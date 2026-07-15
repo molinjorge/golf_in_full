@@ -17,6 +17,9 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 004 | `004_limites_permisos_auditoria.sql` | Límite de asignaciones por rol (ej. 1 club por `club_admin`), quién puede otorgar cada rol, y tabla `audit_log` (auditoría genérica de altas/cambios). |
 | 005 | `005_activacion_desactivacion.sql` | Activar/desactivar personas, roles y asignaciones sin borrarlas, con registro automático de quién y cuándo. |
 | 006 | `006_impedir_borrado_admin_con_historial.sql` | Blindaje: impide borrar físicamente a un administrador que ya tiene historial (asignaciones, verificaciones de hándicap); solo permite desactivarlo. |
+| 007 | `007_recrear_triggers_faltantes.sql` | Corrección: recrea los 11 triggers de `players`, `admin_users`, `roles` y `admin_role_assignments` que no llegaron a crearse en las migraciones 001-005 (las funciones ya existían, pero no estaban enganchadas). Idempotente — segura de correr aunque alguno ya exista. |
+
+## Cómo agregar una migración nueva
 
 ## Cómo agregar una migración nueva
 
