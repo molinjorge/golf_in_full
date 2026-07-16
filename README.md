@@ -27,7 +27,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 014 | `014_eliminar_ciudad_estado_texto.sql` | Elimina definitivamente `clubs.ciudad` y `clubs.estado` (texto libre) â€” la ubicaciÃ³n ya vive solo en `clubs.city_id`. |
 | 015 | `015_city_id_obligatorio.sql` | Hace `clubs.city_id` obligatorio (`NOT NULL`). Se detiene con un error claro si queda algÃºn club sin ciudad asignada â€” hay que resolver esos primero. |
 | 016 | `016_catalogo_husos_horarios.sql` | CatÃ¡logo curado `timezones` (etiqueta amigable + diferencia UTC), con FK real desde `cities.timezone`. Evita mostrar identificadores IANA crudos en el dropdown del frontend. |
-
+| 017 | `017_modulos_y_licencias.sql` | CatÃ¡logo `modules` (primer mÃ³dulo: Torneos) y tabla `club_module_licenses` para controlar contrataciÃ³n (anual o por torneo), vigencia, tarifa y pago por club. Incluye `club_has_active_module()` para que el frontend consulte fÃ¡cilmente si un mÃ³dulo estÃ¡ habilitado. Fase 1: solo estructura, sin frontend todavÃ­a. |
 
 
 ## Cómo agregar una migración nueva
