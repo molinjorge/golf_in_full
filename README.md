@@ -22,12 +22,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 009 | `009_restringir_contacto_clubs.sql` | Restringe `clubs.telefono` y `clubs.email` a usuarios autenticados (privilegios de columna); visitantes sin sesiÃ³n (`anon`) ya no pueden leer esas dos columnas vÃ­a la API pÃºblica. |
 | 010 | `010_rls_players.sql` | PolÃ­ticas de RLS de `players`: un jugador solo ve/edita su propio perfil (cero visibilidad entre jugadores); cualquier administrador activo puede ver/editar cualquier perfil. Trigger que impide que un jugador se auto-verifique su propio hÃ¡ndicap. |
 | 011 | `011_grants_faltantes.sql` | CorrecciÃ³n: otorga los `GRANT` de tabla faltantes en `players`, `admin_users`, `roles`, `admin_role_assignments`, `system_parameters`, `audit_log`, `clubs` y `tournaments`. Sin estos, RLS nunca llegaba a evaluarse â€” Postgres rechazaba el acceso antes. No cambia ninguna polÃ­tica ni regla de negocio. |
+| 012 | `012_fix_recursion_rls.sql` | CorrecciÃ³n crÃ­tica: `is_superadmin`, `is_club_admin`, `is_tournament_organizer` e `is_active_admin` pasan a `SECURITY DEFINER` con `search_path` fijo, para romper una recursiÃ³n infinita â€” esas funciones consultan tablas cuyas propias polÃ­ticas de RLS las vuelven a llamar, causando "stack depth limit exceeded" (visible como error 500 en la API) para cualquier usuario autenticado normal. 
 
-
-
-
-
-## Cómo agregar una migración nueva
 
 ## Cómo agregar una migración nueva
 
