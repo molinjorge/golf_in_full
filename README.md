@@ -26,6 +26,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 013 | `013_geografia_paises_estados_ciudades.sql` | CatÃ¡logo geogrÃ¡fico normalizado: `countries` â†’ `states` â†’ `cities`, con huso horario (IANA) a nivel ciudad. Sembrado con MÃ©xico + EE.UU., 32 estados de MÃ©xico + 51 de EE.UU., y las ~27 ciudades donde ya identificamos clubes. `clubs.city_id` agregado; `clubs.ciudad`/`clubs.estado` (texto libre) quedan obsoletos pero sin eliminar todavÃ­a. |
 | 014 | `014_eliminar_ciudad_estado_texto.sql` | Elimina definitivamente `clubs.ciudad` y `clubs.estado` (texto libre) â€” la ubicaciÃ³n ya vive solo en `clubs.city_id`. |
 | 015 | `015_city_id_obligatorio.sql` | Hace `clubs.city_id` obligatorio (`NOT NULL`). Se detiene con un error claro si queda algÃºn club sin ciudad asignada â€” hay que resolver esos primero. |
+| 016 | `016_catalogo_husos_horarios.sql` | CatÃ¡logo curado `timezones` (etiqueta amigable + diferencia UTC), con FK real desde `cities.timezone`. Evita mostrar identificadores IANA crudos en el dropdown del frontend. |
 
 
 
