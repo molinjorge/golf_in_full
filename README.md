@@ -30,7 +30,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 017 | `017_modulos_y_licencias.sql` | CatÃ¡logo `modules` (primer mÃ³dulo: Torneos) y tabla `club_module_licenses` para controlar contrataciÃ³n (anual o por torneo), vigencia, tarifa y pago por club. Incluye `club_has_active_module()` para que el frontend consulte fÃ¡cilmente si un mÃ³dulo estÃ¡ habilitado. Fase 1: solo estructura, sin frontend todavÃ­a. |
 | 018 | `018_formato_juego_y_categorias.sql` | `tournaments` gana formato de juego (individual/equipo), modalidad segÃºn formato, tamaÃ±o de equipo (2-5), y duraciÃ³n en dÃ­as calculada automÃ¡ticamente. CatÃ¡logo `categories` + relaciÃ³n muchos-a-muchos `tournament_categories` (un torneo puede tener varias categorÃ­as). |
 | 019 | `019_criterios_categorias.sql` | `categories` gana rango de edad y rango de hÃ¡ndicap, ambos opcionales e independientes â€” una categorÃ­a puede usar uno, otro, ambos, o ninguno. |
-
+| 020 | `020_vincular_jugador_preregistrado.sql` | Cuando un jugador confirma su correo al crear su cuenta, se vincula automÃ¡ticamente con su perfil pre-registrado en `players` (si un organizador ya lo habÃ­a dado de alta con ese mismo correo) â€” solo tras confirmaciÃ³n, nunca antes, para evitar suplantaciÃ³n. No crea perfiles nuevos. |
 
 ## Cómo agregar una migración nueva
 
