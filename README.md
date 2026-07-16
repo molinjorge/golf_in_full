@@ -23,6 +23,10 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 010 | `010_rls_players.sql` | PolÃ­ticas de RLS de `players`: un jugador solo ve/edita su propio perfil (cero visibilidad entre jugadores); cualquier administrador activo puede ver/editar cualquier perfil. Trigger que impide que un jugador se auto-verifique su propio hÃ¡ndicap. |
 | 011 | `011_grants_faltantes.sql` | CorrecciÃ³n: otorga los `GRANT` de tabla faltantes en `players`, `admin_users`, `roles`, `admin_role_assignments`, `system_parameters`, `audit_log`, `clubs` y `tournaments`. Sin estos, RLS nunca llegaba a evaluarse â€” Postgres rechazaba el acceso antes. No cambia ninguna polÃ­tica ni regla de negocio. |
 | 012 | `012_fix_recursion_rls.sql` | CorrecciÃ³n crÃ­tica: `is_superadmin`, `is_club_admin`, `is_tournament_organizer` e `is_active_admin` pasan a `SECURITY DEFINER` con `search_path` fijo, para romper una recursiÃ³n infinita â€” esas funciones consultan tablas cuyas propias polÃ­ticas de RLS las vuelven a llamar, causando "stack depth limit exceeded" (visible como error 500 en la API) para cualquier usuario autenticado normal. 
+| 013 | `013_geografia_paises_estados_ciudades.sql` | CatÃ¡logo geogrÃ¡fico normalizado: `countries` â†’ `states` â†’ `cities`, con huso horario (IANA) a nivel ciudad. Sembrado con MÃ©xico + EE.UU., 32 estados de MÃ©xico + 51 de EE.UU., y las ~27 ciudades donde ya identificamos clubes. `clubs.city_id` agregado; `clubs.ciudad`/`clubs.estado` (texto libre) quedan obsoletos pero sin eliminar todavÃ­a. |
+| 014 | `014_eliminar_ciudad_estado_texto.sql` | Elimina definitivamente `clubs.ciudad` y `clubs.estado` (texto libre) â€” la ubicaciÃ³n ya vive solo en `clubs.city_id`. |
+| 015 | `015_city_id_obligatorio.sql` | Hace `clubs.city_id` obligatorio (`NOT NULL`). Se detiene con un error claro si queda algÃºn club sin ciudad asignada â€” hay que resolver esos primero. |
+
 
 
 ## Cómo agregar una migración nueva
