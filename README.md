@@ -41,8 +41,11 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 4. Agregar una fila a la tabla de este README.
 
 ## Entidades pendientes (no construidas todavía)
-
-- `clubs`
-- `tournaments`
-- `tournament_registrations`
-- Políticas RLS de `players` (pendiente de definir reglas de acceso)
+tournament_registrations
+Registro de jugadores por parte del organizador (Fase 2) y autoregistro del jugador (Fase 3) — la migración 020 ya deja lista la vinculación automática entre ambos flujos
+Frontend de licencias de módulos (club_module_licenses) — la estructura ya existe (migración 017), falta la pantalla
+Dashboard completo para el rol club_admin (login, layout, navegación) — hoy solo existe el de superadmin
+Regla de RLS adicional en players para exponer nombre/hándicap de jugadores inscritos en un torneo específico, de cara al público (se agregará junto con tournament_registrations)
+Agregar más ciudades a cities conforme se registren clubes en localidades nuevas (vía dashboard de superadmin)
+Configurar SMTP personalizado en Supabase (Authentication → SMTP Settings) antes de lanzar con jugadores reales — el correo interno de Supabase tiene un límite de envíos muy bajo, solo sirve para pruebas
+Comprar y verificar un dominio propio para Golf In Full, y verificarlo en Resend, antes de lanzar con jugadores reales — mientras tanto se usa el dominio de pruebas de Resend (onboarding.resend.dev), que solo envía a la cuenta propia, no a jugadores reales
