@@ -31,6 +31,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 018 | `018_formato_juego_y_categorias.sql` | `tournaments` gana formato de juego (individual/equipo), modalidad segÃºn formato, tamaÃ±o de equipo (2-5), y duraciÃ³n en dÃ­as calculada automÃ¡ticamente. CatÃ¡logo `categories` + relaciÃ³n muchos-a-muchos `tournament_categories` (un torneo puede tener varias categorÃ­as). |
 | 019 | `019_criterios_categorias.sql` | `categories` gana rango de edad y rango de hÃ¡ndicap, ambos opcionales e independientes â€” una categorÃ­a puede usar uno, otro, ambos, o ninguno. |
 | 020 | `020_vincular_jugador_preregistrado.sql` | Cuando un jugador confirma su correo al crear su cuenta, se vincula automÃ¡ticamente con su perfil pre-registrado en `players` (si un organizador ya lo habÃ­a dado de alta con ese mismo correo) â€” solo tras confirmaciÃ³n, nunca antes, para evitar suplantaciÃ³n. No crea perfiles nuevos. |
+| 021 | `021_estatus_activo_players.sql` | Agrega `activo`/`fecha_baja`/`dado_de_baja_por`/`motivo_baja` a `players`. Agrega el trigger de auditorÃ­a que a `players` le faltaba desde el inicio. Solo un administrador puede activar/desactivar a un jugador â€” el jugador no puede autoreactivarse si fue dado de baja. |
 
 ## Cómo agregar una migración nueva
 
