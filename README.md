@@ -29,6 +29,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 016 | `016_catalogo_husos_horarios.sql` | CatÃ¡logo curado `timezones` (etiqueta amigable + diferencia UTC), con FK real desde `cities.timezone`. Evita mostrar identificadores IANA crudos en el dropdown del frontend. |
 | 017 | `017_modulos_y_licencias.sql` | CatÃ¡logo `modules` (primer mÃ³dulo: Torneos) y tabla `club_module_licenses` para controlar contrataciÃ³n (anual o por torneo), vigencia, tarifa y pago por club. Incluye `club_has_active_module()` para que el frontend consulte fÃ¡cilmente si un mÃ³dulo estÃ¡ habilitado. Fase 1: solo estructura, sin frontend todavÃ­a. |
 | 018 | `018_formato_juego_y_categorias.sql` | `tournaments` gana formato de juego (individual/equipo), modalidad segÃºn formato, tamaÃ±o de equipo (2-5), y duraciÃ³n en dÃ­as calculada automÃ¡ticamente. CatÃ¡logo `categories` + relaciÃ³n muchos-a-muchos `tournament_categories` (un torneo puede tener varias categorÃ­as). |
+| 019 | `019_criterios_categorias.sql` | `categories` gana rango de edad y rango de hÃ¡ndicap, ambos opcionales e independientes â€” una categorÃ­a puede usar uno, otro, ambos, o ninguno. |
 
 
 ## Cómo agregar una migración nueva
