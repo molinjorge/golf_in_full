@@ -21,6 +21,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 008 | `008_clubs_y_tournaments.sql` | Tablas `clubs` y `tournaments`, con auditorÃ­a/alta-baja reutilizando las funciones genÃ©ricas ya construidas. Activa las FK `club_id`/`tournament_id` pendientes en `admin_role_assignments`. RLS: lectura pÃºblica de activos, escritura restringida por rol. |
 | 009 | `009_restringir_contacto_clubs.sql` | Restringe `clubs.telefono` y `clubs.email` a usuarios autenticados (privilegios de columna); visitantes sin sesiÃ³n (`anon`) ya no pueden leer esas dos columnas vÃ­a la API pÃºblica. |
 | 010 | `010_rls_players.sql` | PolÃ­ticas de RLS de `players`: un jugador solo ve/edita su propio perfil (cero visibilidad entre jugadores); cualquier administrador activo puede ver/editar cualquier perfil. Trigger que impide que un jugador se auto-verifique su propio hÃ¡ndicap. |
+| 011 | `011_grants_faltantes.sql` | CorrecciÃ³n: otorga los `GRANT` de tabla faltantes en `players`, `admin_users`, `roles`, `admin_role_assignments`, `system_parameters`, `audit_log`, `clubs` y `tournaments`. Sin estos, RLS nunca llegaba a evaluarse â€” Postgres rechazaba el acceso antes. No cambia ninguna polÃ­tica ni regla de negocio. |
+
 
 
 
