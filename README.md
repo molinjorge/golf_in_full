@@ -34,6 +34,8 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 026A	`026A_helpers_coordenadas_green.sql`	Complemento a la 026 (corrida sin estos ayudantes): función `upsert_green_coordenadas()` (RPC que recibe lat/long normales, evita que el frontend maneje PostGIS directamente) y la vista `green_coordenadas_detalle` (lectura ya convertida a números).
 027	`027_orden_marcas_salida.sql`	`marcas_salida.categoria_estandar` (Championship/Azul/Blanco/Dorado/Rojo/Otro, lista fija) — `orden_visualizacion` se calcula automáticamente a partir de esa categoría (columna `generated always as`), nunca se captura manualmente.
 028	`028_resumen_campo.sql`	Vistas `resumen_par_por_campo` (hoyos agrupados por par) y `resumen_yardaje_por_marca` (yardaje total por marca, ya ordenado) — para la tarjeta "Resumen del campo" sin que el frontend tenga que calcular agregados.
+029	`029_tournament_formats.sql`	Catálogo `tournament_formats` (code, name, tipo_participacion, scoring_engine, descripción, orden). `tipo_participacion` reutiliza el enum `formato_juego_torneo` ya existente — renombrado desde `category` para no confundirlo con la tabla `categories` (divisiones de jugadores). Solo estructura — los "motores" de puntuación se definirán en una fase posterior.
+030	`030_migrar_tournaments_a_formats.sql`	Limpia torneos de prueba (y lo que dependía de ellos: categorías asignadas, licencia ligada, asignación de Pedro Pérez como organizador). Siembra `tournament_formats` con las 5 modalidades que ya existían. Migra `tournaments` para usar `tournament_format_id` (FK) en vez de los enums `formato_juego`/`modalidad_individual`/`modalidad_equipo`, que se eliminan.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
@@ -41,6 +43,8 @@ Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, co
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
 `tournament_registrations`
+Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_formats` — hoy solo existe la estructura
+Después de la migración 030, hay que volver a dar de alta el torneo de prueba (se borró) y reasignar a Pedro Pérez como organizador si se sigue necesitando
 Tabla de contactos por área de cada campo de golf (Pro Shop, Starter, Renta de Carritos, Taller, Servicio en Campo/Alimentos y Bebidas) — fase futura, aparte de `campos_golf`
 Decidir si `tournaments.club_id` debe cambiar a `campo_golf_id` — ahora que un club puede tener varios campos, un torneo probablemente debería apuntar al campo específico donde se juega, no solo al club en general
 Soporte de "nueves combinables" (A/B/C) para campos de 27+ hoyos — hoy `hoyos` asume numeración simple 1..N
