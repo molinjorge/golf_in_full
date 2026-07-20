@@ -30,7 +30,8 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 023	`023_campos_golf.sql`	Nueva tabla `campos_golf`: `club_id` (un club puede operar varios campos), `nombre_oficial`, `numero_hoyos`, `timezone_id`, `latitud`/`longitud` (opcionales). `clubs` pierde `numero_hoyos`. Solo superadmin da de alta campos nuevos; club_admin puede editar los de su club.
 024	`024_hoyos_y_marcas_salida.sql`	`marcas_salida` (tee marks con Course Rating/Slope), `hoyos` (par, hándicap de hoyo), `distancias_hoyo` (yardaje por hoyo según marca). Numeración simple 1..N — sin soporte de "nueves combinables" en campos de 27+ todavía. Lectura pública; escritura de superadmin o club_admin dueño del campo.
 025	`025_rating_slope_por_genero.sql`	`marcas_salida.rating`/`slope` se separan en `rating_caballeros`/`slope_caballeros` y `rating_damas`/`slope_damas` — el estándar USGA/World Handicap System certifica estos números por separado para cada género, incluso desde la misma marca de salida.
-
+026	`026_coordenadas_green.sql`	Habilita PostGIS. Tabla `green_coordenadas` (frente/centro/atrás por hoyo, tipo `geography(POINT, 4326)`), opcional, un hoyo = a lo más una fila. Permite cálculos de distancia nativos más adelante.
+027	`027_orden_marcas_salida.sql`	`marcas_salida.categoria_estandar` (Championship/Azul/Blanco/Dorado/Rojo/Otro, lista fija) — `orden_visualizacion` se calcula automáticamente a partir de esa categoría (columna `generated always as`), nunca se captura manualmente.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
