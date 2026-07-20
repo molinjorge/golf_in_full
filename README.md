@@ -31,6 +31,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 024	`024_hoyos_y_marcas_salida.sql`	`marcas_salida` (tee marks con Course Rating/Slope), `hoyos` (par, hándicap de hoyo), `distancias_hoyo` (yardaje por hoyo según marca). Numeración simple 1..N — sin soporte de "nueves combinables" en campos de 27+ todavía. Lectura pública; escritura de superadmin o club_admin dueño del campo.
 025	`025_rating_slope_por_genero.sql`	`marcas_salida.rating`/`slope` se separan en `rating_caballeros`/`slope_caballeros` y `rating_damas`/`slope_damas` — el estándar USGA/World Handicap System certifica estos números por separado para cada género, incluso desde la misma marca de salida.
 026	`026_coordenadas_green.sql`	Habilita PostGIS. Tabla `green_coordenadas` (frente/centro/atrás por hoyo, tipo `geography(POINT, 4326)`), opcional, un hoyo = a lo más una fila. Permite cálculos de distancia nativos más adelante.
+026A	`026A_helpers_coordenadas_green.sql`	Complemento a la 026 (corrida sin estos ayudantes): función `upsert_green_coordenadas()` (RPC que recibe lat/long normales, evita que el frontend maneje PostGIS directamente) y la vista `green_coordenadas_detalle` (lectura ya convertida a números).
 027	`027_orden_marcas_salida.sql`	`marcas_salida.categoria_estandar` (Championship/Azul/Blanco/Dorado/Rojo/Otro, lista fija) — `orden_visualizacion` se calcula automáticamente a partir de esa categoría (columna `generated always as`), nunca se captura manualmente.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
