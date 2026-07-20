@@ -33,6 +33,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 026	`026_coordenadas_green.sql`	Habilita PostGIS. Tabla `green_coordenadas` (frente/centro/atrás por hoyo, tipo `geography(POINT, 4326)`), opcional, un hoyo = a lo más una fila. Permite cálculos de distancia nativos más adelante.
 026A	`026A_helpers_coordenadas_green.sql`	Complemento a la 026 (corrida sin estos ayudantes): función `upsert_green_coordenadas()` (RPC que recibe lat/long normales, evita que el frontend maneje PostGIS directamente) y la vista `green_coordenadas_detalle` (lectura ya convertida a números).
 027	`027_orden_marcas_salida.sql`	`marcas_salida.categoria_estandar` (Championship/Azul/Blanco/Dorado/Rojo/Otro, lista fija) — `orden_visualizacion` se calcula automáticamente a partir de esa categoría (columna `generated always as`), nunca se captura manualmente.
+028	`028_resumen_campo.sql`	Vistas `resumen_par_por_campo` (hoyos agrupados por par) y `resumen_yardaje_por_marca` (yardaje total por marca, ya ordenado) — para la tarjeta "Resumen del campo" sin que el frontend tenga que calcular agregados.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
