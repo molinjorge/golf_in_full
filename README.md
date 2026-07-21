@@ -36,15 +36,20 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 028	`028_resumen_campo.sql`	Vistas `resumen_par_por_campo` (hoyos agrupados por par) y `resumen_yardaje_por_marca` (yardaje total por marca, ya ordenado) — para la tarjeta "Resumen del campo" sin que el frontend tenga que calcular agregados.
 029	`029_tournament_formats.sql`	Catálogo `tournament_formats` (code, name, tipo_participacion, scoring_engine, descripción, orden). `tipo_participacion` reutiliza el enum `formato_juego_torneo` ya existente — renombrado desde `category` para no confundirlo con la tabla `categories` (divisiones de jugadores). Solo estructura — los "motores" de puntuación se definirán en una fase posterior.
 030	`030_migrar_tournaments_a_formats.sql`	Limpia torneos de prueba (y lo que dependía de ellos: categorías asignadas, licencia ligada, asignación de Pedro Pérez como organizador). Siembra `tournament_formats` con las 5 modalidades que ya existían. Migra `tournaments` para usar `tournament_format_id` (FK) en vez de los enums `formato_juego`/`modalidad_individual`/`modalidad_equipo`, que se eliminan.
+031	`031_reglas_desempate_handicap_marcas.sql`	Catálogo `tiebreak_methods` + `tournament_tiebreak_rules` (secuencia encadenable de desempate, con alcance distinto para primer lugar vs. resto). `tournament_formats.handicap_allowance_default` (95% Stroke Play/Stableford individual, 85% Best Ball). `tournament_tee_overrides` (rating/slope de marca de salida, excepción opcional por torneo).
+032	`032_rondas_y_cortes.sql`	`tournament_rounds`: cada torneo pasa a tener 1+ rondas (fecha, campo). La modalidad (`tournament_format_id`) y el % de hándicap son opcionales por ronda — si no se especifican, se heredan del torneo (vista `tournament_rounds_efectivo` resuelve el valor real, aplicando la herencia). `tournament_cut_rules`: reglas de corte por posición o por score, siempre por categoría, ligadas a después de qué ronda ocurren.
+033	`033_turnos_y_cupo_categoria.sql`	`tournament_round_shifts`: turnos dentro de una ronda (máx. 3 por día), cada uno con su hora de salida y cupo máximo definido por el comité — mezclan categorías, no son un turno por categoría. `tournament_categories.cupo_maximo`: límite de inscripciones por categoría, definido por el comité.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
 Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, con el siguiente número consecutivo (ej. `007_clubs_y_tournaments.sql`).
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
-`tournament_registrations`
+`tournament_registrations` — y, dentro de ese diseño, decidir cómo se registra a qué rondas específicas participa cada jugador (relevante tras un corte)
+Motor de cálculo de resultados (Course Handicap → Playing Handicap → score neto → aplicar cortes → aplicar desempates encadenados) — hoy solo existe la estructura de datos/reglas, no la lógica de cálculo
 Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_formats` — hoy solo existe la estructura
 Después de la migración 030, hay que volver a dar de alta el torneo de prueba (se borró) y reasignar a Pedro Pérez como organizador si se sigue necesitando
+Revisar si `tournaments.duracion_dias` (calculado de fecha_inicio/fecha_fin) sigue teniendo sentido ahora que `tournament_rounds` es la fuente real de cuántos días se juega — podría quedar como dato informativo nada más
 Tabla de contactos por área de cada campo de golf (Pro Shop, Starter, Renta de Carritos, Taller, Servicio en Campo/Alimentos y Bebidas) — fase futura, aparte de `campos_golf`
 Decidir si `tournaments.club_id` debe cambiar a `campo_golf_id` — ahora que un club puede tener varios campos, un torneo probablemente debería apuntar al campo específico donde se juega, no solo al club en general
 Soporte de "nueves combinables" (A/B/C) para campos de 27+ hoyos — hoy `hoyos` asume numeración simple 1..N
