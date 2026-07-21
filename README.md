@@ -44,6 +44,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 036	`036_organizador_permisos_tournaments.sql`	Corrige `tournaments_select`/`tournaments_update` para incluir a `is_tournament_organizer()` — ya estaba bien en todas las tablas relacionadas (rondas, turnos, categorías, cortes) desde su creación, pero se quedó fuera en `tournaments` mismo.
 037	`037_numero_rondas_planeadas.sql`	`tournaments.numero_rondas` — declarado al crear el torneo, default 1. El frontend debe usarlo para generar automáticamente esa cantidad de filas en `tournament_rounds`. No se sincroniza a la fuerza después — las rondas reales mandan una vez que existen.
 038	`038_limite_rondas.sql`	Trigger que bloquea crear una ronda nueva si ya se alcanzó `tournaments.numero_rondas` (contando solo rondas activas) — hay que subir el número de rondas del torneo antes de poder agregar una más.
+039	`039_catalogo_estatus_torneo.sql`	Agrega el valor `inscripcion_cerrada` al enum `estatus_torneo` (que faltaba). El color del badge se resuelve en el frontend (mapeo fijo, no requiere tabla) — el conjunto de estatus es fijo a propósito, para que la automatización futura no dependa de datos que alguien pueda alterar desde una pantalla.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
@@ -51,6 +52,7 @@ Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, co
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
 `tournament_registrations` — y, dentro de ese diseño, decidir cómo se registra a qué rondas específicas participa cada jugador (relevante tras un corte)
+Automatización de transiciones de estatus de torneo (ej. pasar solo a "Inscripción Cerrada" al llegar la fecha límite, o a "En Curso" al llegar `fecha_inicio`) — no está construida; habría que decidir el mecanismo (¿trigger por fecha? ¿tarea programada?) y qué transiciones son válidas (esa regla viviría en código/trigger, ya que el estatus se quedó como enum fijo, no catálogo)
 Motor de cálculo de resultados (Course Handicap → Playing Handicap → score neto → aplicar cortes → aplicar desempates encadenados) — hoy solo existe la estructura de datos/reglas, no la lógica de cálculo
 Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_formats` — hoy solo existe la estructura
 Después de la migración 030, hay que volver a dar de alta el torneo de prueba (se borró) y reasignar a Pedro Pérez como organizador si se sigue necesitando
