@@ -45,6 +45,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 037	`037_numero_rondas_planeadas.sql`	`tournaments.numero_rondas` — declarado al crear el torneo, default 1. El frontend debe usarlo para generar automáticamente esa cantidad de filas en `tournament_rounds`. No se sincroniza a la fuerza después — las rondas reales mandan una vez que existen.
 038	`038_limite_rondas.sql`	Trigger que bloquea crear una ronda nueva si ya se alcanzó `tournaments.numero_rondas` (contando solo rondas activas) — hay que subir el número de rondas del torneo antes de poder agregar una más.
 039	`039_catalogo_estatus_torneo.sql`	Agrega el valor `inscripcion_cerrada` al enum `estatus_torneo` (que faltaba). El color del badge se resuelve en el frontend (mapeo fijo, no requiere tabla) — el conjunto de estatus es fijo a propósito, para que la automatización futura no dependa de datos que alguien pueda alterar desde una pantalla.
+040	`040_orden_tiebreak_methods.sql`	`tiebreak_methods.display_order` — Muerte Súbita primero, luego tarjeta de menor a mayor tramo (último hoyo → 3 → 6 → 9 → 18), Sorteo al final.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
