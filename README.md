@@ -43,6 +43,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 035	`035_activo_en_cut_rules.sql`	Agrega el patrón estándar de alta/baja (`activo`, `fecha_baja`, `dado_de_baja_por`, `motivo_baja`, `updated_at` + triggers) a `tournament_cut_rules`, que se había quedado sin él desde la migración 032. Actualiza su política de lectura para respetar `activo`.
 036	`036_organizador_permisos_tournaments.sql`	Corrige `tournaments_select`/`tournaments_update` para incluir a `is_tournament_organizer()` — ya estaba bien en todas las tablas relacionadas (rondas, turnos, categorías, cortes) desde su creación, pero se quedó fuera en `tournaments` mismo.
 037	`037_numero_rondas_planeadas.sql`	`tournaments.numero_rondas` — declarado al crear el torneo, default 1. El frontend debe usarlo para generar automáticamente esa cantidad de filas en `tournament_rounds`. No se sincroniza a la fuerza después — las rondas reales mandan una vez que existen.
+038	`038_limite_rondas.sql`	Trigger que bloquea crear una ronda nueva si ya se alcanzó `tournaments.numero_rondas` (contando solo rondas activas) — hay que subir el número de rondas del torneo antes de poder agregar una más.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
