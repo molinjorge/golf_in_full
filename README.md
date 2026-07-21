@@ -41,6 +41,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 033	`033_turnos_y_cupo_categoria.sql`	`tournament_round_shifts`: turnos dentro de una ronda (máx. 3 por día), cada uno con su hora de salida y cupo máximo definido por el comité — mezclan categorías, no son un turno por categoría. `tournament_categories.cupo_maximo`: límite de inscripciones por categoría, definido por el comité.
 034	`034_campo_golf_en_tournaments.sql`	`tournaments.campo_golf_id` — el campo donde se juega el torneo, validado (trigger) para que pertenezca al `club_id` declarado. Es la fuente real para precargar el campo al crear rondas nuevas. `club_id` se conserva (lo siguen usando todas las políticas de RLS de rondas/turnos/categorías/desempates).
 035	`035_activo_en_cut_rules.sql`	Agrega el patrón estándar de alta/baja (`activo`, `fecha_baja`, `dado_de_baja_por`, `motivo_baja`, `updated_at` + triggers) a `tournament_cut_rules`, que se había quedado sin él desde la migración 032. Actualiza su política de lectura para respetar `activo`.
+036	`036_organizador_permisos_tournaments.sql`	Corrige `tournaments_select`/`tournaments_update` para incluir a `is_tournament_organizer()` — ya estaba bien en todas las tablas relacionadas (rondas, turnos, categorías, cortes) desde su creación, pero se quedó fuera en `tournaments` mismo.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
