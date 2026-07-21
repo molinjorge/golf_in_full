@@ -51,7 +51,7 @@ Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_format
 Después de la migración 030, hay que volver a dar de alta el torneo de prueba (se borró) y reasignar a Pedro Pérez como organizador si se sigue necesitando
 Revisar si `tournaments.duracion_dias` (calculado de fecha_inicio/fecha_fin) sigue teniendo sentido ahora que `tournament_rounds` es la fuente real de cuántos días se juega — podría quedar como dato informativo nada más
 Tabla de contactos por área de cada campo de golf (Pro Shop, Starter, Renta de Carritos, Taller, Servicio en Campo/Alimentos y Bebidas) — fase futura, aparte de `campos_golf`
-Decidir si `tournaments.club_id` debe cambiar a `campo_golf_id` — ahora que un club puede tener varios campos, un torneo probablemente debería apuntar al campo específico donde se juega, no solo al club en general
+Decidir si `tournaments.club_id` debe cambiar a `campo_golf_id` — RESUELTO por el diseño de rondas (migración 032): cada `tournament_rounds` ya tiene su propio `campo_golf_id`; `tournaments.club_id` se queda como el club anfitrión/responsable administrativo
 Soporte de "nueves combinables" (A/B/C) para campos de 27+ hoyos — hoy `hoyos` asume numeración simple 1..N
 Registro de jugadores por parte del organizador (Fase 2) y autoregistro del jugador (Fase 3) — la migración 020 ya deja lista la vinculación automática entre ambos flujos
 Frontend de licencias de módulos (`club_module_licenses`) — la estructura ya existe (migración 017), falta la pantalla
