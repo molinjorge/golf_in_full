@@ -47,6 +47,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 039	`039_catalogo_estatus_torneo.sql`	Agrega el valor `inscripcion_cerrada` al enum `estatus_torneo` (que faltaba). El color del badge se resuelve en el frontend (mapeo fijo, no requiere tabla) — el conjunto de estatus es fijo a propósito, para que la automatización futura no dependa de datos que alguien pueda alterar desde una pantalla.
 040	`040_orden_tiebreak_methods.sql`	`tiebreak_methods.display_order` — Muerte Súbita primero, luego tarjeta de menor a mayor tramo (último hoyo → 3 → 6 → 9 → 18), Sorteo al final.
 041	`041_activo_en_tiebreak_rules.sql`	Agrega el patrón estándar de alta/baja a `tournament_tiebreak_rules` (igual que la 035 hizo con `tournament_cut_rules`). Cambia la restricción única de `(tournament_id, alcance, orden)` a un índice único parcial que solo cuenta filas activas — para que desactivar un paso libere esa posición.
+042	`042_tarifas_torneo.sql`	`tournaments.tarifa_individual` (siempre aplica) y `tarifa_equipo_completo` (solo si la modalidad es de equipo, validado por trigger), más `moneda`.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
