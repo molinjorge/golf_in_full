@@ -48,6 +48,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 040	`040_orden_tiebreak_methods.sql`	`tiebreak_methods.display_order` — Muerte Súbita primero, luego tarjeta de menor a mayor tramo (último hoyo → 3 → 6 → 9 → 18), Sorteo al final.
 041	`041_activo_en_tiebreak_rules.sql`	Agrega el patrón estándar de alta/baja a `tournament_tiebreak_rules` (igual que la 035 hizo con `tournament_cut_rules`). Cambia la restricción única de `(tournament_id, alcance, orden)` a un índice único parcial que solo cuenta filas activas — para que desactivar un paso libere esa posición.
 042	`042_tarifas_torneo.sql`	`tournaments.tarifa_individual` (siempre aplica) y `tarifa_equipo_completo` (solo si la modalidad es de equipo, validado por trigger), más `moneda`.
+043	`043_telefono_obligatorio_unico_restringido.sql`	`players.telefono_*` pasa a obligatorio y único (evita registros duplicados). Una vez confirmada la cuenta (`auth_user_id` asignado), solo el propio jugador o el superadmin pueden editar el teléfono — ningún otro tipo de administrador.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
