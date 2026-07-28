@@ -55,6 +55,7 @@ Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, co
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
 `tournament_registrations` — y, dentro de ese diseño, decidir cómo se registra a qué rondas específicas participa cada jugador (relevante tras un corte)
+Evaluar si al EDITAR (no crear) una regla de corte conviene pedir un motivo del cambio, además de lo que ya registra `audit_log` automáticamente — sin urgencia, decidir más adelante
 Automatización de transiciones de estatus de torneo (ej. pasar solo a "Inscripción Cerrada" al llegar la fecha límite, o a "En Curso" al llegar `fecha_inicio`) — no está construida; habría que decidir el mecanismo (¿trigger por fecha? ¿tarea programada?) y qué transiciones son válidas (esa regla viviría en código/trigger, ya que el estatus se quedó como enum fijo, no catálogo)
 Motor de cálculo de resultados (Course Handicap → Playing Handicap → score neto → aplicar cortes → aplicar desempates encadenados) — hoy solo existe la estructura de datos/reglas, no la lógica de cálculo
 Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_formats` — hoy solo existe la estructura
