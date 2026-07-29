@@ -66,6 +66,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 052 | `052_simulador_pago_temporal.sql` | Reemplaza `tournament_registration_attempts` por `payment_attempts` — intento de pago **genérico** (campo `concepto`: inscripción individual/equipo, renta de carrito, pago el día del evento, etc.), reutilizable en cualquier flujo de pago futuro. RPC `procesar_resultado_pago()` crea lo correspondiente según el concepto (hoy solo implementa `inscripcion_individual`). `simular_resultado_pago()` es un alias **TEMPORAL** para pruebas. ⚠️ Debe eliminarse antes de operar con dinero real. |
 | 053 | `053_habilitar_pgcrypto.sql` | Habilita la extensión `pgcrypto` — nunca se había creado explícitamente; es necesaria para `gen_random_bytes()`, usada en `qr_token` (`tournament_registrations`, `tournament_pre_reservations`) y en las referencias de pago simuladas. |
 | 054 | `054_fix_esquema_pgcrypto.sql` | Corrección: Supabase instala `pgcrypto` en el esquema `extensions`, no en `public` — nuestras funciones `SECURITY DEFINER` (que fijan `search_path=public` por seguridad) no la encontraban. Se califica explícitamente `extensions.gen_random_bytes()` en los defaults de `qr_token` y en `procesar_resultado_pago()`, en vez de ampliar el `search_path`. |
+| 055 | `055_folio_legible_inscripcion.sql` | `tournament_registrations.folio` — consecutivo legible por torneo (INS-0001, INS-0002...), generado automáticamente. Separado de `qr_token`, que se queda como llave secreta del acceso, no pensada para leerse. |
 
 ## Cómo agregar una migración nueva
 
