@@ -52,6 +52,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 044	`044_mensaje_telefono_duplicado.sql`	Trigger que da un mensaje claro ("El número de teléfono indicado está registrado por otro jugador.") en vez del error técnico genérico de la restricción UNIQUE de la migración 043.
 045	`045_fix_security_definer_telefono.sql`	Corrección: `validar_telefono_unico()` pasa a `SECURITY DEFINER` — corría con los permisos del jugador que se registra, y como RLS solo le permite ver su propia fila, nunca detectaba el duplicado de otro jugador (mismo patrón de bug que la recursión de `is_superadmin()` en la migración 012).
 046	`046_info_venta_torneo.sql`	`tournament_marketing_info`: contenido de venta del torneo (qué incluye, premios, kit de bienvenida, alimentos/bebidas/carrito/caddie con detalle, beneficiario, precio socios, contacto). Lectura pública; escritura exclusiva de superadmin y del `tournament_organizer` de ese torneo (`club_admin` no puede editar aquí, a diferencia del resto de tablas de torneo).
+047	`047_ventana_acceso_torneo.sql`	`tournaments.acceso_fecha_hora_inicio`/`acceso_fecha_hora_fin` — ventana de tiempo compartida por todas las inscripciones, contra la que se validará cada QR de acceso al club/campo. Base para el sistema de QR, que se completa cuando exista `tournament_registrations`.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
@@ -59,6 +60,7 @@ Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, co
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
 `tournament_registrations` — y, dentro de ese diseño, decidir cómo se registra a qué rondas específicas participa cada jugador (relevante tras un corte)
+Sistema de QR de acceso al club/campo: token único por inscripción, página de validación pública (escaneable con cualquier celular, sin app), registro de check-in por día, y respaldo de búsqueda manual por nombre para quien no tenga el QR a la mano — depende de que exista `tournament_registrations`; la ventana de fecha/hora ya está lista (migración 047)
 Evaluar si al EDITAR (no crear) una regla de corte conviene pedir un motivo del cambio, además de lo que ya registra `audit_log` automáticamente — sin urgencia, decidir más adelante
 Automatización de transiciones de estatus de torneo (ej. pasar solo a "Inscripción Cerrada" al llegar la fecha límite, o a "En Curso" al llegar `fecha_inicio`) — no está construida; habría que decidir el mecanismo (¿trigger por fecha? ¿tarea programada?) y qué transiciones son válidas (esa regla viviría en código/trigger, ya que el estatus se quedó como enum fijo, no catálogo)
 Motor de cálculo de resultados (Course Handicap → Playing Handicap → score neto → aplicar cortes → aplicar desempates encadenados) — hoy solo existe la estructura de datos/reglas, no la lógica de cálculo
