@@ -69,6 +69,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 055 | `055_folio_legible_inscripcion.sql` | `tournament_registrations.folio` — consecutivo legible por torneo (INS-0001, INS-0002...), generado automáticamente. Separado de `qr_token`, que se queda como llave secreta del acceso, no pensada para leerse. |
 | 056 | `056_mensaje_inscripcion_duplicada.sql` | Trigger que da un mensaje claro ("Ya tienes una inscripción activa en este torneo.") en vez del error técnico genérico de la restricción UNIQUE de `tournament_registrations`. Mismo patrón que la validación de teléfono duplicado. |
 | 057 | `057_bandera_correo_confirmacion.sql` | `tournament_registrations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de inscripción por accidente. |
+| 058 | `058_acotar_visibilidad_players_organizador.sql` | Acota `players_select`/`players_update` para `tournament_organizer`: solo ve/edita jugadores con inscripción o pre-reserva activa en SUS torneos, no el catálogo completo. `superadmin` y `club_admin` conservan visibilidad total (nueva función `is_any_club_admin()`). `players_insert` no cambia — cualquier admin activo sigue pudiendo pre-registrar jugadores nuevos. |
 
 ## Cómo agregar una migración nueva
 
