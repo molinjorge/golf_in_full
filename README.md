@@ -51,6 +51,7 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 043	`043_telefono_obligatorio_unico_restringido.sql`	`players.telefono_*` pasa a obligatorio y único (evita registros duplicados). Una vez confirmada la cuenta (`auth_user_id` asignado), solo el propio jugador o el superadmin pueden editar el teléfono — ningún otro tipo de administrador.
 044	`044_mensaje_telefono_duplicado.sql`	Trigger que da un mensaje claro ("El número de teléfono indicado está registrado por otro jugador.") en vez del error técnico genérico de la restricción UNIQUE de la migración 043.
 045	`045_fix_security_definer_telefono.sql`	Corrección: `validar_telefono_unico()` pasa a `SECURITY DEFINER` — corría con los permisos del jugador que se registra, y como RLS solo le permite ver su propia fila, nunca detectaba el duplicado de otro jugador (mismo patrón de bug que la recursión de `is_superadmin()` en la migración 012).
+046	`046_info_venta_torneo.sql`	`tournament_marketing_info`: contenido de venta del torneo (qué incluye, premios, kit de bienvenida, alimentos/bebidas/carrito/caddie con detalle, beneficiario, precio socios, contacto). Lectura pública; escritura exclusiva de superadmin y del `tournament_organizer` de ese torneo (`club_admin` no puede editar aquí, a diferencia del resto de tablas de torneo).
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
