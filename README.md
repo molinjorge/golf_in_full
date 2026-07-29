@@ -57,14 +57,16 @@ Las migraciones deben correrse en este orden exacto — cada una depende de que 
 049	`049_pre_reservas_torneo.sql`	`tournament_pre_reservations`: jugadores que apartan lugar por transferencia (a confirmar) o pago el día del evento — tabla separada de `tournament_registrations` por tener un ciclo de vida distinto (sí tiene estatus pendiente/pagado/cancelado/no-show). El cupo por categoría ahora se valida cruzado entre ambas tablas. Vista `tournament_participantes` unifica los dos canales para roster.
 050	`050_confirmar_pago_prereserva.sql`	Agrega "efectivo" al catálogo de medios de pago. Función `confirmar_pago_prereserva()`: confirma el pago de una pre-reserva, crea la inscripción real enlazada en `tournament_registrations`, sin borrar el historial de la pre-reserva original. Ajusta el cupo cruzado para no contar dos veces una pre-reserva ya convertida.
 051	`051_separar_medio_pago_torneo.sql`	Corrección: crea `medio_pago_torneo`, catálogo propio para pagos de inscripción de jugador, separado de `medio_pago_licencia` (que es para pagos de licencia de club — dominio distinto). Corrige `tournament_registrations.medio_pago` y la función `confirmar_pago_prereserva()` para usar el catálogo correcto.
+052	`052_simulador_pago_temporal.sql`	Reemplaza `tournament_registration_attempts` por `payment_attempts` — intento de pago genérico (campo `concepto`: inscripción individual/equipo, renta de carrito, pago el día del evento, etc.), reutilizable en cualquier flujo de pago futuro. RPC `procesar_resultado_pago()` crea lo correspondiente según el concepto (hoy solo implementa `inscripcion_individual`). `simular_resultado_pago()` es un alias TEMPORAL para pruebas. ⚠️ Debe eliminarse antes de operar con dinero real.
 Cómo agregar una migración nueva
 Diseñar el cambio (esquema, RLS, triggers).
 Correrlo en el SQL Editor de Supabase (proyecto `GOLFING_FULL`), confirmar que no haya errores.
 Subir el archivo `.sql` a este repositorio, dentro de `supabase/migrations/`, con el siguiente número consecutivo (ej. `007_clubs_y_tournaments.sql`).
 Agregar una fila a la tabla de este README.
 Entidades pendientes (no construidas todavía)
-Inscripción de EQUIPOS (distinta a la individual que ya se construyó) — necesita capturar compañeros de equipo
+Inscripción de EQUIPOS (distinta a la individual que ya se construyó) — necesita capturar compañeros de equipo, y agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()`
 Integración real con la pasarela de pago (Edge Function que reciba la confirmación del banco y cree la fila en `tournament_registrations` vía service_role) — hoy la tabla existe, pero nada la conecta todavía con un banco real
+⚠️ CRÍTICO antes de producción: eliminar (o inhabilitar por completo) la función `simular_resultado_pago()` (migración 052) — permite aprobar pagos sin banco real de por medio. Es intencional solo para pruebas.
 Pantalla/lógica de validación de QR (la página pública que escanea el club) — depende de `tournament_registrations.qr_token`, ya existe el dato pero no la pantalla
 Tarea programada que revise `tournament_registration_attempts` sin completar y dispare el correo de abandono
 Decidir si la marca de salida se asigna en el momento de la inscripción, o se resuelve después (hoy `tournament_registrations` no la captura)
