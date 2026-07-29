@@ -67,6 +67,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 053 | `053_habilitar_pgcrypto.sql` | Habilita la extensión `pgcrypto` — nunca se había creado explícitamente; es necesaria para `gen_random_bytes()`, usada en `qr_token` (`tournament_registrations`, `tournament_pre_reservations`) y en las referencias de pago simuladas. |
 | 054 | `054_fix_esquema_pgcrypto.sql` | Corrección: Supabase instala `pgcrypto` en el esquema `extensions`, no en `public` — nuestras funciones `SECURITY DEFINER` (que fijan `search_path=public` por seguridad) no la encontraban. Se califica explícitamente `extensions.gen_random_bytes()` en los defaults de `qr_token` y en `procesar_resultado_pago()`, en vez de ampliar el `search_path`. |
 | 055 | `055_folio_legible_inscripcion.sql` | `tournament_registrations.folio` — consecutivo legible por torneo (INS-0001, INS-0002...), generado automáticamente. Separado de `qr_token`, que se queda como llave secreta del acceso, no pensada para leerse. |
+| 056 | `056_mensaje_inscripcion_duplicada.sql` | Trigger que da un mensaje claro ("Ya tienes una inscripción activa en este torneo.") en vez del error técnico genérico de la restricción UNIQUE de `tournament_registrations`. Mismo patrón que la validación de teléfono duplicado. |
 
 ## Cómo agregar una migración nueva
 
