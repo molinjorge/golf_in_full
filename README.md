@@ -73,6 +73,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 059 | `059_hora_escopetazo.sql` | `tournament_marketing_info.hora_escopetazo` — hora de salida en escopetazo, opcional. |
 | 060 | `060_recibo_deducible_fase1.sql` | `payment_fiscal_receipts` — Fase 1 de recibo deducible: solicitud + referencia al PDF de la Constancia de Situación Fiscal, ligada a `payment_attempts` (pago genérico, no a la inscripción específica). Fase 2 (generación/envío real de factura vía PAC) queda pendiente. |
 | 061 | `061_bucket_constancias_fiscales.sql` | Bucket privado de Supabase Storage `constancias-fiscales`, con permisos: cada jugador solo sube/ve dentro de su propia carpeta (`player_id`); superadmin y club_admin ven todo; `tournament_organizer` ve únicamente las constancias ligadas a pagos de SUS propios torneos (consulta `payment_fiscal_receipts`). |
+| 062 | `062_fix_recursion_players_organizador.sql` | Corrección crítica: la 058 introdujo recursión infinita de RLS entre `players` y `tournament_registrations`/`tournament_pre_reservations` (cada política consultaba a la otra). Se resuelve con la función `SECURITY DEFINER` `jugador_visible_para_organizador()`, mismo patrón que la migración 012. |
+| 063 | `063_bandera_intencion_recibo.sql` | `payment_attempts.solicito_recibo_deducible` — marca la intención en cuanto el jugador dice "Sí", independiente de si sube la constancia después. Permite detectar solicitudes de recibo incompletas (dijo que sí pero nunca subió el PDF). |
 
 ## Cómo agregar una migración nueva
 
@@ -85,6 +87,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - Inscripción de EQUIPOS (distinta a la individual que ya se construyó) — necesita capturar compañeros de equipo, y agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()`
 - Recibo deducible — FASE 2: generación real de la factura fiscal, típicamente requiere integrarse con un PAC (Proveedor Autorizado de Certificación del SAT), y su envío automático al jugador. Hoy solo existe la solicitud + carga del PDF (Fase 1).
+- Recordatorio para quien dijo "Sí" a recibo deducible pero no subió su constancia (`payment_attempts.solicito_recibo_deducible = true` sin fila correspondiente en `payment_fiscal_receipts`) — hoy solo existe el dato para detectarlo, no un correo/aviso automático.
 - Integración real con la pasarela de pago (Edge Function que reciba la confirmación del banco y cree la fila en `tournament_registrations` vía service_role) — hoy la tabla existe, pero nada la conecta todavía con un banco real
 - ⚠️ **CRÍTICO antes de producción:** eliminar (o inhabilitar por completo) la función `simular_resultado_pago()` (migración 052) — permite aprobar pagos sin banco real de por medio. Es intencional solo para pruebas.
 - Pantalla/lógica de validación de QR (la página pública que escanea el club) — depende de `tournament_registrations.qr_token`, ya existe el dato pero no la pantalla
