@@ -70,6 +70,9 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 056 | `056_mensaje_inscripcion_duplicada.sql` | Trigger que da un mensaje claro ("Ya tienes una inscripción activa en este torneo.") en vez del error técnico genérico de la restricción UNIQUE de `tournament_registrations`. Mismo patrón que la validación de teléfono duplicado. |
 | 057 | `057_bandera_correo_confirmacion.sql` | `tournament_registrations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de inscripción por accidente. |
 | 058 | `058_acotar_visibilidad_players_organizador.sql` | Acota `players_select`/`players_update` para `tournament_organizer`: solo ve/edita jugadores con inscripción o pre-reserva activa en SUS torneos, no el catálogo completo. `superadmin` y `club_admin` conservan visibilidad total (nueva función `is_any_club_admin()`). `players_insert` no cambia — cualquier admin activo sigue pudiendo pre-registrar jugadores nuevos. |
+| 059 | `059_hora_escopetazo.sql` | `tournament_marketing_info.hora_escopetazo` — hora de salida en escopetazo, opcional. |
+| 060 | `060_recibo_deducible_fase1.sql` | `payment_fiscal_receipts` — Fase 1 de recibo deducible: solicitud + referencia al PDF de la Constancia de Situación Fiscal, ligada a `payment_attempts` (pago genérico, no a la inscripción específica). Fase 2 (generación/envío real de factura vía PAC) queda pendiente. |
+| 061 | `061_bucket_constancias_fiscales.sql` | Bucket privado de Supabase Storage `constancias-fiscales`, con permisos: cada jugador solo sube/ve dentro de su propia carpeta (`player_id`); superadmin y club_admin ven todo; `tournament_organizer` ve únicamente las constancias ligadas a pagos de SUS propios torneos (consulta `payment_fiscal_receipts`). |
 
 ## Cómo agregar una migración nueva
 
@@ -81,6 +84,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 ## Entidades pendientes (no construidas todavía)
 
 - Inscripción de EQUIPOS (distinta a la individual que ya se construyó) — necesita capturar compañeros de equipo, y agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()`
+- Recibo deducible — FASE 2: generación real de la factura fiscal, típicamente requiere integrarse con un PAC (Proveedor Autorizado de Certificación del SAT), y su envío automático al jugador. Hoy solo existe la solicitud + carga del PDF (Fase 1).
 - Integración real con la pasarela de pago (Edge Function que reciba la confirmación del banco y cree la fila en `tournament_registrations` vía service_role) — hoy la tabla existe, pero nada la conecta todavía con un banco real
 - ⚠️ **CRÍTICO antes de producción:** eliminar (o inhabilitar por completo) la función `simular_resultado_pago()` (migración 052) — permite aprobar pagos sin banco real de por medio. Es intencional solo para pruebas.
 - Pantalla/lógica de validación de QR (la página pública que escanea el club) — depende de `tournament_registrations.qr_token`, ya existe el dato pero no la pantalla
