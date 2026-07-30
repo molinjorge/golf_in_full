@@ -76,6 +76,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 062 | `062_fix_recursion_players_organizador.sql` | Corrección crítica: la 058 introdujo recursión infinita de RLS entre `players` y `tournament_registrations`/`tournament_pre_reservations` (cada política consultaba a la otra). Se resuelve con la función `SECURITY DEFINER` `jugador_visible_para_organizador()`, mismo patrón que la migración 012. |
 | 063 | `063_bandera_intencion_recibo.sql` | `payment_attempts.solicito_recibo_deducible` — marca la intención en cuanto el jugador dice "Sí", independiente de si sube la constancia después. Permite detectar solicitudes de recibo incompletas (dijo que sí pero nunca subió el PDF). |
 | 064 | `064_torneos_beneficencia.sql` | `tournaments.es_beneficencia`/`institucion_beneficiaria`/`concepto_recibo` — mueve el dato del beneficiario desde `tournament_marketing_info` (que pierde esas 2 columnas) hacia `tournaments`, ya que ahora controla una regla real: **solo torneos de beneficencia pueden solicitar recibo deducible**, validado por trigger tanto en `payment_attempts` como en `payment_fiscal_receipts`. |
+| 065 | `065_tarifa_early_bird.sql` | `tournaments.tarifa_early_bird`/`fecha_limite_early_bird`. Función `tarifa_vigente_torneo()` calcula la tarifa aplicable hoy. El monto de `payment_attempts` para inscripción individual ahora lo calcula siempre el servidor (trigger), nunca se confía en lo que mande el cliente — cierra un hueco de seguridad real. |
 
 ## Cómo agregar una migración nueva
 
