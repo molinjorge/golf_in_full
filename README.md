@@ -75,6 +75,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 061 | `061_bucket_constancias_fiscales.sql` | Bucket privado de Supabase Storage `constancias-fiscales`, con permisos: cada jugador solo sube/ve dentro de su propia carpeta (`player_id`); superadmin y club_admin ven todo; `tournament_organizer` ve únicamente las constancias ligadas a pagos de SUS propios torneos (consulta `payment_fiscal_receipts`). |
 | 062 | `062_fix_recursion_players_organizador.sql` | Corrección crítica: la 058 introdujo recursión infinita de RLS entre `players` y `tournament_registrations`/`tournament_pre_reservations` (cada política consultaba a la otra). Se resuelve con la función `SECURITY DEFINER` `jugador_visible_para_organizador()`, mismo patrón que la migración 012. |
 | 063 | `063_bandera_intencion_recibo.sql` | `payment_attempts.solicito_recibo_deducible` — marca la intención en cuanto el jugador dice "Sí", independiente de si sube la constancia después. Permite detectar solicitudes de recibo incompletas (dijo que sí pero nunca subió el PDF). |
+| 064 | `064_torneos_beneficencia.sql` | `tournaments.es_beneficencia`/`institucion_beneficiaria`/`concepto_recibo` — mueve el dato del beneficiario desde `tournament_marketing_info` (que pierde esas 2 columnas) hacia `tournaments`, ya que ahora controla una regla real: **solo torneos de beneficencia pueden solicitar recibo deducible**, validado por trigger tanto en `payment_attempts` como en `payment_fiscal_receipts`. |
 
 ## Cómo agregar una migración nueva
 
