@@ -80,6 +80,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 066 | `066_tarifa_socios_permisos_validacion.sql` | Agrega a `club_admin` como editor de `tournament_marketing_info` (confirmado: intencional). `precio_socios` inicialmente exigía igualdad con `tarifa_early_bird` — corregido en la 067. |
 | 067 | `067_tarifas_independientes_y_bloqueo.sql` | `precio_socios` vuelve a ser independiente de `tarifa_early_bird` — solo debe ser menor que `tarifa_individual`. Nuevo: una vez que un torneo tiene al menos una inscripción activa, sus tarifas (`tarifa_individual`, `tarifa_early_bird`, `fecha_limite_early_bird`) quedan bloqueadas — no se pueden modificar, protegiendo a quien ya pagó. |
 | 068 | `068_perfil_completo_para_inscripcion.sql` | `players.fecha_nacimiento` y `telefono_*` vuelven opcionales (para permitir pre-registro incompleto por un organizador). Se exigen completos únicamente al momento de inscribirse (`tournament_registrations`/`tournament_pre_reservations`), vía `validar_perfil_completo_para_inscripcion()`. |
+| 069 | `069_buscar_jugador_por_telefono.sql` | Función `buscar_jugador_por_telefono()` — búsqueda acotada (solo confirma existencia + nombre) para que un organizador maneje reservas telefónicas sin poder navegar el catálogo completo. Habilita el flujo: llamada → buscar por teléfono → si existe, crear `tournament_pre_reservations` directo (cuenta contra cupo); si no existe, pre-registrar primero. |
+| 070 | `070_reservas_previas_telefonicas.sql` | `phone_reservations`: reserva telefónica para alguien que aún NO está en el catálogo (nombre + **correo obligatorio** + teléfono + compromiso, sin `player_id`). El correo permite enviar una invitación real a registrarse (pendiente construir en frontend). Se reconcilia automáticamente por teléfono (trigger en `players`): al autoregistrarse, se crea la `tournament_pre_reservations` real y se cancela la reserva telefónica. |
 
 ## Cómo agregar una migración nueva
 
@@ -98,6 +100,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Pantalla/lógica de validación de QR (la página pública que escanea el club) — depende de `tournament_registrations.qr_token`, ya existe el dato pero no la pantalla
 - Tarea programada que revise `tournament_registration_attempts` sin completar y dispare el correo de abandono
 - Decidir si la marca de salida se asigna en el momento de la inscripción, o se resuelve después (hoy `tournament_registrations` no la captura)
+- Notificación automática (SMS/WhatsApp) para avisarle a alguien pre-reservado por teléfono que debe entrar a confirmar — hoy no existe ninguna integración de mensajería, el aviso queda a criterio del organizador durante la misma llamada
 - Decidir qué pasa con una pre-reserva de transferencia que pasa su `fecha_limite_pago` sin confirmarse — ¿se cancela sola (tarea programada) o alguien la revisa manualmente?
 - Selector de ciudades + listado de torneos por ciudad (pantalla de jugador, antes de inscribirse) — no construido todavía
 - Sistema de QR de acceso al club/campo: respaldo de búsqueda manual por nombre para quien no tenga el QR a la mano — pendiente de decidir
