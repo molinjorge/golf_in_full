@@ -84,6 +84,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 070 | `070_reservas_previas_telefonicas.sql` | `phone_reservations`: reserva telefónica para alguien que aún NO está en el catálogo (nombre + **correo obligatorio** + teléfono + compromiso, sin `player_id`). El correo permite enviar una invitación real a registrarse (pendiente construir en frontend). Se reconcilia automáticamente por teléfono (trigger en `players`): al autoregistrarse, se crea la `tournament_pre_reservations` real y se cancela la reserva telefónica. |
 | 071 | `071_vista_reservas_previas.sql` | Vista `tournament_reservas_previas` — unifica `tournament_pre_reservations` y `phone_reservations` en una sola consulta, para la pantalla "Reservas previas del torneo" del organizador. Requiere que ya exista `phone_reservations` (070). |
 | 072 | `072_perfil_completo_solo_inscripcion_real.sql` | Corrección: la exigencia de perfil completo (migración 068) se quita de `tournament_pre_reservations` — solo debe aplicar a `tournament_registrations` (inscripción real, pagada). Una pre-reserva es un compromiso provisional y puede convivir con un perfil incompleto hasta confirmar el pago. |
+| 073 | `073_fecha_limite_pago_validada.sql` | `fecha_limite_pago` pasa de `timestamptz` a `date` (sin hora) en `tournament_pre_reservations` y `phone_reservations`. Se valida que no sea posterior a `tournaments.fecha_inicio`, y se autocompleta con esa misma fecha cuando la modalidad es "pago el día del evento" — ya no se captura a mano en ese caso. |
+| 074 | `074_bandera_correo_prereserva.sql` | `tournament_pre_reservations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de pre-reserva por accidente. |
 
 ## Cómo agregar una migración nueva
 
@@ -103,6 +105,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Tarea programada que revise `tournament_registration_attempts` sin completar y dispare el correo de abandono
 - Decidir si la marca de salida se asigna en el momento de la inscripción, o se resuelve después (hoy `tournament_registrations` no la captura)
 - Notificación automática (SMS/WhatsApp) para avisarle a alguien pre-reservado por teléfono que debe entrar a confirmar — hoy no existe ninguna integración de mensajería, el aviso queda a criterio del organizador durante la misma llamada
+- Anulación automática de pre-reservas vencidas (`fecha_limite_pago` pasada sin pago) — hoy no existe ninguna tarea programada que lo haga; se decidirá si se construye junto con el correo de confirmación de pre-reserva
 - Decidir qué pasa con una pre-reserva de transferencia que pasa su `fecha_limite_pago` sin confirmarse — ¿se cancela sola (tarea programada) o alguien la revisa manualmente?
 - Selector de ciudades + listado de torneos por ciudad (pantalla de jugador, antes de inscribirse) — no construido todavía
 - Sistema de QR de acceso al club/campo: respaldo de búsqueda manual por nombre para quien no tenga el QR a la mano — pendiente de decidir
