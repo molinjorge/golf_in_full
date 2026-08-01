@@ -86,6 +86,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 072 | `072_perfil_completo_solo_inscripcion_real.sql` | Corrección: la exigencia de perfil completo (migración 068) se quita de `tournament_pre_reservations` — solo debe aplicar a `tournament_registrations` (inscripción real, pagada). Una pre-reserva es un compromiso provisional y puede convivir con un perfil incompleto hasta confirmar el pago. |
 | 073 | `073_fecha_limite_pago_validada.sql` | `fecha_limite_pago` pasa de `timestamptz` a `date` (sin hora) en `tournament_pre_reservations` y `phone_reservations`. Se valida que no sea posterior a `tournaments.fecha_inicio`, y se autocompleta con esa misma fecha cuando la modalidad es "pago el día del evento" — ya no se captura a mano en ese caso. |
 | 074 | `074_bandera_correo_prereserva.sql` | `tournament_pre_reservations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de pre-reserva por accidente. |
+| 075 | `075_jugador_paga_prereserva.sql` | Nuevo concepto `confirmar_pre_reserva` en `procesar_resultado_pago()` — permite que el propio jugador pague en línea (tarjeta) una pre-reserva pendiente, sin depender de que un administrador la confirme manualmente. Valida que la pre-reserva le pertenezca y siga pendiente. |
 
 ## Cómo agregar una migración nueva
 
