@@ -98,6 +98,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 084 | `084_fix_categoria_nula_permitida.sql` | Corrección: `validar_categoria_pertenece_al_torneo()` rechazaba por error cualquier reserva con categoría vacía (incluido el caso legítimo "sin equipo") — nunca se actualizó para permitir `NULL` después de que la 083 volviera la categoría opcional. |
 | 085 | `085_categoria_obligatoria_sin_equipo_temprano.sql` | Adelanta la regla "sin equipo → categoría obligatoria" al momento de crear la pre-reserva (`phone_reservations`, `tournament_pre_reservations`), en vez de descubrirlo hasta el pago. Corrige un error de diseño propio: "sin equipo" nunca debió saltarse la pregunta de categoría — solo se salta cuando SÍ hay equipo (se hereda de ahí). |
 | 086 | `086_membresia_club_jugador.sql` | `players.club_id` (referencia a `clubs`, opcional) y `players.numero_membresia` (opcional) — captura de membresía de club. Estructura solamente; la lógica de aplicar tarifa de socios en el pago queda para una fase futura. |
+| 087 | `087_restringir_edicion_membresia.sql` | `club_id`/`numero_membresia` solo los puede editar el propio jugador o el superadmin — ni `club_admin` ni `tournament_organizer` pueden tocarlos, aunque sí editen el resto del perfil. Son datos que declara el propio jugador. |
 
 ## Cómo agregar una migración nueva
 
