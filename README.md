@@ -88,6 +88,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 074 | `074_bandera_correo_prereserva.sql` | `tournament_pre_reservations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de pre-reserva por accidente. |
 | 075 | `075_jugador_paga_prereserva.sql` | Nuevo concepto `confirmar_pre_reserva` en `procesar_resultado_pago()` — permite que el propio jugador pague en línea (tarjeta) una pre-reserva pendiente, sin depender de que un administrador la confirme manualmente. Valida que la pre-reserva le pertenezca y siga pendiente. |
 | 076 | `076_pais_telefono_y_whatsapp.sql` | Código de país limitado a `+52`/`+1` a nivel de base de datos (`players`, `phone_reservations`). `players.acepta_whatsapp` — consentimiento explícito para comunicación futura por ese canal. |
+| 077 | `077_secuencias_desempate.sql` | Catálogo `secuencias_desempate` (plantillas con nombre: "R&A Oficial" y "Mexicano por Hándicap") + `secuencia_desempate_pasos`. Agrega el método faltante `HOYO_POR_HOYO_HANDICAP` a `tiebreak_methods`. Función `aplicar_secuencia_desempate()` — aplica una plantilla completa a un torneo/alcance de un clic, reutilizando `tournament_tiebreak_rules` (031) por debajo. |
+| 078 | `078_desempate_por_categoria.sql` | `tournament_tiebreak_rules` gana `tournament_category_id` (permite secuencia distinta por categoría — Playoff para Campeonato, Countback neto para hándicap, etc. — NULL aplica como default general) y `tipo_resultado` (gross/neto). `aplicar_secuencia_desempate()` actualizado para aceptar ambos parámetros. |
 
 ## Cómo agregar una migración nueva
 
