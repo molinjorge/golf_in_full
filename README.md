@@ -87,6 +87,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 073 | `073_fecha_limite_pago_validada.sql` | `fecha_limite_pago` pasa de `timestamptz` a `date` (sin hora) en `tournament_pre_reservations` y `phone_reservations`. Se valida que no sea posterior a `tournaments.fecha_inicio`, y se autocompleta con esa misma fecha cuando la modalidad es "pago el día del evento" — ya no se captura a mano en ese caso. |
 | 074 | `074_bandera_correo_prereserva.sql` | `tournament_pre_reservations.correo_confirmacion_enviado` — evita reenviar el correo de confirmación de pre-reserva por accidente. |
 | 075 | `075_jugador_paga_prereserva.sql` | Nuevo concepto `confirmar_pre_reserva` en `procesar_resultado_pago()` — permite que el propio jugador pague en línea (tarjeta) una pre-reserva pendiente, sin depender de que un administrador la confirme manualmente. Valida que la pre-reserva le pertenezca y siga pendiente. |
+| 076 | `076_pais_telefono_y_whatsapp.sql` | Código de país limitado a `+52`/`+1` a nivel de base de datos (`players`, `phone_reservations`). `players.acepta_whatsapp` — consentimiento explícito para comunicación futura por ese canal. |
 
 ## Cómo agregar una migración nueva
 
@@ -106,6 +107,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Tarea programada que revise `tournament_registration_attempts` sin completar y dispare el correo de abandono
 - Decidir si la marca de salida se asigna en el momento de la inscripción, o se resuelve después (hoy `tournament_registrations` no la captura)
 - Notificación automática (SMS/WhatsApp) para avisarle a alguien pre-reservado por teléfono que debe entrar a confirmar — hoy no existe ninguna integración de mensajería, el aviso queda a criterio del organizador durante la misma llamada
+- Integración real de WhatsApp para comunicación con jugadores — hoy solo existe el consentimiento (`players.acepta_whatsapp`), ninguna integración de mensajería construida todavía
 - Anulación automática de pre-reservas vencidas (`fecha_limite_pago` pasada sin pago) — hoy no existe ninguna tarea programada que lo haga; se decidirá si se construye junto con el correo de confirmación de pre-reserva
 - Decidir qué pasa con una pre-reserva de transferencia que pasa su `fecha_limite_pago` sin confirmarse — ¿se cancela sola (tarea programada) o alguien la revisa manualmente?
 - Selector de ciudades + listado de torneos por ciudad (pantalla de jugador, antes de inscribirse) — no construido todavía
