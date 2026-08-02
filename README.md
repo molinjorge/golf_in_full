@@ -95,6 +95,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 081 | `081_jugador_crea_equipo.sql` | Permite que cualquier jugador autenticado cree un equipo (antes solo administradores) — necesario para la Fase 2: si el jugador no encuentra su equipo en la lista, puede darlo de alta él mismo. |
 | 082 | `082_logos_torneo.sql` | `tournaments.logo_url`. Bucket público `logos-torneos` (a diferencia de constancias fiscales, este sí es público). Solo superadmin/organizador/club_admin del club sede pueden subir el logo de su torneo. |
 | 083 | `083_equipos_en_prereservas.sql` | Corrección: el soporte de equipos (079) nunca se propagó a `phone_reservations` ni `tournament_pre_reservations` — ambas ganan `tournament_team_id` (categoría ahora opcional en ambas). Se actualiza la reconciliación automática, `confirmar_pago_prereserva()`, y `procesar_resultado_pago()` para propagar el equipo de extremo a extremo, desde la llamada telefónica hasta la inscripción final. |
+| 084 | `084_fix_categoria_nula_permitida.sql` | Corrección: `validar_categoria_pertenece_al_torneo()` rechazaba por error cualquier reserva con categoría vacía (incluido el caso legítimo "sin equipo") — nunca se actualizó para permitir `NULL` después de que la 083 volviera la categoría opcional. |
 
 ## Cómo agregar una migración nueva
 
