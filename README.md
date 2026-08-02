@@ -90,6 +90,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 076 | `076_pais_telefono_y_whatsapp.sql` | Código de país limitado a `+52`/`+1` a nivel de base de datos (`players`, `phone_reservations`). `players.acepta_whatsapp` — consentimiento explícito para comunicación futura por ese canal. |
 | 077 | `077_secuencias_desempate.sql` | Catálogo `secuencias_desempate` (plantillas con nombre: "R&A Oficial" y "Mexicano por Hándicap") + `secuencia_desempate_pasos`. Agrega el método faltante `HOYO_POR_HOYO_HANDICAP` a `tiebreak_methods`. Función `aplicar_secuencia_desempate()` — aplica una plantilla completa a un torneo/alcance de un clic, reutilizando `tournament_tiebreak_rules` (031) por debajo. |
 | 078 | `078_desempate_por_categoria.sql` | `tournament_tiebreak_rules` gana `tournament_category_id` (permite secuencia distinta por categoría — Playoff para Campeonato, Countback neto para hándicap, etc. — NULL aplica como default general) y `tipo_resultado` (gross/neto). `aplicar_secuencia_desempate()` actualizado para aceptar ambos parámetros. |
+| 079 | `079_equipos_fase1.sql` | **Inscripción por equipos, Fase 1.** Tabla `tournament_teams` (categoría opcional — soporta torneos de equipos sin categorías). `tournament_registrations` gana `tournament_team_id`; `tournament_category_id` pasa a opcional y se hereda automáticamente del equipo. Cupo por categoría deja de aplicar en torneos de equipos. Función `reasignar_jugador_a_equipo()` para que el organizador mueva jugadores libremente entre equipos. Vista `tournament_equipos_incompletos`. |
 
 ## Cómo agregar una migración nueva
 
@@ -100,7 +101,11 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 ## Entidades pendientes (no construidas todavía)
 
-- Inscripción de EQUIPOS (distinta a la individual que ya se construyó) — necesita capturar compañeros de equipo, y agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()`
+- Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
+- Inscripción por EQUIPOS — Fase 3: que el jugador se una a un equipo incompleto ya existente (usa la vista `tournament_equipos_incompletos`, ya lista)
+- Inscripción por EQUIPOS — Fase 4: pago de "equipo completo de una sola vez" con `tarifa_equipo_completo` — requiere que un solo pago genere varias inscripciones simultáneas, distinto al mecanismo actual de "un pago = una inscripción"
+- Inscripción por EQUIPOS — Fase 5: correo de confirmación con el detalle completo del equipo
+- Agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()` (relacionado con la Fase 4 de equipos)
 - Recibo deducible — FASE 2: generación real de la factura fiscal, típicamente requiere integrarse con un PAC (Proveedor Autorizado de Certificación del SAT), y su envío automático al jugador. Hoy solo existe la solicitud + carga del PDF (Fase 1).
 - Recordatorio para quien dijo "Sí" a recibo deducible pero no subió su constancia (`payment_attempts.solicito_recibo_deducible = true` sin fila correspondiente en `payment_fiscal_receipts`) — hoy solo existe el dato para detectarlo, no un correo/aviso automático.
 - Integración real con la pasarela de pago (Edge Function que reciba la confirmación del banco y cree la fila en `tournament_registrations` vía service_role) — hoy la tabla existe, pero nada la conecta todavía con un banco real
