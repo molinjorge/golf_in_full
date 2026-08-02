@@ -110,6 +110,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Decidir si la marca de salida se asigna en el momento de la inscripción, o se resuelve después (hoy `tournament_registrations` no la captura)
 - Notificación automática (SMS/WhatsApp) para avisarle a alguien pre-reservado por teléfono que debe entrar a confirmar — hoy no existe ninguna integración de mensajería, el aviso queda a criterio del organizador durante la misma llamada
 - Integración real de WhatsApp para comunicación con jugadores — hoy solo existe el consentimiento (`players.acepta_whatsapp`), ninguna integración de mensajería construida todavía
+- Decidir (con el asesor de golf) si conviene abrir la puerta a plantillas de desempate personalizadas por torneo, más allá de "R&A Oficial" y "Mexicano por Hándicap" — la estructura ya lo soportaría (`tournament_tiebreak_rules` permite armar una cadena a mano), falta decidir si construir la pantalla para eso
 - Anulación automática de pre-reservas vencidas (`fecha_limite_pago` pasada sin pago) — hoy no existe ninguna tarea programada que lo haga; se decidirá si se construye junto con el correo de confirmación de pre-reserva
 - Decidir qué pasa con una pre-reserva de transferencia que pasa su `fecha_limite_pago` sin confirmarse — ¿se cancela sola (tarea programada) o alguien la revisa manualmente?
 - Selector de ciudades + listado de torneos por ciudad (pantalla de jugador, antes de inscribirse) — no construido todavía
