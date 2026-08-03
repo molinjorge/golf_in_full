@@ -100,6 +100,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 086 | `086_membresia_club_jugador.sql` | `players.club_id` (referencia a `clubs`, opcional) y `players.numero_membresia` (opcional) — captura de membresía de club. Estructura solamente; la lógica de aplicar tarifa de socios en el pago queda para una fase futura. |
 | 087 | `087_restringir_edicion_membresia.sql` | `club_id`/`numero_membresia` solo los puede editar el propio jugador o el superadmin — ni `club_admin` ni `tournament_organizer` pueden tocarlos, aunque sí editen el resto del perfil. Son datos que declara el propio jugador. |
 | 088 | `088_tarifa_socios_real.sql` | `tarifa_vigente_torneo()` ahora recibe también `p_player_id` — aplica tarifa de socios si el jugador pertenece al club dueño del campo, tiene `numero_membresia` capturado (control anti-fraude), y el torneo la ofrece. Si no, sigue la lógica previa (Early Bird > individual). El monto de inscripción individual ya considera al jugador, no solo el torneo. |
+| 089 | `089_cupo_equipo_en_reservas.sql` | Cupo de equipo ahora se valida desde `phone_reservations`/`tournament_pre_reservations` (no solo hasta `tournament_registrations`), vía función compartida `ocupacion_actual_equipo()` que suma las tres fuentes sin doble conteo. Usa una bandera de sesión (`app.saltar_validacion_cupo_equipo`) para no contar dos veces durante la conversión controlada de pre-reserva a inscripción real. |
 
 ## Cómo agregar una migración nueva
 
@@ -117,7 +118,6 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Agregar el concepto `inscripcion_equipo` a `procesar_resultado_pago()` (relacionado con la Fase 4 de equipos)
 - Recibo deducible — FASE 2: generación real de la factura fiscal, típicamente requiere integrarse con un PAC (Proveedor Autorizado de Certificación del SAT), y su envío automático al jugador. Hoy solo existe la solicitud + carga del PDF (Fase 1).
 - Recordatorio para quien dijo "Sí" a recibo deducible pero no subió su constancia (`payment_attempts.solicito_recibo_deducible = true` sin fila correspondiente en `payment_fiscal_receipts`) — hoy solo existe el dato para detectarlo, no un correo/aviso automático.
-- Validar el cupo del equipo también al crear una `phone_reservations`/`tournament_pre_reservations` con equipo asignado — hoy esa validación solo corre en `tournament_registrations` (la inscripción final)
 - Corregir la pantalla "Mis Reservas Pendientes" (botón "Pagar ahora") para que también pregunte por recibo deducible cuando el torneo es de beneficencia — esa lógica parece que solo se construyó en la pantalla de inscripción individual directa
 - Decidir y construir si la tarifa de socios se extiende a TODO el equipo cuando un solo integrante es socio del club — no aplica en todos los torneos, depende del mecanismo de "pago de equipo completo" (Fase 4 de equipos, todavía no construida)
 - Soporte de "clubes amigos" con tarifa recíproca de socios (más allá del propio club del jugador) — todavía no construido
