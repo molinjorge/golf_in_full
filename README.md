@@ -101,6 +101,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 087 | `087_restringir_edicion_membresia.sql` | `club_id`/`numero_membresia` solo los puede editar el propio jugador o el superadmin — ni `club_admin` ni `tournament_organizer` pueden tocarlos, aunque sí editen el resto del perfil. Son datos que declara el propio jugador. |
 | 088 | `088_tarifa_socios_real.sql` | `tarifa_vigente_torneo()` ahora recibe también `p_player_id` — aplica tarifa de socios si el jugador pertenece al club dueño del campo, tiene `numero_membresia` capturado (control anti-fraude), y el torneo la ofrece. Si no, sigue la lógica previa (Early Bird > individual). El monto de inscripción individual ya considera al jugador, no solo el torneo. |
 | 089 | `089_cupo_equipo_en_reservas.sql` | Cupo de equipo ahora se valida desde `phone_reservations`/`tournament_pre_reservations` (no solo hasta `tournament_registrations`), vía función compartida `ocupacion_actual_equipo()` que suma las tres fuentes sin doble conteo. Usa una bandera de sesión (`app.saltar_validacion_cupo_equipo`) para no contar dos veces durante la conversión controlada de pre-reserva a inscripción real. |
+| 090 | `090_fecha_limite_obligatoria_transferencia.sql` | Corrección: `ajustar_fecha_limite_pago()` ahora exige `fecha_limite_pago` cuando `modalidad = 'transferencia'` — antes solo se autocompletaba para "pago el día del evento", pero nunca se exigió para transferencia, permitiendo reservas sin fecha límite. |
 
 ## Cómo agregar una migración nueva
 
