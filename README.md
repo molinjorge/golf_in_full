@@ -99,6 +99,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 085 | `085_categoria_obligatoria_sin_equipo_temprano.sql` | Adelanta la regla "sin equipo → categoría obligatoria" al momento de crear la pre-reserva (`phone_reservations`, `tournament_pre_reservations`), en vez de descubrirlo hasta el pago. Corrige un error de diseño propio: "sin equipo" nunca debió saltarse la pregunta de categoría — solo se salta cuando SÍ hay equipo (se hereda de ahí). |
 | 086 | `086_membresia_club_jugador.sql` | `players.club_id` (referencia a `clubs`, opcional) y `players.numero_membresia` (opcional) — captura de membresía de club. Estructura solamente; la lógica de aplicar tarifa de socios en el pago queda para una fase futura. |
 | 087 | `087_restringir_edicion_membresia.sql` | `club_id`/`numero_membresia` solo los puede editar el propio jugador o el superadmin — ni `club_admin` ni `tournament_organizer` pueden tocarlos, aunque sí editen el resto del perfil. Son datos que declara el propio jugador. |
+| 088 | `088_tarifa_socios_real.sql` | `tarifa_vigente_torneo()` ahora recibe también `p_player_id` — aplica tarifa de socios si el jugador pertenece al club dueño del campo, tiene `numero_membresia` capturado (control anti-fraude), y el torneo la ofrece. Si no, sigue la lógica previa (Early Bird > individual). El monto de inscripción individual ya considera al jugador, no solo el torneo. |
 
 ## Cómo agregar una migración nueva
 
@@ -118,7 +119,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Recordatorio para quien dijo "Sí" a recibo deducible pero no subió su constancia (`payment_attempts.solicito_recibo_deducible = true` sin fila correspondiente en `payment_fiscal_receipts`) — hoy solo existe el dato para detectarlo, no un correo/aviso automático.
 - Validar el cupo del equipo también al crear una `phone_reservations`/`tournament_pre_reservations` con equipo asignado — hoy esa validación solo corre en `tournament_registrations` (la inscripción final)
 - Corregir la pantalla "Mis Reservas Pendientes" (botón "Pagar ahora") para que también pregunte por recibo deducible cuando el torneo es de beneficencia — esa lógica parece que solo se construyó en la pantalla de inscripción individual directa
-- Integrar la tarifa de socios (`tournament_marketing_info.precio_socios`) en el momento del pago, usando `players.club_id`/`numero_membresia` (086) — aplicar automáticamente cuando el torneo se juega en el campo del club del que el jugador es socio, y eventualmente soportar "clubes amigos" con tarifa recíproca
+- Decidir y construir si la tarifa de socios se extiende a TODO el equipo cuando un solo integrante es socio del club — no aplica en todos los torneos, depende del mecanismo de "pago de equipo completo" (Fase 4 de equipos, todavía no construida)
+- Soporte de "clubes amigos" con tarifa recíproca de socios (más allá del propio club del jugador) — todavía no construido
 - Integración real con la pasarela de pago (Edge Function que reciba la confirmación del banco y cree la fila en `tournament_registrations` vía service_role) — hoy la tabla existe, pero nada la conecta todavía con un banco real
 - ⚠️ **CRÍTICO antes de producción:** eliminar (o inhabilitar por completo) la función `simular_resultado_pago()` (migración 052) — permite aprobar pagos sin banco real de por medio. Es intencional solo para pruebas.
 - Pantalla/lógica de validación de QR (la página pública que escanea el club) — depende de `tournament_registrations.qr_token`, ya existe el dato pero no la pantalla
