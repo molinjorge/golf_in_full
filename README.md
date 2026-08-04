@@ -107,6 +107,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 093 | `093_carga_orden_categorias.sql` | Carga el orden confirmado: Scratch, Premier, AA, A, B, C, D, Senior 1, Senior 2, Abierta (caballeros) → Damas 1, Damas 2 → Única. Debe respetarse en todas las pantallas: catálogo, selectores de inscripción/pre-reserva, configuración de torneo. |
 | 094 | `094_exentar_categorias_sin_rango.sql` | Corrección: categorías sin rango de hándicap definido (ej. Senior 1/2, decididas por edad) se estaban reasignando incorrectamente en `resolver_categoria_y_marca()`. Ahora se aceptan tal cual, sin validar — la reasignación automática solo aplica entre categorías que sí tienen rango de hándicap. |
 | 095 | `095_validar_por_edad.sql` | Extiende `resolver_categoria_y_marca()` para validar/reasignar también por rango de EDAD (categorías tipo Senior), simétrico a como ya funciona con hándicap — usa `fecha_nacimiento` del jugador (ya garantizada no-nula) contra la fecha de inicio del torneo. |
+| 096 | `096_franjas_continuas_y_herencia.sql` | Candado real contra huecos/traslapes en `tournament_franjas_handicap` — cada franja nueva debe empezar exactamente donde terminó la anterior, error explícito si no. Función `heredar_franjas_desde_categorias()` — crea de un jalón las franjas de un torneo copiando los rangos/marca de las categorías estándar de caballeros (excluye Damas). |
+| 097 | `097_damas_rojas_categoria_unica.sql` | En torneos de categoría única, las damas siempre salen de Rojas (regla fija, no pasan por las franjas de hándicap — esas son solo para caballeros). |
 
 ## Cómo agregar una migración nueva
 
