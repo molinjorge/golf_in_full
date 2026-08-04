@@ -105,6 +105,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 091 | `091_asignacion_marca_salida.sql` | Asignación automática de marca de salida al inscribirse. `categories.categoria_estandar_marca` (color fijo por categoría). `tournament_categories.handicap_minimo`/`handicap_maximo` (override por torneo). `tournament_franjas_handicap` (para torneos de categoría única, resuelve directo por hándicap sin pasar por categoría). `tournament_registrations` gana `marca_salida_id` y `categoria_reasignada`. Con equipo, la marca se hereda de la categoría del equipo sin validar hándicap individual. |
 | 092 | `092_orden_categorias.sql` | `categories.display_order` — columna para el orden de presentación estándar (sin datos todavía). |
 | 093 | `093_carga_orden_categorias.sql` | Carga el orden confirmado: Scratch, Premier, AA, A, B, C, D, Senior 1, Senior 2, Abierta (caballeros) → Damas 1, Damas 2 → Única. Debe respetarse en todas las pantallas: catálogo, selectores de inscripción/pre-reserva, configuración de torneo. |
+| 094 | `094_exentar_categorias_sin_rango.sql` | Corrección: categorías sin rango de hándicap definido (ej. Senior 1/2, decididas por edad) se estaban reasignando incorrectamente en `resolver_categoria_y_marca()`. Ahora se aceptan tal cual, sin validar — la reasignación automática solo aplica entre categorías que sí tienen rango de hándicap. |
+| 095 | `095_validar_por_edad.sql` | Extiende `resolver_categoria_y_marca()` para validar/reasignar también por rango de EDAD (categorías tipo Senior), simétrico a como ya funciona con hándicap — usa `fecha_nacimiento` del jugador (ya garantizada no-nula) contra la fecha de inicio del torneo. |
 
 ## Cómo agregar una migración nueva
 
