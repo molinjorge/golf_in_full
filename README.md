@@ -110,6 +110,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 096 | `096_franjas_continuas_y_herencia.sql` | Candado real contra huecos/traslapes en `tournament_franjas_handicap` — cada franja nueva debe empezar exactamente donde terminó la anterior, error explícito si no. Función `heredar_franjas_desde_categorias()` — crea de un jalón las franjas de un torneo copiando los rangos/marca de las categorías estándar de caballeros (excluye Damas). |
 | 097 | `097_damas_rojas_categoria_unica.sql` | En torneos de categoría única, las damas siempre salen de Rojas (regla fija, no pasan por las franjas de hándicap — esas son solo para caballeros). |
 | 098 | `098_seniors_doradas_categoria_unica.sql` | En categoría única: caballeros de edad senior siempre salen de Doradas (gana sobre franjas de hándicap), mujeres siguen ganando sobre todo (siempre Rojas, incluso si son senior). `tournaments.edad_senior_categoria_unica` — override opcional del corte de edad, por torneo (default: el `edad_minima` más bajo entre categorías Senior del catálogo global). |
+| 099 | `099_fix_genero_categoria.sql` | Corrección de bug real: la reasignación automática por hándicap/edad no filtraba por género, permitiendo que un hombre con hándicap bajo fuera reasignado por error a una categoría de damas si los rangos numéricos coincidían (caso real detectado: Juan Llosa). Se agrega `categories.genero` (M/F/NULL) explícito, usado ahora para filtrar toda reasignación. |
 
 ## Cómo agregar una migración nueva
 
