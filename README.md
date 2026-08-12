@@ -275,3 +275,18 @@ La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya 
 - Shotgun no se toca en esta migración.
 - La persistencia/autosave de Salidas Shotgun queda para la **Migración 135**.
 
+## Migración 135 — Persistencia/autosave de Salidas Shotgun
+
+**Estado:** preparada para ejecución manual; no marcar como aplicada hasta validar en Supabase.
+
+- Materializa una sola vez la propuesta inicial Shotgun.
+- Después, cada movimiento se guarda transaccionalmente e incrementalmente.
+- Un movimiento afecta únicamente a la unidad movida; no redistribuye terceros.
+- Crea o reactiva el grupo destino cuando sea necesario.
+- Da de baja lógica a un grupo cuando queda vacío.
+- Incluye `sacar_unidad_grupo_shotgun` para soportar posteriormente la bandeja virtual de pendientes.
+- Usa `pg_advisory_xact_lock` por configuración para serializar movimientos concurrentes.
+- Calcula `hora_salida` con fecha de ronda + hora del turno + zona IANA real del campo; salida B suma el intervalo configurado.
+- Agrega índices de `tournament_group_players` para grupo, inscripción y unicidad grupo/inscripción.
+- No cierra ni valida definitivamente las salidas; persistir sigue siendo distinto de `VALIDAR SALIDAS ANTES DE GENERAR TARJETAS`.
+
