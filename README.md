@@ -205,3 +205,73 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 ### Nota técnica — RLS Shotgun holes optimizada en 133
 
 Se confirmó que un `UPDATE` simple sobre `tournament_shotgun_category_holes` era rápido sin RLS (~5 ms) pero se degradaba a segundos al simular el rol `authenticated`, debido a la expansión de policies a través de múltiples tablas también protegidas por RLS. La migración 133 encapsula la resolución de acceso en helpers `SECURITY DEFINER` y simplifica únicamente las policies de `tournament_shotgun_category_holes`. La verificación posterior debe repetir el `EXPLAIN ANALYZE` autenticado antes de considerar cerrada la corrección.
+
+---
+
+## Estado de desarrollo — 11 agosto 2026 — Categorías de equipos y próxima Migración 134
+
+Se detectó y diagnosticó una inconsistencia de integridad en torneos por equipos: ciertos equipos creados automáticamente desde el flujo de cortesías de patrocinador podían nacer con `tournament_teams.tournament_category_id = NULL`. Como la regla vigente de inscripciones hace que la categoría del equipo prevalezca sobre la de sus integrantes, esos jugadores heredaban también `NULL`.
+
+La causa raíz quedó localizada en la creación automática de equipos de cortesía. Se confirmó además que el fallback visual `?? "ÚNICA"` en la pantalla de equipos ocultaba el problema; el frontend ya fue ajustado para mostrar la categoría real y utilizar `Sin categoría` cuando el dato realmente sea NULL.
+
+### Regla funcional definitiva de categorías de equipos
+
+- Torneo con **0 categorías**: `tournament_category_id = NULL` puede seguir siendo válido conforme al modelo actual.
+- Torneo con **1 categoría**: todo equipo debe recibir automáticamente la única `tournament_categories.id`, independientemente de si fue creado manualmente, por jugador, reserva, patrocinio/cortesía u otro flujo.
+- Torneo con **más de 1 categoría**: la categoría deportiva del equipo debe ser explícita; el sistema no debe deducirla ni elegir la primera.
+- La categoría almacenada en `tournament_teams.tournament_category_id` siempre referencia `tournament_categories.id`, nunca `categories.id`.
+- La categoría comercial del patrocinador (`patrocinadores.categoria_patrocinador_id`) y la categoría deportiva del equipo son conceptos independientes. **No se agregará `patrocinadores.tournament_category_id`.**
+- Un mismo patrocinador puede tener varios equipos en categorías deportivas diferentes.
+
+### Frontend ya preparado
+
+El frontend fue adaptado para que:
+
+- en una categoría, el equipo reciba automáticamente esa categoría;
+- en multicategoría, el organizador deba seleccionar explícitamente la categoría antes de crear el equipo;
+- los equipos de cortesía multicategoría se materialicen uno por uno desde la UI, con categoría por equipo;
+- el cupo de equipos de cortesía se calcule como `ceil(cupo_jugadores_cortesia / jugadores_por_equipo)` y se muestre como Permitidos / Creados / Pendientes;
+- un integrante de equipo no pueda cambiar individualmente su categoría; la categoría se administra desde el equipo;
+- una categoría NULL real se muestre como `Sin categoría`, sin fallback cosmético a `ÚNICA`.
+
+### Migración 134 — PENDIENTE DE GENERACIÓN / REVISIÓN / EJECUCIÓN
+
+La próxima migración será:
+
+`134_integridad_categorias_equipos.sql`
+
+Debe incluir, para revisión manual antes de ejecutarse:
+
+- backfill genérico de equipos NULL en torneos con exactamente una categoría;
+- sincronización de las inscripciones activas de integrantes con la categoría de su equipo;
+- corrección inequívoca de cortesías pendientes en torneos de una categoría;
+- resolución defensiva de categoría única en `tournament_teams`;
+- rechazo de equipos definitivos sin categoría cuando el torneo tenga múltiples categorías;
+- corrección de `crear_equipos_cortesia_patrocinador()` para crear automáticamente equipos solo en torneos de 0/1 categorías y posponer la materialización cuando haya múltiples categorías;
+- protección server-side del máximo de equipos de cortesía permitido por patrocinador;
+- verificaciones PRE y POST separadas en `SUPABASE-VERIFICAR-INTEGRIDAD-CATEGORIAS-EQUIPOS.sql`.
+
+La Migración 134 **no está aplicada todavía**. No debe marcarse como ejecutada hasta completar revisión, ejecución manual en Supabase y verificación POST.
+
+### Shotgun
+
+La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya llegó hasta propuesta automática, posiciones físicas, asignación inicial, movimientos manuales sin redistribución de terceros y preparación de la arquitectura para persistencia incremental. La persistencia/autosave transaccional de Shotgun queda reservada para la **Migración 135** después de cerrar y verificar la integridad de categorías de equipos.
+
+## Migración 134 — Integridad de categorías en equipos
+
+**Estado:** preparada para ejecución manual. No marcar como aplicada hasta validar el resultado en Supabase.
+
+- Corrige la causa raíz por la que equipos automáticos de cortesía podían quedar con `tournament_category_id = NULL`.
+- Mantiene completamente separada la categoría comercial del patrocinador (`categoria_patrocinador_id`) de la categoría deportiva del equipo (`tournament_teams.tournament_category_id`).
+- Regla 0/1/>1 categorías:
+  - 0 categorías: `NULL` puede ser válido.
+  - 1 categoría: se asigna automáticamente `tournament_categories.id`.
+  - >1 categorías: se exige categoría explícita para el equipo.
+- Backfill genérico de equipos, integrantes y cortesías pendientes cuando la categoría es inequívoca.
+- Protección defensiva para impedir equipos definitivos sin categoría en torneos multicategoría.
+- Protección server-side del cupo máximo de equipos de cortesía.
+- En torneos multicategoría, los equipos de cortesía se materializan uno por uno desde la UI con categoría explícita.
+- **No se agrega** `patrocinadores.tournament_category_id`.
+- Shotgun no se toca en esta migración.
+- La persistencia/autosave de Salidas Shotgun queda para la **Migración 135**.
+
