@@ -145,6 +145,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 130 | `130_configuracion_shotgun_por_categoria.sql` | **Fase 2 de preparación de salidas Shotgun.** Crea `tournament_shotgun_category_configs` para definir por categoría y turno el tamaño normal del grupo, el máximo excepcional y el desfase en minutos de la salida B; la unidad se deriva de `tournament_formats.tipo_participacion` (jugadores en individual, equipos en torneo por equipos). Crea `tournament_shotgun_category_holes` para que el organizador seleccione los hoyos de salida de cada categoría y decida hoyo por hoyo si existe salida doble A/B. Un mismo hoyo queda reservado a una sola categoría dentro del turno y debe pertenecer al campo de la ronda. Solo se permite configurar rondas `shotgun`. Incluye RLS, auditoría, baja lógica y validaciones. **No modifica todavía** `tournament_groups`, no asigna jugadores/equipos y no elimina aún la validación histórica de doble salida por Par 4/5 en grupos. |
 | 131 | `131_adaptacion_estructural_grupos_shotgun.sql` | **Fase 3A del motor Shotgun.** Adapta `tournament_groups` sin destruir su estructura histórica: agrega `tournament_shotgun_category_hole_id` y `posicion_salida` (`A`/`B`), con unicidad de posición activa por hoyo Shotgun configurado. Crea `tournament_group_teams` para permitir uno o varios equipos completos dentro del mismo grupo físico, manteniendo `tournament_groups.tournament_team_id` temporalmente como campo LEGACY. Hace backfill de equipos históricos hacia la nueva tabla y agrega validaciones estructurales de coherencia torneo/turno/hoyo. **No modifica todavía** las validaciones de doble salida por PAR, máximo de integrantes, equipo único por ronda ni la exigencia histórica de un único team_id en `tournament_groups`; esas reglas se adaptarán en la siguiente fase. |
 | 136 | `136_congelar_condiciones_y_handicaps.sql` | **Fase 1 del motor de captura de resultados.** Crea un congelamiento único e inmutable por torneo con snapshots normalizados de condiciones efectivas por ronda, PAR/Stroke Index/distancias por tee, Handicap Index de cada inscripción activa y Course/Playing Handicap por jugador y ronda. Agrega el override opcional `tournament_round_registration_tees` para soportar torneos multicampo o tees distintos por ronda. Aplica la fórmula WHS sobre el Course Handicap sin redondear y redondea sólo al final. Incluye preview de errores/advertencias, estado ligero para UI, congelamiento atómico, RLS y protección contra edición/borrado. Los cortes se excluyen deliberadamente para poder configurarlos después de cada ronda. **No crea todavía tarjetas, scores, cortes aplicados ni clasificaciones.** |
+| 137 | `137_proteger_inscripciones_torneo_congelado.sql` | **Candado competitivo posterior al congelamiento.** Protege `tournament_registrations` para impedir nuevas inscripciones activas y cambios de jugador, categoría, marca de salida, equipo o torneo después de crear el snapshot. Permite la baja lógica de un participante y sólo permite reactivar una inscripción si ya pertenecía al snapshot original. Los datos no competitivos del registro, el perfil global del jugador, su Handicap Index vivo y las reglas de corte siguen administrándose sin modificar la fotografía congelada. Incluye función `SECURITY DEFINER` y trigger `BEFORE INSERT OR UPDATE`; las excepciones futuras deberán implementarse mediante un proceso explícito y auditado. |
 
 ## Cómo agregar una migración nueva
 
@@ -293,7 +294,7 @@ La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya 
 
 ## Migración 136 — Congelamiento de condiciones y hándicaps
 
-**Estado:** preparada para revisión y ejecución manual en Supabase. No marcar como aplicada hasta ejecutar el verificador posterior.
+**Estado:** aplicada correctamente en Supabase. La estructura, RLS, políticas, funciones, inmutabilidad y fórmulas quedaron verificadas; se corrigió únicamente una constante mal transcrita en el script de verificación original (`10.861061...` por `10.861946...`), sin cambios en la migración ni en los datos.
 
 - Es el primer bloque del motor de captura de resultados; todavía no crea tarjetas ni captura golpes.
 - El botón de Lovable debe llamar primero a `previsualizar_congelamiento_torneo(tournament_id)` y sólo habilitar la confirmación cuando `ready = true`.
@@ -309,3 +310,18 @@ La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya 
 - Los cortes no forman parte del snapshot: permanecen configurables después de cada ronda mediante la estructura ya existente `tournament_cut_rules`.
 - La siguiente fase deberá cerrar las salidas de una ronda y generar las tarjetas desde esa salida y desde estos snapshots; después vendrán captura, atestación, sanciones y cálculo de resultados.
 - Verificación posterior: `SUPABASE-VERIFICAR-CONGELAMIENTO-CONDICIONES-HANDICAPS.sql`.
+
+## Migración 137 — Protección de inscripciones después del congelamiento
+
+**Estado:** preparada para ejecución manual en Supabase. No marcar como aplicada hasta ejecutar su verificador posterior.
+
+- Cierra la inconsistencia detectada al probar la Fase 1: la pantalla de jugadores inscritos todavía podía modificar la categoría viva aunque el snapshot conservara la categoría original.
+- Rechaza nuevas inscripciones activas en un torneo congelado.
+- Rechaza cambios de jugador, categoría, marca de salida, equipo y torneo en inscripciones vinculadas con un torneo congelado.
+- Permite retirar a un jugador mediante baja lógica (`activo: true → false`).
+- Permite reactivar únicamente una inscripción que ya formaba parte de `tournament_handicap_snapshots`; no permite introducir mediante reactivación un participante ajeno al snapshot.
+- No bloquea nombre, teléfono, correo ni otros datos generales del jugador.
+- No bloquea la actualización del Handicap Index vivo: los torneos futuros podrán usar el valor nuevo, mientras que el torneo congelado conserva el snapshot anterior.
+- No modifica ni congela las reglas de corte.
+- No implementa todavía un mecanismo excepcional de corrección posterior al congelamiento; ese mecanismo deberá ser explícito, autorizado, auditado y versionado.
+- Verificación posterior: `SUPABASE-VERIFICAR-PROTECCION-INSCRIPCIONES-CONGELADAS.sql`.
