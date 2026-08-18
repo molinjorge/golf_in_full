@@ -158,6 +158,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 143 | `143_emision_oficial_tarjetas_score.sql` | Crea la infraestructura de **emisión oficial de tarjetas de score** a partir de una versión validada de las salidas: cabecera `tournament_score_card_emissions`, tarjetas `tournament_score_cards`, folio y QR propios de tarjeta, RPC idempotente `emitir_tarjetas_score_ronda(uuid)`, estado ligero de emisión y bloqueo de reapertura normal después de emitir. El QR existente en `tournament_registrations.qr_token` queda intacto y reservado para el futuro módulo de control de acceso. Primera versión: Stroke Play individual + Shotgun. No captura golpes ni genera PDF. |
 | 144 | `144_snapshot_tee_efectivo_ronda_CORREGIDA.sql` | Completa la fotografía histórica del tee efectivo sin modificar snapshots inmutables. Crea `tournament_round_handicap_tee_snapshots`, tabla complementaria 1:1 con nombre/color del tee, backfill por INSERT para snapshots existentes y trigger `AFTER INSERT` para snapshots futuros. La primera versión de 144 fue descartada porque intentaba UPDATE sobre snapshots congelados y fue correctamente rechazada por la protección `55000`. No toca QR/folio de inscripción ni de tarjeta. |
 | 145 | `145_payload_oficial_tarjetas_score_snapshots.sql` | Agrega `obtener_payload_tarjetas_score_oficiales_ronda(uuid)`, RPC de solo lectura para reconstruir el payload oficial de una ronda emitida exclusivamente desde emisión + validación + snapshots históricos de hándicap, tee (144), condiciones y hoyos. Usa `tournament_score_cards.card_folio` y `tournament_score_cards.qr_token`; no depende de `tournament_groups` vivos, `distancias_hoyo`, `marcas_salida` ni del QR/folio de inscripción. No genera PDF. |
+| 146 | `146_nucleo_captura_scores_pwa.sql` | Crea el núcleo transaccional de captura de **GROSS por hoyo** para PWA: sesiones por tarjeta, asignación circular de marcador basada en `order_in_group` congelado, scores por hoyo con `play_sequence` Shotgun, confirmación/disputa por el dueño y bitácora inmutable. El QR de tarjeta sólo localiza; la autorización se resuelve con `auth.uid() → players.auth_user_id`. No calcula NETO, leaderboard, cortes ni cierre físico. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -372,6 +373,25 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La RPC valida que el número de tarjetas coincida con la emisión y que cada tarjeta tenga vínculos completos a snapshots históricos.
 - No genera PDF ni modifica emisión, tarjetas o snapshots.
 
+### Migración 146 — Núcleo de captura de scores para PWA
+
+- Crea `tournament_scorecard_capture_sessions`, una sesión operativa 1:1 por tarjeta oficial.
+- Crea `tournament_scorecard_marker_assignments`, historial de quién marca la tarjeta de quién.
+- Crea `tournament_scorecard_hole_scores`, una fila por tarjeta + hoyo congelado, con `hole_number`, `play_sequence`, `gross_score`, estados `pending / entered / confirmed / disputed`, marcador utilizado y confirmación/disputa del dueño.
+- Crea `tournament_scorecard_events`, bitácora inmutable de captura, corrección, confirmación, disputa y cambio administrativo de marcador.
+- Se captura únicamente **GROSS**. El NETO y resultados derivados no se almacenan en esta migración.
+- `inicializar_captura_scores_ronda(uuid)` exige emisión oficial activa, crea sesiones/hoyos de forma idempotente, calcula el orden real Shotgun y genera el marcador circular desde `order_in_group` congelado.
+- Regla circular: A marca B; B marca C; C marca D; D marca A.
+- Grupos de un solo jugador quedan sin marcador automático; nunca se autoasigna al propio jugador.
+- `asignar_marcador_tarjeta_score(...)` permite cambio administrativo explícito y auditado desde una secuencia futura.
+- `registrar_score_hoyo(...)` sólo permite escribir al marcador vigente y bloquea expresamente la auto-captura.
+- `confirmar_score_hoyo(uuid)` y `disputar_score_hoyo(uuid,integer,text)` sólo pueden ejecutarse por el dueño de la tarjeta.
+- `abrir_captura_tarjeta_score(text)` usa exclusivamente `tournament_score_cards.qr_token` como localizador; no usa el QR de inscripción y no lo considera permiso de escritura.
+- `obtener_mi_panel_scores_ronda(uuid)` entrega a la futura PWA la tarjeta propia y las tarjetas que el usuario marca, sin exponer QR.
+- RLS: lectura sólo para dueño, marcador vigente o administrador autorizado; no existe escritura directa de cliente.
+- Las tarjetas oficiales de la 143 permanecen inmutables.
+- No incluye UI PWA, notificaciones, reconciliación de tarjeta física, NETO, leaderboard, cortes, desempates ni cierre oficial de resultados.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -380,6 +400,12 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 4. Agregar una fila a la tabla de este README.
 
 ## Entidades pendientes (no construidas todavía)
+
+- **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
+- **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
+- **Reconciliación de tarjeta física:** recepción, firmas, comparación físico vs digital, diferencias y aceptación por Comité.
+- **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
+- **QR de tarjeta → apertura por cámara/PWA:** la 146 trata `tournament_score_cards.qr_token` como localizador y nunca como permiso. La ruta/deep-link final deberá decidir si el QR impreso codifica una URL propia de Tee Central o se escanea dentro de la PWA; nunca reutilizar el QR de inscripción.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
 - Inscripción por EQUIPOS — Fase 3: que el jugador se una a un equipo incompleto ya existente (usa la vista `tournament_equipos_incompletos`, ya lista)
