@@ -146,6 +146,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 131 | `131_adaptacion_estructural_grupos_shotgun.sql` | **Fase 3A del motor Shotgun.** Adapta `tournament_groups` sin destruir su estructura histórica: agrega `tournament_shotgun_category_hole_id` y `posicion_salida` (`A`/`B`), con unicidad de posición activa por hoyo Shotgun configurado. Crea `tournament_group_teams` para permitir uno o varios equipos completos dentro del mismo grupo físico, manteniendo `tournament_groups.tournament_team_id` temporalmente como campo LEGACY. Hace backfill de equipos históricos hacia la nueva tabla y agrega validaciones estructurales de coherencia torneo/turno/hoyo. **No modifica todavía** las validaciones de doble salida por PAR, máximo de integrantes, equipo único por ronda ni la exigencia histórica de un único team_id en `tournament_groups`; esas reglas se adaptarán en la siguiente fase. |
 | 136 | `136_congelar_condiciones_y_handicaps.sql` | **Fase 1 del motor de captura de resultados.** Crea un congelamiento único e inmutable por torneo con snapshots normalizados de condiciones efectivas por ronda, PAR/Stroke Index/distancias por tee, Handicap Index de cada inscripción activa y Course/Playing Handicap por jugador y ronda. Agrega el override opcional `tournament_round_registration_tees` para soportar torneos multicampo o tees distintos por ronda. Aplica la fórmula WHS sobre el Course Handicap sin redondear y redondea sólo al final. Incluye preview de errores/advertencias, estado ligero para UI, congelamiento atómico, RLS y protección contra edición/borrado. Los cortes se excluyen deliberadamente para poder configurarlos después de cada ronda. **No crea todavía tarjetas, scores, cortes aplicados ni clasificaciones.** |
 | 137 | `137_proteger_inscripciones_torneo_congelado.sql` | **Candado competitivo posterior al congelamiento.** Protege `tournament_registrations` para impedir nuevas inscripciones activas y cambios de jugador, categoría, marca de salida, equipo o torneo después de crear el snapshot. Permite la baja lógica de un participante y sólo permite reactivar una inscripción si ya pertenecía al snapshot original. Los datos no competitivos del registro, el perfil global del jugador, su Handicap Index vivo y las reglas de corte siguen administrándose sin modificar la fotografía congelada. Incluye función `SECURITY DEFINER` y trigger `BEFORE INSERT OR UPDATE`; las excepciones futuras deberán implementarse mediante un proceso explícito y auditado. |
+| 138 | `138_integridad_y_congelamiento_rondas.sql` | **Integridad secuencial y congelamiento de rondas.** Sustituye la validación histórica que sólo contaba rondas activas y permitía saltar de la 1 a la 3 cuando la 2 estaba inactiva. Las rondas activas deben formar la secuencia continua `1..N`; no puede desactivarse o eliminarse una ronda si existen posteriores activas. RPC `crear_o_reactivar_siguiente_ronda()` crea el primer número faltante o reactiva la fila inactiva existente conservando su `id`; si tiene turnos relacionados, protege fecha, campo y formato físico. Después del congelamiento bloquea cualquier alta/cambio/reactivación/baja de rondas y protege las condiciones deportivas del torneo, categorías específicas, franjas, overrides y desempates. Los cortes, grupos, salidas, perfiles y catálogos globales permanecen fuera del candado. |
 
 ## Cómo agregar una migración nueva
 
@@ -313,7 +314,7 @@ La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya 
 
 ## Migración 137 — Protección de inscripciones después del congelamiento
 
-**Estado:** preparada para ejecución manual en Supabase. No marcar como aplicada hasta ejecutar su verificador posterior.
+**Estado:** aplicada y verificada correctamente en Supabase (`5 verificaciones; 0 errores`).
 
 - Cierra la inconsistencia detectada al probar la Fase 1: la pantalla de jugadores inscritos todavía podía modificar la categoría viva aunque el snapshot conservara la categoría original.
 - Rechaza nuevas inscripciones activas en un torneo congelado.
@@ -325,3 +326,21 @@ La Migración 134 no debe tocar el motor Shotgun. La preparación de salidas ya 
 - No modifica ni congela las reglas de corte.
 - No implementa todavía un mecanismo excepcional de corrección posterior al congelamiento; ese mecanismo deberá ser explícito, autorizado, auditado y versionado.
 - Verificación posterior: `SUPABASE-VERIFICAR-PROTECCION-INSCRIPCIONES-CONGELADAS.sql`.
+
+## Migración 138 — Integridad y congelamiento de rondas
+
+**Estado:** preparada para ejecución manual en Supabase. No marcar como aplicada hasta ejecutar su verificador posterior.
+
+- Corrige el defecto estructural de la validación anterior `validar_limite_rondas()`, que sólo contaba rondas activas y podía permitir una ronda 3 cuando la ronda 2 existía inactiva.
+- Antes de realizar cambios, la migración comprueba que las rondas activas existentes ya formen una secuencia continua; si encuentra inconsistencias, revierte todo y las reporta sin corregir datos silenciosamente.
+- Las rondas activas deben mantener la secuencia `1, 2, 3…` y nunca superar `tournaments.numero_rondas`.
+- No se puede cambiar el número ni el torneo de una ronda existente.
+- Una ronda no puede desactivarse o eliminarse mientras existan rondas posteriores activas.
+- `crear_o_reactivar_siguiente_ronda()` resuelve de forma transaccional el primer número activo faltante: si la fila no existe la crea; si existe inactiva, reactiva esa misma fila y conserva su `id` y relaciones.
+- Si la ronda inactiva tiene turnos o salidas relacionados, no permite cambiar fecha, campo ni formato de salida al reactivarla, evitando que sus grupos históricos apunten a condiciones incompatibles.
+- Después del congelamiento queda bloqueado cualquier `INSERT`, `UPDATE` o `DELETE` de rondas.
+- En `tournaments` quedan congelados: número de rondas, formato, campo, fechas, tamaño de equipo, tamaño de grupo y edad senior de categoría única. Nombre, descripción, estado administrativo, tarifas y datos comerciales siguen editables conforme a sus reglas existentes.
+- Quedan congeladas las configuraciones específicas `tournament_categories`, `tournament_franjas_handicap`, `tournament_tee_overrides` y `tournament_tiebreak_rules`.
+- No se bloquean `tournament_cut_rules`, turnos, grupos, preparación de salidas, perfiles de jugadores ni catálogos globales.
+- Lovable deberá sustituir su `INSERT` directo de rondas por la nueva RPC y mostrar “Reactivar ronda N” cuando corresponda. Ese ajuste se realizará después de verificar la migración.
+- Verificación posterior: `SUPABASE-VERIFICAR-INTEGRIDAD-Y-CONGELAMIENTO-RONDAS.sql`.
