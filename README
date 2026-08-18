@@ -1,0 +1,66 @@
+# MIGRACIONES 140–141 — VALIDACIÓN Y CIERRE DE SALIDAS POR RONDA
+
+## Estado
+
+- **Migración 140:** aplicada y verificada correctamente (`31 verificaciones; 0 error(es)`).
+- **Migración 141:** preparada para ejecución manual en Supabase. No debe marcarse como aplicada hasta ejecutar `SUPABASE-VERIFICAR-MIGRACION-141.sql` y obtener resultado global `OK`.
+
+## Archivos de la Migración 141
+
+- `141_corregir_validador_categorias_vacias_y_utf8.sql`
+- `SUPABASE-VERIFICAR-MIGRACION-141.sql`
+
+## Motivo de la Migración 141
+
+Durante la integración frontend de la Migración 140 se detectaron dos problemas en `previsualizar_validacion_salidas_ronda(uuid)`:
+
+1. `categoria_turno_sin_configuracion` exigía una configuración Shotgun activa a **todas** las categorías asignadas a un turno, incluso cuando la categoría no tenía ningún participante elegible congelado en la ronda. En el torneo de prueba existían 11 categorías asignadas al turno, 3 con participantes/configuración y 8 sin inscripciones; esas 8 categorías vacías bloqueaban indebidamente la validación.
+2. Los mensajes de las RPC de validación contenían mojibake UTF-8 (`categorÃ­a`, `asignaciÃ³n`, `configuraciÃ³n`, etc.).
+
+## Regla funcional corregida
+
+Una categoría-turno sólo requiere configuración Shotgun activa cuando existe al menos un participante elegible congelado de esa categoría para la ronda.
+
+- **0 participantes elegibles:** no debe exigirse una configuración Shotgun únicamente por estar la categoría asignada al turno; por tanto no debe generar `categoria_turno_sin_configuracion`.
+- **1+ participantes elegibles:** requiere configuración Shotgun activa y continúa sometida a todas las demás validaciones de la Migración 140.
+
+La validación independiente `configuracion_sin_hoyos` no se cambia en esta migración; una configuración activa existente sigue requiriendo hoyos hasta que ese caso se diagnostique por separado.
+
+El universo de elegibilidad se toma de las mismas fuentes congeladas que ya utiliza el validador:
+
+- `tournament_handicap_snapshots`;
+- `tournament_round_handicap_snapshots`;
+- `tournament_registrations` activas;
+- categoría congelada `hs.tournament_category_id`.
+
+## Alcance técnico
+
+La Migración 141 hace `CREATE OR REPLACE FUNCTION` sobre:
+
+- `public.previsualizar_validacion_salidas_ronda(uuid)` — cambio funcional puntual + corrección UTF-8.
+- `public.validar_salidas_ronda(uuid)` — sin cambio funcional; sólo corrección UTF-8 en mensajes/comentarios.
+
+No modifica tablas, RLS, triggers, permisos, fotografías históricas ni datos existentes.
+
+## Qué NO corrige esta migración
+
+`configuracion_sin_hoyos` permanece sin cambios. Esa validación sólo revisa configuraciones Shotgun activas que ya existen; las categorías vacías sin configuración no generan directamente ese error. Cualquier configuración activa sin hoyos debe diagnosticarse por separado.
+
+Tampoco se modifica la lógica de modalidad, formato congelado, participantes elegibles, grupos, posiciones A/B, distancias ni consistencia de la salida.
+
+## Orden de ejecución
+
+1. Ejecutar completo `141_corregir_validador_categorias_vacias_y_utf8.sql` en Supabase.
+2. Confirmar `Success`.
+3. Ejecutar completo `SUPABASE-VERIFICAR-MIGRACION-141.sql`.
+4. Confirmar que `99_RESUMEN` sea `OK` con `0 error(es)`.
+5. Revisar el diagnóstico informativo del torneo de prueba: `elegibles_sin_config_bloqueantes` debe reflejar sólo categorías que realmente tengan participantes elegibles y carezcan de configuración.
+6. Volver a abrir `REVISAR SALIDAS` en Lovable y comprobar que ya no aparece `categoria_turno_sin_configuracion` por las 8 categorías vacías y que las tildes se muestran correctamente.
+
+## Numeración posterior
+
+El README de la Migración 140 reservaba originalmente la **Migración 141** para emisión/identidad de tarjetas. La corrección encontrada durante las pruebas requiere ocupar ahora el número 141 como hotfix del validador. Por tanto, la futura migración de emisión de tarjetas, folios/QR y documento oficial pasa a ser **Migración 142**.
+
+## Frontend
+
+Esta migración no requiere que Lovable cree SQL ni cambie Supabase. El frontend existente puede seguir consumiendo las mismas RPC y firmas. Después de aplicar 141 basta volver a ejecutar `REVISAR SALIDAS` para obtener la lógica corregida.
