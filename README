@@ -156,6 +156,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 141 | `141_corregir_validador_categorias_vacias_y_utf8.sql` | Hotfix del validador de 140: `categoria_turno_sin_configuracion` sólo exige configuración Shotgun a categorías con participantes elegibles congelados; las categorías sin inscripciones dejan de bloquear la validación. Corrige además textos con mojibake UTF-8 en las RPC de revisión/validación. Verificación funcional: 11 categorías activas, 3 con elegibles, 8 vacías ignorables y 0 elegibles sin configuración bloqueante. |
 | 142 | `142_historial_validacion_reapertura_salidas.sql` | Agrega `public.obtener_historial_validacion_salidas_ronda(uuid)`, RPC de solo lectura para consultar el historial auditable y versionado de validaciones y reaperturas por ronda: versión, estado, quién/cuándo validó, quién/cuándo reabrió, motivo, motor, hash y conteos. No modifica la lógica de validación/reapertura ni genera tarjetas, folios, QR o PDF. |
 | 143 | `143_emision_oficial_tarjetas_score.sql` | Crea la infraestructura de **emisión oficial de tarjetas de score** a partir de una versión validada de las salidas: cabecera `tournament_score_card_emissions`, tarjetas `tournament_score_cards`, folio y QR propios de tarjeta, RPC idempotente `emitir_tarjetas_score_ronda(uuid)`, estado ligero de emisión y bloqueo de reapertura normal después de emitir. El QR existente en `tournament_registrations.qr_token` queda intacto y reservado para el futuro módulo de control de acceso. Primera versión: Stroke Play individual + Shotgun. No captura golpes ni genera PDF. |
+| 144 | `144_snapshot_tee_efectivo_ronda_CORREGIDA.sql` | Completa la fotografía histórica del tee efectivo sin modificar snapshots inmutables. Crea `tournament_round_handicap_tee_snapshots`, tabla complementaria 1:1 con nombre/color del tee, backfill por INSERT para snapshots existentes y trigger `AFTER INSERT` para snapshots futuros. La primera versión de 144 fue descartada porque intentaba UPDATE sobre snapshots congelados y fue correctamente rechazada por la protección `55000`. No toca QR/folio de inscripción ni de tarjeta. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -316,6 +317,23 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - No captura resultados/golpes.
 - No genera ni guarda PDF.
 - No inicia la ronda deportivamente.
+
+### Migración 144 — Snapshot complementario del tee efectivo
+
+- La primera propuesta de 144 intentaba actualizar `tournament_round_handicap_snapshots` para rellenar nombre/color del tee.
+- Esa operación fue correctamente bloqueada por la protección de inmutabilidad (`SQLSTATE 55000`).
+- La versión corregida NO modifica snapshots existentes.
+- Crea `tournament_round_handicap_tee_snapshots`, relación 1:1 con `tournament_round_handicap_snapshots`.
+- Guarda de forma inmutable:
+  - `tee_id`;
+  - `tee_name`;
+  - `tee_color_hex`.
+- Para snapshots existentes, el backfill se realiza mediante INSERT en la tabla complementaria usando el catálogo actual de `marcas_salida`.
+- Limitación histórica: si nombre/color cambió antes de aplicar 144, ese valor previo no puede reconstruirse retrospectivamente.
+- Para snapshots futuros, `trg_crear_snapshot_tee_efectivo_ronda` crea automáticamente el complemento mediante AFTER INSERT, sin alterar la fila congelada principal.
+- La tabla complementaria también es inmutable.
+- No toca `tournament_registrations.qr_token` ni `tournament_score_cards.qr_token`.
+- No cambia reglas de hándicap, Course Handicap, Playing Handicap, rating, slope ni yardas.
 
 ## Cómo agregar una migración nueva
 
