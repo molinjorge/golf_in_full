@@ -155,6 +155,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 140 | `140_validacion_y_cierre_salidas_ronda.sql` | Implementa validación, versionado y cierre de salidas por ronda. Crea fotografías inmutables de grupos/unidades, RPC de preview/estado/validación/reapertura, hash de contenido, auditoría y bloqueos server-side sobre la conformación mientras exista una validación activa. Primer motor: Stroke Play individual + Shotgun. No genera tarjetas oficiales, folios, QR ni PDF emitido. |
 | 141 | `141_corregir_validador_categorias_vacias_y_utf8.sql` | Hotfix del validador de 140: `categoria_turno_sin_configuracion` sólo exige configuración Shotgun a categorías con participantes elegibles congelados; las categorías sin inscripciones dejan de bloquear la validación. Corrige además textos con mojibake UTF-8 en las RPC de revisión/validación. Verificación funcional: 11 categorías activas, 3 con elegibles, 8 vacías ignorables y 0 elegibles sin configuración bloqueante. |
 | 142 | `142_historial_validacion_reapertura_salidas.sql` | Agrega `public.obtener_historial_validacion_salidas_ronda(uuid)`, RPC de solo lectura para consultar el historial auditable y versionado de validaciones y reaperturas por ronda: versión, estado, quién/cuándo validó, quién/cuándo reabrió, motivo, motor, hash y conteos. No modifica la lógica de validación/reapertura ni genera tarjetas, folios, QR o PDF. |
+| 143 | `143_emision_oficial_tarjetas_score.sql` | Crea la infraestructura de **emisión oficial de tarjetas de score** a partir de una versión validada de las salidas: cabecera `tournament_score_card_emissions`, tarjetas `tournament_score_cards`, folio y QR propios de tarjeta, RPC idempotente `emitir_tarjetas_score_ronda(uuid)`, estado ligero de emisión y bloqueo de reapertura normal después de emitir. El QR existente en `tournament_registrations.qr_token` queda intacto y reservado para el futuro módulo de control de acceso. Primera versión: Stroke Play individual + Shotgun. No captura golpes ni genera PDF. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -273,6 +274,48 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - El frontend de validación de salidas (Fases 1–6) permite consultar estado, revisar, aceptar advertencias, validar/cerrar, bloquear edición y reabrir con motivo.
 - La auditoría de reapertura ya se guarda en backend (`reopen_reason`, `reopened_by`, `reopened_at`), aunque hasta la 141 todavía no existe una RPC específica para mostrar el historial completo.
 - La emisión oficial de tarjetas/folios/QR sigue pendiente y debe ocurrir únicamente después de una salida validada.
+
+### Migración 143 — Emisión oficial de tarjetas de score
+
+- Crea `tournament_score_card_emissions` como cabecera auditable del acto de emisión.
+- Crea `tournament_score_cards` con una tarjeta oficial por unidad validada.
+- La emisión nace exclusivamente de:
+  - `tournament_round_start_validations`;
+  - `tournament_round_start_validation_groups`;
+  - `tournament_round_start_validation_units`.
+- No utiliza `tournament_groups` / `tournament_group_players` vivos para crear la tarjeta oficial.
+- Primera versión habilitada: `stroke_individual_shotgun_v1`.
+- La RPC `emitir_tarjetas_score_ronda(uuid)`:
+  - exige sesión y permiso administrativo;
+  - serializa por ronda con el mismo advisory lock de salidas;
+  - exige una validación activa;
+  - es idempotente si ya existe emisión activa;
+  - verifica cantidad/tipo de unidades;
+  - crea una emisión y una tarjeta por participante;
+  - revierte toda la transacción si el número emitido no coincide con la validación.
+- La RPC `obtener_estado_emision_tarjetas_ronda(uuid)` devuelve un estado ligero para frontend.
+- Cada tarjeta tiene:
+  - `card_number`;
+  - `card_folio`;
+  - `qr_token`;
+  - vínculo a emisión, validación, grupo validado y unidad validada.
+- El folio de tarjeta es independiente del folio de inscripción.
+- **El QR de tarjeta es totalmente independiente del QR existente en `tournament_registrations.qr_token`.**
+  - `tournament_registrations.qr_token` se conserva intacto para el futuro módulo de control de acceso a clubes/campos.
+  - La Migración 143 no lo lee, no lo reemplaza y no lo actualiza.
+- Mientras exista una emisión oficial activa:
+  - `reabrir_salidas_ronda(uuid,text)` rechaza la reapertura;
+  - un trigger adicional protege también una transición directa `validated -> reopened`.
+- La anulación/reposición de una emisión oficial todavía NO está implementada. Las columnas `voided_*` quedan reservadas para una migración futura.
+- Las tablas tienen RLS:
+  - `authenticated` puede leer si administra el torneo;
+  - `anon` no tiene acceso;
+  - no existe escritura directa de cliente;
+  - toda emisión pasa por RPC.
+- Las emisiones y tarjetas son inmutables en esta fase.
+- No captura resultados/golpes.
+- No genera ni guarda PDF.
+- No inicia la ronda deportivamente.
 
 ## Cómo agregar una migración nueva
 
