@@ -154,6 +154,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 139 | `139_visibilidad_rondas_inactivas.sql` | Ajusta RLS de `tournament_rounds` para que visitantes sólo vean rondas activas y administradores autorizados puedan consultar también rondas inactivas para reactivarlas. Reutiliza `puede_administrar_congelamiento_torneo()` y revoca ejecución a `anon`/`PUBLIC` sobre el helper administrativo. |
 | 140 | `140_validacion_y_cierre_salidas_ronda.sql` | Implementa validación, versionado y cierre de salidas por ronda. Crea fotografías inmutables de grupos/unidades, RPC de preview/estado/validación/reapertura, hash de contenido, auditoría y bloqueos server-side sobre la conformación mientras exista una validación activa. Primer motor: Stroke Play individual + Shotgun. No genera tarjetas oficiales, folios, QR ni PDF emitido. |
 | 141 | `141_corregir_validador_categorias_vacias_y_utf8.sql` | Hotfix del validador de 140: `categoria_turno_sin_configuracion` sólo exige configuración Shotgun a categorías con participantes elegibles congelados; las categorías sin inscripciones dejan de bloquear la validación. Corrige además textos con mojibake UTF-8 en las RPC de revisión/validación. Verificación funcional: 11 categorías activas, 3 con elegibles, 8 vacías ignorables y 0 elegibles sin configuración bloqueante. |
+| 142 | `142_historial_validacion_reapertura_salidas.sql` | Agrega `public.obtener_historial_validacion_salidas_ronda(uuid)`, RPC de solo lectura para consultar el historial auditable y versionado de validaciones y reaperturas por ronda: versión, estado, quién/cuándo validó, quién/cuándo reabrió, motivo, motor, hash y conteos. No modifica la lógica de validación/reapertura ni genera tarjetas, folios, QR o PDF. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -242,6 +243,30 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - 8 vacías sin configuración correctamente ignorables;
   - 0 categorías con elegibles sin configuración bloqueante.
 - `configuracion_sin_hoyos` permanece como validación independiente para configuraciones activas existentes.
+
+### Migración 142 — Historial auditable de validaciones y reaperturas
+
+- Agrega la RPC de solo lectura `public.obtener_historial_validacion_salidas_ronda(uuid)`.
+- La consulta exige sesión autenticada y permiso administrativo mediante `puede_administrar_congelamiento_torneo(tournament_id)`.
+- `authenticated` puede ejecutar la RPC; `anon` y `PUBLIC` no.
+- Devuelve por versión:
+  - `version`;
+  - `status`;
+  - `validatedAt`;
+  - `validatedBy` (`adminUserId`, `displayName`);
+  - `reopenedAt`;
+  - `reopenedBy` (`adminUserId`, `displayName`);
+  - `reopenReason`;
+  - `validatorEngine`;
+  - `startFormat`;
+  - `participationType`;
+  - `scoringEngine`;
+  - `contentHash`;
+  - conteos de configuraciones, grupos y unidades.
+- La migración no cambia `reabrir_salidas_ronda`; únicamente hace consultable la auditoría que el backend ya registra.
+- No modifica snapshots, historial existente, triggers de cierre, RLS de tablas, tarjetas, folios, QR ni PDF.
+- Después de verificarla, Lovable podrá integrar una bitácora humana de validaciones/reaperturas sin recibir UUID/JSON como presentación principal.
+- La emisión oficial de tarjetas/folios/QR queda desplazada a la Migración 143.
 
 ### Estado al cierre de la 141
 
