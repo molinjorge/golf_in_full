@@ -157,6 +157,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 142 | `142_historial_validacion_reapertura_salidas.sql` | Agrega `public.obtener_historial_validacion_salidas_ronda(uuid)`, RPC de solo lectura para consultar el historial auditable y versionado de validaciones y reaperturas por ronda: versión, estado, quién/cuándo validó, quién/cuándo reabrió, motivo, motor, hash y conteos. No modifica la lógica de validación/reapertura ni genera tarjetas, folios, QR o PDF. |
 | 143 | `143_emision_oficial_tarjetas_score.sql` | Crea la infraestructura de **emisión oficial de tarjetas de score** a partir de una versión validada de las salidas: cabecera `tournament_score_card_emissions`, tarjetas `tournament_score_cards`, folio y QR propios de tarjeta, RPC idempotente `emitir_tarjetas_score_ronda(uuid)`, estado ligero de emisión y bloqueo de reapertura normal después de emitir. El QR existente en `tournament_registrations.qr_token` queda intacto y reservado para el futuro módulo de control de acceso. Primera versión: Stroke Play individual + Shotgun. No captura golpes ni genera PDF. |
 | 144 | `144_snapshot_tee_efectivo_ronda_CORREGIDA.sql` | Completa la fotografía histórica del tee efectivo sin modificar snapshots inmutables. Crea `tournament_round_handicap_tee_snapshots`, tabla complementaria 1:1 con nombre/color del tee, backfill por INSERT para snapshots existentes y trigger `AFTER INSERT` para snapshots futuros. La primera versión de 144 fue descartada porque intentaba UPDATE sobre snapshots congelados y fue correctamente rechazada por la protección `55000`. No toca QR/folio de inscripción ni de tarjeta. |
+| 145 | `145_payload_oficial_tarjetas_score_snapshots.sql` | Agrega `obtener_payload_tarjetas_score_oficiales_ronda(uuid)`, RPC de solo lectura para reconstruir el payload oficial de una ronda emitida exclusivamente desde emisión + validación + snapshots históricos de hándicap, tee (144), condiciones y hoyos. Usa `tournament_score_cards.card_folio` y `tournament_score_cards.qr_token`; no depende de `tournament_groups` vivos, `distancias_hoyo`, `marcas_salida` ni del QR/folio de inscripción. No genera PDF. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -334,6 +335,42 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La tabla complementaria también es inmutable.
 - No toca `tournament_registrations.qr_token` ni `tournament_score_cards.qr_token`.
 - No cambia reglas de hándicap, Course Handicap, Playing Handicap, rating, slope ni yardas.
+
+### Migración 145 — Payload oficial de tarjetas desde snapshots
+
+- Agrega la RPC `public.obtener_payload_tarjetas_score_oficiales_ronda(uuid)`.
+- La RPC es de sólo lectura, `SECURITY DEFINER`, exige sesión autenticada y permiso administrativo del torneo.
+- Sólo trabaja cuando existe una emisión oficial activa de la ronda.
+- La fuente de verdad es:
+  - `tournament_score_card_emissions`;
+  - `tournament_score_cards`;
+  - `tournament_round_start_validations`;
+  - `tournament_round_start_validation_groups`;
+  - `tournament_round_start_validation_units`;
+  - `tournament_handicap_snapshots`;
+  - `tournament_round_handicap_snapshots`;
+  - `tournament_round_handicap_tee_snapshots` (144);
+  - `tournament_round_condition_snapshots`;
+  - `tournament_round_hole_snapshots`.
+- Reconstruye por tarjeta:
+  - folio oficial;
+  - QR oficial;
+  - jugador congelado;
+  - categoría congelada;
+  - Handicap Index/origen/estatus;
+  - Course Handicap y Playing Handicap;
+  - tee efectivo con nombre/color congelados;
+  - hoyo, posición A/B, turno, hora y orden;
+  - compañeros del grupo validado;
+  - PAR, Stroke Index y yardas históricas por tee;
+  - totales OUT/IN/TOTAL.
+- El payload NO usa `tournament_groups` ni `tournament_group_players` vivos.
+- El payload NO usa `marcas_salida` ni `distancias_hoyo` vivas.
+- El QR se toma de `tournament_score_cards.qr_token`, nunca de `tournament_registrations.qr_token`.
+- El folio principal es `tournament_score_cards.card_folio`, no el folio de inscripción.
+- Nombre/logo del torneo permanecen como datos institucionales vivos.
+- La RPC valida que el número de tarjetas coincida con la emisión y que cada tarjeta tenga vínculos completos a snapshots históricos.
+- No genera PDF ni modifica emisión, tarjetas o snapshots.
 
 ## Cómo agregar una migración nueva
 
