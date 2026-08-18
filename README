@@ -159,6 +159,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 144 | `144_snapshot_tee_efectivo_ronda_CORREGIDA.sql` | Completa la fotografía histórica del tee efectivo sin modificar snapshots inmutables. Crea `tournament_round_handicap_tee_snapshots`, tabla complementaria 1:1 con nombre/color del tee, backfill por INSERT para snapshots existentes y trigger `AFTER INSERT` para snapshots futuros. La primera versión de 144 fue descartada porque intentaba UPDATE sobre snapshots congelados y fue correctamente rechazada por la protección `55000`. No toca QR/folio de inscripción ni de tarjeta. |
 | 145 | `145_payload_oficial_tarjetas_score_snapshots.sql` | Agrega `obtener_payload_tarjetas_score_oficiales_ronda(uuid)`, RPC de solo lectura para reconstruir el payload oficial de una ronda emitida exclusivamente desde emisión + validación + snapshots históricos de hándicap, tee (144), condiciones y hoyos. Usa `tournament_score_cards.card_folio` y `tournament_score_cards.qr_token`; no depende de `tournament_groups` vivos, `distancias_hoyo`, `marcas_salida` ni del QR/folio de inscripción. No genera PDF. |
 | 146 | `146_nucleo_captura_scores_pwa.sql` | Crea el núcleo transaccional de captura de **GROSS por hoyo** para PWA: sesiones por tarjeta, asignación circular de marcador basada en `order_in_group` congelado, scores por hoyo con `play_sequence` Shotgun, confirmación/disputa por el dueño y bitácora inmutable. El QR de tarjeta sólo localiza; la autorización se resuelve con `auth.uid() → players.auth_user_id`. No calcula NETO, leaderboard, cortes ni cierre físico. |
+| 147 | `147_lectura_pwa_detalle_captura_score.sql` | Agrega `obtener_detalle_captura_tarjeta_score(uuid)` para abrir de forma segura una tarjeta por `score_card_id` y devolver marcador vigente, salida, estado de captura, hoyos en `play_sequence`, PAR/SI, GROSS/status y permisos derivados. Amplía `obtener_mi_panel_scores_ronda(uuid)` con `markerDisplayName`. No expone QR ni habilita escritura. |
 
 ## Migraciones 132–141 — continuidad recuperada
 
@@ -391,6 +392,30 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - RLS: lectura sólo para dueño, marcador vigente o administrador autorizado; no existe escritura directa de cliente.
 - Las tarjetas oficiales de la 143 permanecen inmutables.
 - No incluye UI PWA, notificaciones, reconciliación de tarjeta física, NETO, leaderboard, cortes, desempates ni cierre oficial de resultados.
+
+### Migración 147 — Lectura PWA del detalle de captura
+
+- Agrega `obtener_detalle_captura_tarjeta_score(uuid)`.
+- La RPC recibe `score_card_id`, no QR.
+- Requiere sesión autenticada y valida acceso con el contrato de la Migración 146:
+  - dueño de la tarjeta;
+  - marcador vigente;
+  - administrador autorizado.
+- Devuelve:
+  - folio y nombre del jugador;
+  - grupo, orden, hoyo inicial, A/B, turno y hora;
+  - nombre del marcador vigente;
+  - estado/progreso de captura;
+  - hoyos ordenados por `play_sequence`;
+  - PAR y Stroke Index congelados;
+  - `grossScore` y estado actual;
+  - `canCapture`, `canConfirm` y `canDispute` derivados server-side.
+- No devuelve ni consulta `qr_token`.
+- No usa el QR/folio de inscripción.
+- Amplía `obtener_mi_panel_scores_ronda(uuid)` para que `myCard` incluya `markerDisplayName`.
+- `scoreCardId` se conserva en `myCard` y `cardsIMark` para navegación interna de la PWA.
+- La migración es exclusivamente de lectura; no añade escrituras ni modifica el motor de captura GROSS.
+- No implementa UI, notificaciones, NETO, leaderboard, cortes ni reconciliación física.
 
 ## Cómo agregar una migración nueva
 
