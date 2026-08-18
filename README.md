@@ -1,75 +1,142 @@
-# MIGRACIÓN 139 — VISIBILIDAD DE RONDAS INACTIVAS
+# MIGRACIÓN 140 — VALIDACIÓN Y CIERRE DE SALIDAS POR RONDA
 
 ## Estado
 
-**Preparada para ejecución manual en Supabase.** No debe marcarse como aplicada hasta ejecutar también el verificador posterior y obtener `5 verificaciones; 0 error(es)`.
+**Preparada para ejecución manual en Supabase.** No debe marcarse como aplicada hasta ejecutar el verificador posterior y obtener `31 verificaciones; 0 error(es)`.
 
-La Migración 138 ya fue aplicada y verificada correctamente en Supabase (`14 verificaciones; 0 error(es)`).
+Las migraciones 136, 137, 138 y 139 deben estar aplicadas y verificadas antes de ejecutar ésta.
 
 ## Archivos
 
-- `139_visibilidad_rondas_inactivas.sql`: migración con escritura de esquema; reemplaza una policy SELECT y agrega otra.
-- `SUPABASE-VERIFICAR-VISIBILIDAD-RONDAS-INACTIVAS.sql`: diagnóstico posterior de sólo lectura; no modifica datos ni esquema.
+- `140_validacion_y_cierre_salidas_ronda.sql`: migración con escritura de esquema. Crea las validaciones versionadas, RPC, RLS y candados de salidas.
+- `SUPABASE-VERIFICAR-VALIDACION-CIERRE-SALIDAS-RONDA.sql`: verificador posterior de sólo lectura. No modifica datos ni esquema.
 
-## Problema que resuelve
+## Objetivo
 
-La RPC `crear_o_reactivar_siguiente_ronda()` de la Migración 138 puede reactivar una ronda existente, pero la policy histórica de `tournament_rounds` sólo permitía a organizadores y administradores de club consultar rondas activas. Por ello Lovable no podía detectar ni presentar una ronda inactiva que debía reutilizarse.
+Incorporar un paso operativo previo a la emisión de tarjetas:
 
-## Cambio aplicado
+1. revisar integralmente las salidas de una ronda;
+2. guardar una fotografía inmutable y versionada del acomodo aceptado;
+3. impedir modificaciones accidentales mientras la salida esté validada;
+4. permitir una reapertura explícita, auditada y con motivo;
+5. dejar una base reutilizable para otras modalidades.
 
-La policy SELECT se divide en dos políticas permisivas:
+La primera implementación habilitada es **Stroke Play individual con salida Shotgun**.
 
-| Sesión | Rondas activas | Rondas inactivas |
-|---|---:|---:|
-| Visitante anónimo | Sí | No |
-| Usuario autenticado sin administración del torneo | Sí | No |
-| Superadministrador | Sí | Sí |
-| Organizador del torneo | Sí | Sí |
-| Administrador del club anfitrión | Sí | Sí |
+## Diseño reutilizable
 
-- `tournament_rounds_select` conserva la lectura pública, pero únicamente cuando `activo = true`.
-- `tournament_rounds_select_inactive_admin` permite a usuarios `authenticated` autorizados consultar también las rondas inactivas.
-- La autorización administrativa reutiliza `puede_administrar_congelamiento_torneo(tournament_id)`, helper `SECURITY DEFINER` creado y protegido en la Migración 136.
+La validación pertenece a la ronda completa y no a un PDF ni a una categoría aislada.
 
-## Lo que no cambia
+| Nivel | Función |
+|---|---|
+| `tournament_round_start_validations` | Cabecera versionada de la validación y fotografía JSON canónica. |
+| `tournament_round_start_validation_groups` | Grupos físicos incluidos en la salida validada. |
+| `tournament_round_start_validation_units` | Unidades asignadas a cada grupo. Admite `registration` y deja preparado `team`. |
+| `validator_engine` | Identifica el conjunto de reglas aplicado. La primera versión es `stroke_individual_shotgun_v1`. |
 
-- No modifica ninguna fila de datos.
-- No modifica `tournament_rounds_write`.
-- No cambia la secuencia obligatoria `1..N` establecida por la Migración 138.
-- No permite crear rondas por encima de `tournaments.numero_rondas`.
-- No permite saltar una ronda inactiva para crear otra posterior.
-- No permite modificar rondas ni condiciones deportivas después del congelamiento.
-- No expone rondas inactivas a jugadores, visitantes ni usuarios autenticados ajenos a la administración del torneo.
+Las modalidades futuras podrán reutilizar el mismo versionado, RLS, reapertura, auditoría, locks y tablas normalizadas. Cada nueva modalidad deberá incorporar su propio validador y constructor de fotografía sin alterar las versiones históricas existentes.
+
+## RPC públicas
+
+Todas requieren sesión `authenticated` y permiso administrativo sobre el torneo.
+
+### `previsualizar_validacion_salidas_ronda(uuid)`
+
+No escribe. Devuelve:
+
+- si la ronda está lista;
+- motor validador aplicable;
+- errores y advertencias;
+- conteo de configuraciones, grupos y participantes;
+- validación activa, si ya existe.
+
+### `validar_salidas_ronda(uuid)`
+
+- serializa la operación mediante un lock por ronda;
+- vuelve a ejecutar todas las validaciones dentro del mismo cierre;
+- guarda una fotografía JSON determinista;
+- genera un hash MD5 del contenido;
+- crea las filas normalizadas de grupos y unidades;
+- es idempotente si la ronda ya está validada.
+
+### `obtener_estado_validacion_salidas_ronda(uuid)`
+
+Devuelve el estado ligero para la interfaz: validada o no, versión activa, hash, cantidades e historial.
+
+### `reabrir_salidas_ronda(uuid, text)`
+
+Requiere un motivo de al menos cinco caracteres. Conserva intacta la versión anterior y la marca como `reopened`; después pueden corregirse las salidas y crear una versión nueva.
+
+## Validaciones iniciales
+
+Entre otras comprobaciones, la migración revisa:
+
+- torneo congelado y ronda incluida en el snapshot;
+- ronda activa y salida Shotgun;
+- modalidad Stroke Play individual;
+- formato vivo igual al formato congelado;
+- 18 hoyos congelados;
+- turnos, categorías, configuraciones y hoyos Shotgun activos;
+- cada participante activo pertenece exactamente a un turno y un grupo;
+- inexistencia de participantes duplicados, inactivos o sin snapshot;
+- coincidencia de categoría entre participante y grupo;
+- grupos no vacíos y dentro del máximo;
+- orden interno completo y sin duplicados;
+- posiciones físicas A/B únicas y válidas;
+- salida B sólo cuando el hoyo permite doble salida;
+- consistencia entre turno, hoyo, grupo y hora;
+- ausencia de equipos en el motor individual;
+- distancias congeladas disponibles para cada tee y hoyo.
+
+Las advertencias no impiden validar, pero se devuelven a la interfaz. Incluyen, por ejemplo, estatus del torneo todavía abierto, advertencias heredadas del congelamiento, inscripciones retiradas y grupos por debajo del tamaño normal.
+
+## Qué queda bloqueado después de validar
+
+Mientras exista una validación activa no pueden insertarse, modificarse ni eliminarse filas que alteren la salida de esa ronda en:
+
+- `tournament_round_shifts`;
+- `tournament_round_shift_categories`;
+- `tournament_shotgun_category_configs`;
+- `tournament_shotgun_category_holes`;
+- `tournament_groups`;
+- `tournament_group_players`;
+- `tournament_group_teams`.
+
+También se bloquea la baja o reactivación de una inscripción incluida en una ronda validada. Esto se aplica mediante triggers de base de datos, por lo que protege tanto las RPC existentes como las escrituras directas permitidas por políticas antiguas.
+
+Para realizar cambios debe utilizarse primero `reabrir_salidas_ronda()`.
+
+## Qué no crea ni congela esta migración
+
+- No crea tarjetas físicas o electrónicas.
+- No crea folios ni códigos QR.
+- No genera ni guarda PDF.
+- No captura resultados ni sanciones.
+- No inicia deportivamente la ronda ni cambia el torneo a `en_curso`.
+- No congela perfiles ni catálogos globales.
+- No emite, cancela ni repone tarjetas.
+
+La emisión, identidad, QR, cancelación y reposición de tarjetas corresponde a la **Migración 141**. La tarjeta física seguirá siendo el documento oficial; el registro digital será social/provisional según la regla acordada.
+
+## Seguridad
+
+- Las tres tablas nuevas tienen RLS habilitado.
+- `authenticated` sólo recibe `SELECT` sobre ellas.
+- No existen políticas ni privilegios de escritura directa para `anon` o `authenticated`.
+- Toda escritura se realiza mediante RPC `SECURITY DEFINER` autorizadas.
+- Las funciones internas no son ejecutables desde los roles cliente.
+- Sólo puede existir una validación activa por ronda.
+- Las fotografías históricas no pueden editarse ni eliminarse.
 
 ## Orden de ejecución
 
 1. Abrir el SQL Editor del proyecto correcto en Supabase.
-2. Ejecutar completo `139_visibilidad_rondas_inactivas.sql`.
-3. Confirmar que termina sin error.
-4. Ejecutar completo `SUPABASE-VERIFICAR-VISIBILIDAD-RONDAS-INACTIVAS.sql`.
-5. Compartir el resultado antes de adaptar Lovable.
+2. Ejecutar completo `140_validacion_y_cierre_salidas_ronda.sql`.
+3. Confirmar que finaliza sin error y muestra `Success`.
+4. Ejecutar completo `SUPABASE-VERIFICAR-VALIDACION-CIERRE-SALIDAS-RONDA.sql`.
+5. Confirmar `31 verificaciones; 0 error(es)`.
+6. Compartir el resultado antes de iniciar cambios en Lovable.
 
-## Resultado esperado del verificador
+## Importante para Lovable
 
-Debe devolver estas secciones en `OK`:
-
-- `01_RLS`: RLS continúa habilitado en `tournament_rounds`.
-- `02_POLITICA_PUBLICA`: la lectura pública sólo usa `activo = true`.
-- `03_POLITICA_ADMINISTRATIVA`: la policy adicional pertenece a `authenticated` y usa el helper administrativo.
-- `04_HELPER_SEGURIDAD`: el helper es `SECURITY DEFINER`, ejecutable por `authenticated` y no por `anon`.
-- `05_ESCRITURA_EXISTENTE`: `tournament_rounds_write` sigue presente y sin sustitución.
-- `99_RESUMEN`: `5 verificaciones; 0 error(es)`.
-
-## Siguiente fase en Lovable
-
-Después de validar la Migración 139, la pantalla de rondas deberá:
-
-- consultar rondas activas e inactivas del torneo;
-- determinar el primer número activo faltante;
-- mostrar `REACTIVAR RONDA N` cuando ya exista la fila inactiva correspondiente;
-- mostrar `NUEVA RONDA N` únicamente cuando esa fila todavía no exista;
-- llamar siempre a `crear_o_reactivar_siguiente_ronda()` para ambos casos, sin hacer `INSERT` directo;
-- deshabilitar la creación cuando todas las rondas declaradas estén activas o cuando el torneo esté congelado;
-- mostrar íntegros los errores de Supabase y volver a consultar el estado real después de cada operación.
-
-Lovable no deberá generar ni ejecutar migraciones para esta fase.
+Lovable no debe crear ni ejecutar migraciones. Después de verificar Supabase, el frontend deberá consumir exclusivamente las cuatro RPC públicas de esta migración, mostrar los errores reales y tratar el estado validado como sólo lectura hasta una reapertura autorizada.
