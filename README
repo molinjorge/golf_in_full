@@ -418,6 +418,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - No implementa UI, notificaciones, NETO, leaderboard, cortes ni reconciliación física.
 
 | 148 | `148_mis_rondas_score.sql` | Agrega `obtener_mis_rondas_score()`, RPC segura de solo lectura para que el jugador autenticado pueda descubrir sus rondas de scoring sin QR ni `roundId` externo. Deriva identidad con `auth.uid() → players.auth_user_id`, incluye rondas donde posee tarjeta emitida o es marcador activo, y devuelve metadatos mínimos de torneo/ronda y estado de inicialización. No amplía RLS de `tournament_score_cards` ni modifica captura. |
+| 149 | `149_captura_fisica_tarjetas_score.sql` | Agrega la recepción y captura física de tarjetas oficiales sin sobreescribir la captura digital. Crea recepción 1:1 por tarjeta, scores físicos por hoyo y bitácora física append-only. Permite tarjeta física completa, parcial o sin captura digital en PWA; ese caso se considera válido y se denomina `SIN CAPTURA DIGITAL`. No implementa todavía conciliación, score oficial, NETO, leaderboard ni cortes. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -428,6 +429,65 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Permite que `/score` funcione sin QR y sin `?round=<uuid>` externo.
 - No expone QR, no cambia RLS y no modifica scores.
 
+
+### Migración 149 — Recepción y captura física de tarjetas de score
+
+- Crea `tournament_scorecard_physical_receptions`, una recepción física 1:1 por `tournament_score_cards.id`.
+- La ausencia de fila de recepción equivale a tarjeta física todavía no recibida; no se almacena un estado artificial `NOT_RECEIVED`.
+- Estados físicos almacenados:
+  - `RECEIVED`
+  - `IN_CAPTURE`
+  - `CAPTURED`
+  - `VOIDED`
+- Registra por separado:
+  - `player_signature_present`
+  - `marker_signature_present`
+  - fecha/hora de recepción
+  - usuario autenticado que recibe
+  - inicio y fin de captura física
+  - notas
+- Crea `tournament_scorecard_physical_hole_scores`, una fila por tarjeta + hoyo congelado.
+- La captura física guarda únicamente el valor leído de la tarjeta en papel (`physical_gross_score`), junto con snapshot de hoyo, número, secuencia, actor y timestamps.
+- `UNIQUE(score_card_id, round_hole_snapshot_id)` garantiza un solo valor físico vigente por hoyo.
+- La captura física puede corregirse mientras la recepción esté `RECEIVED` o `IN_CAPTURE`.
+- Una vez la recepción está `CAPTURED`, las RPC de esta fase bloquean edición directa.
+- Crea `tournament_scorecard_physical_events`, bitácora append-only del proceso físico.
+- Eventos incluidos en esta fase:
+  - `physical_card_received`
+  - `physical_capture_started`
+  - `physical_score_entered`
+  - `physical_score_corrected`
+  - `physical_capture_completed`
+  - `physical_card_voided`
+- La bitácora física está protegida contra `UPDATE` y `DELETE`.
+- RLS está habilitado en las tres tablas físicas.
+- `anon` y `authenticated` no tienen acceso directo a las tablas; el flujo se hace exclusivamente por RPC.
+- No se crean todavía roles específicos `scorer` ni `committee`; las RPC usan la autorización administrativa de torneo ya existente mediante `puede_administrar_congelamiento_torneo(tournament_id)`.
+- RPC creadas:
+  - `recibir_tarjeta_fisica_score(uuid, boolean, boolean, text)`
+  - `guardar_score_fisico_hoyo(uuid, uuid, integer)`
+  - `finalizar_captura_fisica_tarjeta(uuid)`
+  - `obtener_captura_fisica_tarjeta(uuid)`
+- Helper interno cerrado al cliente:
+  - `_obtener_score_card_para_captura_fisica(uuid)`
+- La tarjeta física siempre debe estar vinculada a una tarjeta oficial existente en `tournament_score_cards`.
+- La captura digital en `tournament_scorecard_hole_scores` permanece totalmente separada y no se sobreescribe.
+- Que un jugador o marcador no utilice la PWA en uno, varios o todos los hoyos es un caso válido y esperado.
+- La terminología funcional para ese caso será **`SIN CAPTURA DIGITAL`**, no “falta digital” ni error.
+- `finalizar_captura_fisica_tarjeta(uuid)` exige que el número de hoyos físicos capturados coincida con `holes_expected` de la sesión de captura; si no estuviera disponible, usa como respaldo el número de snapshots de hoyo de la ronda.
+- La existencia de scores digitales NO es requisito para finalizar la captura física.
+- Esta migración NO implementa todavía:
+  - comparación DIGITAL vs FÍSICO
+  - `COINCIDE`
+  - `DIFERENCIA`
+  - `SIN CAPTURA DIGITAL` como estado derivado de comparación
+  - resolución de discrepancias
+  - `official_gross_score`
+  - NETO
+  - leaderboard
+  - cortes
+  - cierre oficial de resultados
+- La siguiente fase prevista es la lectura/comparación lado a lado para la UI del capturista, sin resolución de diferencias todavía.
 
 ## Cómo agregar una migración nueva
 
@@ -440,9 +500,8 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Reconciliación de tarjeta física:** recepción, firmas, comparación físico vs digital, diferencias y aceptación por Comité.
+- **Reconciliación de tarjeta física:** Fase de recepción y captura física construida en Migración 149. Pendiente: comparación DIGITAL vs FÍSICO, estados derivados (`COINCIDE`, `DIFERENCIA`, `SIN CAPTURA DIGITAL`, `PENDIENTE DE CAPTURA FÍSICA`), resolución por Comité y score oficial.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
-- **QR de tarjeta → apertura por cámara/PWA:** la 146 trata `tournament_score_cards.qr_token` como localizador y nunca como permiso. La ruta/deep-link final deberá decidir si el QR impreso codifica una URL propia de Tee Central o se escanea dentro de la PWA; nunca reutilizar el QR de inscripción.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
 - Inscripción por EQUIPOS — Fase 3: que el jugador se una a un equipo incompleto ya existente (usa la vista `tournament_equipos_incompletos`, ya lista)
