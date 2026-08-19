@@ -417,6 +417,18 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La migración es exclusivamente de lectura; no añade escrituras ni modifica el motor de captura GROSS.
 - No implementa UI, notificaciones, NETO, leaderboard, cortes ni reconciliación física.
 
+| 148 | `148_mis_rondas_score.sql` | Agrega `obtener_mis_rondas_score()`, RPC segura de solo lectura para que el jugador autenticado pueda descubrir sus rondas de scoring sin QR ni `roundId` externo. Deriva identidad con `auth.uid() → players.auth_user_id`, incluye rondas donde posee tarjeta emitida o es marcador activo, y devuelve metadatos mínimos de torneo/ronda y estado de inicialización. No amplía RLS de `tournament_score_cards` ni modifica captura. |
+
+### Migración 148 — Rondas de score del jugador autenticado
+
+- Agrega `obtener_mis_rondas_score()`.
+- No recibe parámetros: la identidad se resuelve con `auth.uid() → players.auth_user_id`.
+- Devuelve rondas activas de torneos activos donde el jugador tiene tarjeta `issued` y/o es marcador activo.
+- Devuelve torneo, número/fecha de ronda, `hasOwnCard`, `marksCards`, `cardsIMarkCount` y `captureInitialized`.
+- Permite que `/score` funcione sin QR y sin `?round=<uuid>` externo.
+- No expone QR, no cambia RLS y no modifica scores.
+
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
