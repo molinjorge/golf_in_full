@@ -420,6 +420,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 148 | `148_mis_rondas_score.sql` | Agrega `obtener_mis_rondas_score()`, RPC segura de solo lectura para que el jugador autenticado pueda descubrir sus rondas de scoring sin QR ni `roundId` externo. Deriva identidad con `auth.uid() → players.auth_user_id`, incluye rondas donde posee tarjeta emitida o es marcador activo, y devuelve metadatos mínimos de torneo/ronda y estado de inicialización. No amplía RLS de `tournament_score_cards` ni modifica captura. |
 | 149 | `149_captura_fisica_tarjetas_score.sql` | Agrega la recepción y captura física de tarjetas oficiales sin sobreescribir la captura digital. Crea recepción 1:1 por tarjeta, scores físicos por hoyo y bitácora física append-only. Permite tarjeta física completa, parcial o sin captura digital en PWA; ese caso se considera válido y se denomina `SIN CAPTURA DIGITAL`. No implementa todavía conciliación, score oficial, NETO, leaderboard ni cortes. |
 | 150 | `150_listado_captura_fisica_ronda.sql` | Elimina el patrón N+1 del listado administrativo de captura física. Agrega `obtener_tarjetas_captura_fisica_ronda(uuid)`, RPC `SECURITY DEFINER` de solo lectura que devuelve en una sola llamada las tarjetas emitidas de la ronda con jugador/unidad, categoría, marcador vigente, estado físico, firmas, recepción y progreso físico. No expone scores por hoyo, mantiene captura ciega, no usa QR y no implementa conciliación. |
+| 151 | `151_lectura_conciliacion_scorecard.sql` | Agrega `obtener_conciliacion_tarjeta_score(uuid)`, RPC administrativa de solo lectura que, únicamente después de `CAPTURED`, consolida por hoyo el GROSS digital vigente, la inconformidad activa/histórica del jugador y el GROSS físico. Clasifica comparación (`COINCIDE`, `DIFERENCIA`, `SIN_CAPTURA_DIGITAL`, `PENDIENTE_CAPTURA_FISICA`) e inconformidad (`NONE`, `ACTIVE`, `HISTORICAL_PENDING`, `HISTORICAL_RESOLVED`) y deriva `needsReview`. No crea score oficial ni resoluciones. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -525,6 +526,55 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   por esta única RPC para cargar la pantalla inicial.
 - Al abrir una tarjeta individual, las RPC detalladas de la Migración 149 siguen siendo las fuentes correctas.
 
+### Migración 151 — Lectura consolidada para conciliación
+
+- Agrega `obtener_conciliacion_tarjeta_score(uuid)`.
+- La RPC sólo puede utilizarse con una tarjeta física cuya recepción esté `CAPTURED`; antes de eso rechaza la comparación para preservar la captura física ciega.
+- Consolida tres evidencias por hoyo:
+  - GROSS digital vigente del marcador.
+  - Inconformidad del jugador.
+  - GROSS físico transcrito.
+- La inconformidad se obtiene de dos fuentes:
+  - estado actual de `tournament_scorecard_hole_scores` para una disputa activa;
+  - último evento `player_disputed` en `tournament_scorecard_events` para preservar historia aun cuando el marcador haya corregido y la fila actual haya limpiado `player_claimed_gross_score`.
+- También lee el último `player_confirmed` para distinguir si una inconformidad histórica terminó reconfirmada por el jugador.
+- `comparisonStatus`:
+  - `COINCIDE`
+  - `DIFERENCIA`
+  - `SIN_CAPTURA_DIGITAL`
+  - `PENDIENTE_CAPTURA_FISICA`
+- `disputeStatus`:
+  - `NONE`
+  - `ACTIVE`
+  - `HISTORICAL_PENDING`
+  - `HISTORICAL_RESOLVED`
+- `HISTORICAL_PENDING` significa que existió una inconformidad y no existe una confirmación posterior a esa inconformidad.
+- `HISTORICAL_RESOLVED` significa que el jugador posteriormente confirmó después de la última inconformidad registrada.
+- `needsReview=true` cuando:
+  - DIGITAL difiere de FÍSICO;
+  - existe inconformidad `ACTIVE`;
+  - existe inconformidad `HISTORICAL_PENDING`;
+  - falta captura física (caso defensivo).
+- `SIN_CAPTURA_DIGITAL` por sí solo NO marca `needsReview`; es un caso válido y esperado.
+- Una inconformidad histórica ya reconfirmada puede seguir mostrándose como antecedente, pero no obliga revisión si DIGITAL y FÍSICO coinciden.
+- La RPC devuelve resumen por tarjeta con:
+  - coincidencias
+  - diferencias
+  - hoyos sin captura digital
+  - pendientes físicos
+  - inconformidades activas
+  - inconformidades históricas pendientes
+  - inconformidades históricas resueltas
+  - total de hoyos que requieren revisión
+- Esta migración NO:
+  - modifica captura digital;
+  - modifica captura física;
+  - crea tabla de resoluciones;
+  - crea `official_gross_score`;
+  - resuelve automáticamente diferencias;
+  - implementa NETO/leaderboard/cortes.
+- La siguiente fase debe ser la UI de revisión/conciliación informativa usando esta RPC; la resolución oficial debe diseñarse en una migración posterior.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -536,7 +586,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Reconciliación de tarjeta física:** recepción/captura física construida en Migración 149 y listado masivo optimizado en Migración 150. La captura operativa es ciega: DIGITAL sólo se revela después de `CAPTURED`. Pendiente: resolución por Comité, score oficial y consumo posterior por resultados.
+- **Reconciliación de tarjeta física:** recepción/captura física construida en 149, listado masivo optimizado en 150 y lectura consolidada DIGITAL + inconformidad + FÍSICO construida en 151. La captura sigue siendo ciega hasta `CAPTURED`. Pendiente: UI de conciliación, resolución por Comité, score oficial y consumo posterior por resultados.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
