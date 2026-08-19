@@ -422,6 +422,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 150 | `150_listado_captura_fisica_ronda.sql` | Elimina el patrón N+1 del listado administrativo de captura física. Agrega `obtener_tarjetas_captura_fisica_ronda(uuid)`, RPC `SECURITY DEFINER` de solo lectura que devuelve en una sola llamada las tarjetas emitidas de la ronda con jugador/unidad, categoría, marcador vigente, estado físico, firmas, recepción y progreso físico. No expone scores por hoyo, mantiene captura ciega, no usa QR y no implementa conciliación. |
 | 151 | `151_lectura_conciliacion_scorecard.sql` | Agrega `obtener_conciliacion_tarjeta_score(uuid)`, RPC administrativa de solo lectura que, únicamente después de `CAPTURED`, consolida por hoyo el GROSS digital vigente, la inconformidad activa/histórica del jugador y el GROSS físico. Clasifica comparación (`COINCIDE`, `DIFERENCIA`, `SIN_CAPTURA_DIGITAL`, `PENDIENTE_CAPTURA_FISICA`) e inconformidad (`NONE`, `ACTIVE`, `HISTORICAL_PENDING`, `HISTORICAL_RESOLVED`) y deriva `needsReview`. No crea score oficial ni resoluciones. |
 | 152 | `152_resolucion_conciliacion_scorecard.sql` | Agrega la capa auditable de resolución de conciliación sin sobreescribir DIGITAL, FÍSICO ni reclamos. Crea cabecera por tarjeta, resoluciones sólo para hoyos que requieren revisión y bitácora append-only. Fuentes: `DIGITAL`, `PHYSICAL`, `PLAYER_CLAIM`, `MANUAL`; MANUAL exige motivo. No crea todavía `official_gross_score`. |
+| 153 | `153_score_oficial_consolidado_tarjeta.sql` | Agrega `obtener_score_oficial_tarjeta(uuid)`, RPC administrativa de solo lectura que construye el score oficial por hoyo únicamente después de captura física `CAPTURED` y conciliación `COMPLETED`. Los hoyos resueltos usan `resolved_gross_score`; los hoyos sin conflicto usan el valor físico inmutable, clasificando origen como `MATCHED` o `PHYSICAL_ONLY`. Devuelve `officialGrossScore`, `officialSource` y total GROSS oficial, sin sobrescribir evidencias ni materializar todavía una columna oficial. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -601,6 +602,51 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - No modifica DIGITAL, FÍSICO ni historial de inconformidades.
 - No crea todavía `official_gross_score`, NETO, leaderboard, cortes ni desempates.
 
+### Migración 153 — Score oficial consolidado por tarjeta
+
+- Agrega `obtener_score_oficial_tarjeta(uuid)`.
+- Sólo funciona cuando:
+  - la tarjeta física está `CAPTURED`;
+  - la conciliación está `COMPLETED`;
+  - están presentes todos los hoyos físicos esperados;
+  - no queda ningún caso `needsReview` sin resolución.
+- Regla oficial por hoyo:
+  - si existe resolución explícita → `resolved_gross_score`;
+  - si no existe resolución → `physical_gross_score`.
+- El valor físico se usa como soporte inmutable para hoyos normales:
+  - si DIGITAL = FÍSICO → `officialSource = MATCHED`;
+  - si DIGITAL es NULL y existe FÍSICO → `officialSource = PHYSICAL_ONLY`.
+- Para excepciones conciliadas, `officialSource` conserva la fuente registrada:
+  - `DIGITAL`
+  - `PHYSICAL`
+  - `PLAYER_CLAIM`
+  - `MANUAL`
+- La RPC devuelve por hoyo:
+  - evidencia digital;
+  - evidencia física;
+  - resolución si existe;
+  - `officialGrossScore`;
+  - `officialSource`.
+- Devuelve también:
+  - `totalOfficialGross`;
+  - hoyos oficiales;
+  - conteo por fuente de origen.
+- Razón para usar FÍSICO como base de hoyos no conflictivos: la captura física `CAPTURED` ya está bloqueada y es inmutable; así una eventual modificación digital posterior no altera retroactivamente el score oficial.
+- La RPC vuelve a validar server-side que no existan casos pendientes, aun cuando la conciliación figure `COMPLETED`.
+- Esta migración es exclusivamente de lectura.
+- No modifica:
+  - `tournament_scorecard_hole_scores.gross_score`;
+  - `tournament_scorecard_physical_hole_scores.physical_gross_score`;
+  - resoluciones existentes.
+- No crea todavía una columna `official_gross_score`; el dato oficial se deriva de forma determinística.
+- No calcula todavía:
+  - NETO;
+  - leaderboard;
+  - cortes;
+  - desempates;
+  - publicación de resultados.
+- La siguiente fase debe validar esta lectura con una tarjeta conciliada real y después definir la fuente masiva por ronda para resultados, evitando N+1.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -612,7 +658,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Reconciliación de tarjeta física:** recepción/captura física construida en 149, listado masivo en 150, lectura consolidada en 151 y capa auditable de resolución en 152. Pendiente: UI de resolución, definición/materialización del score oficial y consumo posterior por resultados.
+- **Reconciliación y score oficial:** recepción/captura física construida en 149, listado masivo en 150, lectura consolidada en 151, resolución auditable en 152 y lectura oficial determinística por tarjeta en 153. Pendiente: validar score oficial con datos reales y construir fuente masiva por ronda para NETO/resultados sin N+1.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
