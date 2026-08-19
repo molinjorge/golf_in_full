@@ -419,6 +419,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 | 148 | `148_mis_rondas_score.sql` | Agrega `obtener_mis_rondas_score()`, RPC segura de solo lectura para que el jugador autenticado pueda descubrir sus rondas de scoring sin QR ni `roundId` externo. Deriva identidad con `auth.uid() → players.auth_user_id`, incluye rondas donde posee tarjeta emitida o es marcador activo, y devuelve metadatos mínimos de torneo/ronda y estado de inicialización. No amplía RLS de `tournament_score_cards` ni modifica captura. |
 | 149 | `149_captura_fisica_tarjetas_score.sql` | Agrega la recepción y captura física de tarjetas oficiales sin sobreescribir la captura digital. Crea recepción 1:1 por tarjeta, scores físicos por hoyo y bitácora física append-only. Permite tarjeta física completa, parcial o sin captura digital en PWA; ese caso se considera válido y se denomina `SIN CAPTURA DIGITAL`. No implementa todavía conciliación, score oficial, NETO, leaderboard ni cortes. |
+| 150 | `150_listado_captura_fisica_ronda.sql` | Elimina el patrón N+1 del listado administrativo de captura física. Agrega `obtener_tarjetas_captura_fisica_ronda(uuid)`, RPC `SECURITY DEFINER` de solo lectura que devuelve en una sola llamada las tarjetas emitidas de la ronda con jugador/unidad, categoría, marcador vigente, estado físico, firmas, recepción y progreso físico. No expone scores por hoyo, mantiene captura ciega, no usa QR y no implementa conciliación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -489,6 +490,41 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - cierre oficial de resultados
 - La siguiente fase prevista es la lectura/comparación lado a lado para la UI del capturista, sin resolución de diferencias todavía.
 
+### Migración 150 — Listado operativo de captura física por ronda
+
+- Agrega `obtener_tarjetas_captura_fisica_ronda(uuid)`.
+- Objetivo: eliminar las llamadas N+1 de la pantalla administrativa `CAPTURA TARJETAS FÍSICAS`.
+- La RPC recibe únicamente `tournament_round_id`.
+- Requiere sesión autenticada y valida permiso administrativo del torneo mediante `puede_administrar_congelamiento_torneo(tournament_id)`.
+- Devuelve en una sola respuesta todas las tarjetas oficiales `issued` de la ronda.
+- Por tarjeta devuelve:
+  - `scoreCardId`
+  - `cardNumber`
+  - `cardFolio`
+  - jugador/unidad (`playerId`, `displayName`)
+  - categoría (`tournamentCategoryId`, `name`)
+  - marcador vigente (`playerId`, `displayName`)
+  - recepción física
+  - estado físico
+  - presencia de ambas firmas
+  - timestamps de recepción/inicio/finalización
+  - `holesExpected`
+  - `physicalHolesCaptured`
+- `NOT_RECEIVED` sigue siendo un estado DERIVADO: se devuelve cuando no existe fila en `tournament_scorecard_physical_receptions`; no se almacena en base de datos.
+- La RPC NO devuelve `gross_score` digital ni `physical_gross_score` por hoyo.
+- Por tanto, la optimización del listado no rompe el principio de **captura física ciega**.
+- La RPC es `STABLE`, `SECURITY DEFINER`, con `search_path=public, pg_temp`.
+- `authenticated` puede ejecutarla; `anon` y `public` no.
+- No modifica ninguna tabla.
+- No utiliza QR.
+- No implementa conciliación, resoluciones ni `official_gross_score`.
+- El frontend deberá sustituir:
+  - el listado previo de `useRoundScoreCards`
+  - la lectura auxiliar de marcador para el listado
+  - las N llamadas a `obtener_captura_fisica_tarjeta`
+  por esta única RPC para cargar la pantalla inicial.
+- Al abrir una tarjeta individual, las RPC detalladas de la Migración 149 siguen siendo las fuentes correctas.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -500,7 +536,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Reconciliación de tarjeta física:** Fase de recepción y captura física construida en Migración 149. Pendiente: comparación DIGITAL vs FÍSICO, estados derivados (`COINCIDE`, `DIFERENCIA`, `SIN CAPTURA DIGITAL`, `PENDIENTE DE CAPTURA FÍSICA`), resolución por Comité y score oficial.
+- **Reconciliación de tarjeta física:** recepción/captura física construida en Migración 149 y listado masivo optimizado en Migración 150. La captura operativa es ciega: DIGITAL sólo se revela después de `CAPTURED`. Pendiente: resolución por Comité, score oficial y consumo posterior por resultados.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
