@@ -427,6 +427,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 155 | `155_resultados_oficiales_masivos_ronda.sql` | Agrega `obtener_resultados_oficiales_ronda(uuid)`, fuente administrativa masiva y set-based por ronda. Devuelve en una sola llamada estado operativo, jugador/categoría/tee, snapshots de hándicap, GROSS oficial, NETO oficial y detalle por hoyo para tarjetas `OFFICIAL_READY`; las pendientes conservan estado e issues sin presentar totales como oficiales. No implementa posiciones, leaderboard ni premiación. |
 | 156 | `156_estados_competitivos_terminales_ronda.sql` | Modela estados competitivos terminales sin reutilizar `score_cards.status`: `OFFICIAL` continúa derivado; excepciones de ronda `WD`, `DNF`, `DQ`, `DNS`, `NO_CARD` se registran y auditan. `DNF` conserva parciales. `MC/QUALIFIED` se modela aparte como estado de corte del torneo. Agrega validación de cierre de resultados: toda tarjeta debe ser `OFFICIAL_READY` o tener excepción terminal. No calcula todavía corte ni leaderboard. |
 | 157 | `157_fix_cierre_resultados_null_outcome.sql` | Corrige `validar_cierre_resultados_ronda(uuid)`: una tarjeta sin outcome excepcional (`NULL`) se trata explícitamente como no resuelta cuando tampoco está `OFFICIAL_READY`. Evita el falso positivo `unresolvedCards=0 / readyToCloseResults=true` detectado en prueba real. No modifica datos ni tablas. |
+| 158 | `158_leaderboard_ronda_gross_neto.sql` | Agrega `obtener_leaderboard_ronda(uuid)`: leaderboard derivado por ronda y categoría, siempre con clasificación GROSS y NETO. Sólo `OFFICIAL_READY` recibe posición; WD/DNF/DQ/DNS/NO_CARD permanecen visibles sin rank. Mientras haya tarjetas sin resolver el estado es `PROVISIONAL`; con ronda resuelta y empates pasa a `READY_FOR_TIEBREAK`; sin empates a `READY_FOR_PUBLICATION`. Detecta empates pero no aplica todavía desempates, cortes ni premiación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -852,6 +853,67 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - 7 tarjetas sin resolver;
   - `readyToCloseResults = false`.
 
+### Migración 158 — Leaderboard de ronda GROSS + NETO
+
+- Agrega:
+  - `obtener_leaderboard_ronda(uuid)`
+- Consume exclusivamente:
+  - `obtener_resultados_oficiales_ronda(uuid)` de la 155;
+  - `validar_cierre_resultados_ronda(uuid)` corregida por la 157;
+  - outcomes terminales de la 156.
+- El leaderboard calcula y expone SIEMPRE dos clasificaciones:
+  - GROSS;
+  - NETO.
+- Todavía NO decide cuál de ellas se utilizará para premiación por categoría.
+- Elegibilidad:
+  - sólo tarjetas `OFFICIAL_READY` reciben posición numérica;
+  - WD, DNF, DQ, DNS y NO_CARD permanecen visibles con su estado competitivo y sin rank;
+  - tarjetas todavía no resueltas también permanecen visibles como pendientes.
+- Agrupa por categoría del torneo.
+- Para cada jugador oficial expone:
+  - GROSS total;
+  - posición GROSS provisional;
+  - NETO total;
+  - posición NETO provisional;
+  - tieSize;
+  - tiebreakPending.
+- Usa `RANK()` para posiciones provisionales:
+  - jugadores empatados reciben la misma posición;
+  - la siguiente posición conserva el salto estándar de ranking.
+- Los empates se detectan por:
+  - misma categoría;
+  - mismo total GROSS o mismo total NETO.
+- La 158 NO rompe empates.
+- Estado global del leaderboard:
+  - `PROVISIONAL`:
+    - la ronda todavía tiene tarjetas sin resolver;
+  - `READY_FOR_TIEBREAK`:
+    - todas las tarjetas están resueltas;
+    - existe al menos un empate GROSS o NETO;
+  - `READY_FOR_PUBLICATION`:
+    - todas las tarjetas están resueltas;
+    - no existen empates.
+- `roundResolved` proviene de la regla formal de cierre 156/157:
+  - OFFICIAL_READY o outcome terminal.
+- La respuesta incluye:
+  - resumen global;
+  - resumen por categoría;
+  - jugadores de cada categoría;
+  - estado competitivo;
+  - GROSS/NETO/ranks;
+  - flags de empate.
+- No implementa todavía:
+  - desempate por reglas configuradas;
+  - elección GROSS/NETO para premiación;
+  - tabla de ganadores;
+  - cortes;
+  - MC;
+  - resultados acumulados multirronda.
+- Próximo paso:
+  - verificar la 158;
+  - probarla contra la ronda actual, donde debe aparecer como `PROVISIONAL`;
+  - después diseñar el motor de desempates usando las reglas ya existentes en `tournament_tiebreak_rules`.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -863,7 +925,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155 y estados competitivos terminales/cierre de ronda 156. `OFFICIAL` permanece derivado; WD/DNF/DQ/DNS/NO_CARD resuelven excepciones; MC queda separado como estado posterior al corte. Pendiente: validar outcomes/cierre y construir leaderboard sobre tarjetas resueltas.
+- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155, outcomes/cierre 156-157 y leaderboard GROSS+NETO por ronda 158. `OFFICIAL` permanece derivado; WD/DNF/DQ/DNS/NO_CARD quedan visibles sin posición. Pendiente: validar leaderboard real y construir desempates antes de premiación.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
