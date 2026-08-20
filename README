@@ -426,6 +426,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 154 | `154_motor_neto_oficial_tarjeta.sql` | Construye el motor NETO oficial por tarjeta sin depender de categoría: consume el GROSS oficial de la 153, usa exclusivamente `playing_handicap` congelado y distribuye golpes por `stroke_index`. Calcula siempre GROSS y NETO por hoyo y totales, incluyendo plus handicaps. No materializa NETO ni implementa leaderboard/premiación. |
 | 155 | `155_resultados_oficiales_masivos_ronda.sql` | Agrega `obtener_resultados_oficiales_ronda(uuid)`, fuente administrativa masiva y set-based por ronda. Devuelve en una sola llamada estado operativo, jugador/categoría/tee, snapshots de hándicap, GROSS oficial, NETO oficial y detalle por hoyo para tarjetas `OFFICIAL_READY`; las pendientes conservan estado e issues sin presentar totales como oficiales. No implementa posiciones, leaderboard ni premiación. |
 | 156 | `156_estados_competitivos_terminales_ronda.sql` | Modela estados competitivos terminales sin reutilizar `score_cards.status`: `OFFICIAL` continúa derivado; excepciones de ronda `WD`, `DNF`, `DQ`, `DNS`, `NO_CARD` se registran y auditan. `DNF` conserva parciales. `MC/QUALIFIED` se modela aparte como estado de corte del torneo. Agrega validación de cierre de resultados: toda tarjeta debe ser `OFFICIAL_READY` o tener excepción terminal. No calcula todavía corte ni leaderboard. |
+| 157 | `157_fix_cierre_resultados_null_outcome.sql` | Corrige `validar_cierre_resultados_ronda(uuid)`: una tarjeta sin outcome excepcional (`NULL`) se trata explícitamente como no resuelta cuando tampoco está `OFFICIAL_READY`. Evita el falso positivo `unresolvedCards=0 / readyToCloseResults=true` detectado en prueba real. No modifica datos ni tablas. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -821,6 +822,35 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - probar uno o dos outcomes en el torneo de prueba (por ejemplo DNF/DNS);
   - verificar `validar_cierre_resultados_ronda`;
   - después construir leaderboard provisional/definitivo sobre resultados resueltos.
+
+### Migración 157 — Fix de cierre de resultados con outcome NULL
+
+- La prueba real posterior a la Migración 156 detectó un error de lógica SQL de tres valores.
+- Cuando una tarjeta no estaba `OFFICIAL_READY` y tampoco tenía fila en `tournament_scorecard_round_outcomes`, la expresión `false OR NULL` producía `NULL`.
+- El conteo original `FILTER (WHERE NOT resolved_for_round)` no contabilizaba esos `NULL`.
+- Consecuencia observada:
+  - tarjetas pendientes visibles;
+  - `resolvedForRound = NULL`;
+  - `unresolvedCards = 0`;
+  - `readyToCloseResults = true` incorrectamente.
+- La 157 corrige `validar_cierre_resultados_ronda(uuid)`:
+  - `outcome_code NULL` equivale explícitamente a `false`;
+  - pendientes se cuentan con `resolved_for_round IS NOT TRUE`;
+  - la ronda sólo puede cerrar si `totalCards > 0` y `unresolvedCards = 0`.
+- No crea tablas.
+- No modifica datos.
+- No cambia WD/DNF/DQ/DNS/NO_CARD.
+- No cambia MC/QUALIFIED.
+- No cambia GROSS/NETO.
+- El diagnóstico real también aclaró el estado actual de la ronda:
+  - 3 tarjetas tienen físico `CAPTURED`;
+  - sólo 1 de esas 3 tiene conciliación `COMPLETED`;
+  - las otras 2 tienen conciliación `NOT_STARTED`;
+  - 5 tarjetas están `NOT_RECEIVED`.
+- Por tanto, antes de outcomes excepcionales, el estado real esperado es:
+  - 1 tarjeta resuelta;
+  - 7 tarjetas sin resolver;
+  - `readyToCloseResults = false`.
 
 ## Cómo agregar una migración nueva
 
