@@ -425,6 +425,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 153 | `153_score_oficial_consolidado_tarjeta.sql` | Agrega `obtener_score_oficial_tarjeta(uuid)`, RPC administrativa de solo lectura que construye el score oficial por hoyo únicamente después de captura física `CAPTURED` y conciliación `COMPLETED`. Los hoyos resueltos usan `resolved_gross_score`; los hoyos sin conflicto usan el valor físico inmutable, clasificando origen como `MATCHED` o `PHYSICAL_ONLY`. Devuelve `officialGrossScore`, `officialSource` y total GROSS oficial, sin sobrescribir evidencias ni materializar todavía una columna oficial. |
 | 154 | `154_motor_neto_oficial_tarjeta.sql` | Construye el motor NETO oficial por tarjeta sin depender de categoría: consume el GROSS oficial de la 153, usa exclusivamente `playing_handicap` congelado y distribuye golpes por `stroke_index`. Calcula siempre GROSS y NETO por hoyo y totales, incluyendo plus handicaps. No materializa NETO ni implementa leaderboard/premiación. |
 | 155 | `155_resultados_oficiales_masivos_ronda.sql` | Agrega `obtener_resultados_oficiales_ronda(uuid)`, fuente administrativa masiva y set-based por ronda. Devuelve en una sola llamada estado operativo, jugador/categoría/tee, snapshots de hándicap, GROSS oficial, NETO oficial y detalle por hoyo para tarjetas `OFFICIAL_READY`; las pendientes conservan estado e issues sin presentar totales como oficiales. No implementa posiciones, leaderboard ni premiación. |
+| 156 | `156_estados_competitivos_terminales_ronda.sql` | Modela estados competitivos terminales sin reutilizar `score_cards.status`: `OFFICIAL` continúa derivado; excepciones de ronda `WD`, `DNF`, `DQ`, `DNS`, `NO_CARD` se registran y auditan. `DNF` conserva parciales. `MC/QUALIFIED` se modela aparte como estado de corte del torneo. Agrega validación de cierre de resultados: toda tarjeta debe ser `OFFICIAL_READY` o tener excepción terminal. No calcula todavía corte ni leaderboard. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -761,6 +762,66 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - comprobar que actualmente sólo la tarjeta conciliada aparezca `OFFICIAL_READY` y las demás con su estado real;
   - después diseñar leaderboard sobre esta única fuente.
 
+### Migración 156 — Estados competitivos terminales de ronda
+
+- El diagnóstico previo confirmó que no existía un modelo formal para WD/DNF/DQ/DNS/NO_CARD.
+- Se mantiene separado:
+  - estado administrativo de `tournament_score_cards` (`issued/voided`);
+  - pipeline físico/conciliación;
+  - outcome competitivo del jugador.
+- `OFFICIAL` no se almacena:
+  - sigue siendo un resultado derivado por `obtener_resultados_oficiales_ronda()` de la 155;
+  - una tarjeta `OFFICIAL_READY` representa el resultado normal completo.
+- Excepciones terminales de ronda:
+  - `WD` — Withdrawn / retirado;
+  - `DNF` — Did Not Finish / inició pero no terminó;
+  - `DQ` — Disqualified;
+  - `DNS` — Did Not Start;
+  - `NO_CARD` — no existe tarjeta válida entregada para resultado.
+- Tabla:
+  - `tournament_scorecard_round_outcomes`
+- Bitácora append-only:
+  - `tournament_scorecard_round_outcome_events`
+- RPC:
+  - `establecer_outcome_competitivo_tarjeta(uuid,text,text)`
+  - `limpiar_outcome_competitivo_tarjeta(uuid,text)`
+  - `obtener_outcomes_competitivos_ronda(uuid)`
+- DNF:
+  - no se convierte artificialmente en score oficial completo;
+  - conserva scores digitales parciales ya capturados;
+  - la consulta expone `holesWithDigitalScore`, `digitalGrossPartial` y hoyos parciales;
+  - esto permite que una fase futura decida cómo usar esos parciales en competencias por equipo.
+- Cierre de resultados:
+  - RPC `validar_cierre_resultados_ronda(uuid)`;
+  - una tarjeta cuenta como resuelta si:
+    - está `OFFICIAL_READY`; o
+    - tiene `WD`, `DNF`, `DQ`, `DNS` o `NO_CARD`;
+  - devuelve `readyToCloseResults`, resumen y tarjetas todavía sin resolver.
+- MC — Missed Cut:
+  - NO es outcome de una tarjeta de ronda;
+  - se modela aparte en `tournament_cut_player_statuses`;
+  - valores: `MC`, `QUALIFIED`;
+  - identifica la ronda después de la cual se aplicó el corte;
+  - RPC de registro: `establecer_estado_corte_jugador(uuid,uuid,text,text)`.
+- La 156 NO calcula automáticamente quién pasa el corte:
+  - no aplica posiciones;
+  - no aplica top N;
+  - no aplica empates en línea de corte;
+  - sólo deja el modelo correcto preparado.
+- La 156 no:
+  - modifica DIGITAL;
+  - modifica FÍSICO;
+  - modifica conciliación;
+  - modifica GROSS/NETO oficial;
+  - implementa leaderboard;
+  - implementa premiación;
+  - implementa desempates.
+- Próximo paso recomendado:
+  - verificar la migración;
+  - probar uno o dos outcomes en el torneo de prueba (por ejemplo DNF/DNS);
+  - verificar `validar_cierre_resultados_ronda`;
+  - después construir leaderboard provisional/definitivo sobre resultados resueltos.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -772,7 +833,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS oficial 153, NETO oficial por tarjeta 154 y fuente masiva set-based por ronda 155. GROSS y NETO se calculan siempre. Pendiente: validar la fuente masiva con datos reales y construir leaderboard/premiación sobre esta capa, sin N+1.
+- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155 y estados competitivos terminales/cierre de ronda 156. `OFFICIAL` permanece derivado; WD/DNF/DQ/DNS/NO_CARD resuelven excepciones; MC queda separado como estado posterior al corte. Pendiente: validar outcomes/cierre y construir leaderboard sobre tarjetas resueltas.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
