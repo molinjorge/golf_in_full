@@ -428,6 +428,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 156 | `156_estados_competitivos_terminales_ronda.sql` | Modela estados competitivos terminales sin reutilizar `score_cards.status`: `OFFICIAL` continúa derivado; excepciones de ronda `WD`, `DNF`, `DQ`, `DNS`, `NO_CARD` se registran y auditan. `DNF` conserva parciales. `MC/QUALIFIED` se modela aparte como estado de corte del torneo. Agrega validación de cierre de resultados: toda tarjeta debe ser `OFFICIAL_READY` o tener excepción terminal. No calcula todavía corte ni leaderboard. |
 | 157 | `157_fix_cierre_resultados_null_outcome.sql` | Corrige `validar_cierre_resultados_ronda(uuid)`: una tarjeta sin outcome excepcional (`NULL`) se trata explícitamente como no resuelta cuando tampoco está `OFFICIAL_READY`. Evita el falso positivo `unresolvedCards=0 / readyToCloseResults=true` detectado en prueba real. No modifica datos ni tablas. |
 | 158 | `158_leaderboard_ronda_gross_neto.sql` | Agrega `obtener_leaderboard_ronda(uuid)`: leaderboard derivado por ronda y categoría, siempre con clasificación GROSS y NETO. Sólo `OFFICIAL_READY` recibe posición; WD/DNF/DQ/DNS/NO_CARD permanecen visibles sin rank. Mientras haya tarjetas sin resolver el estado es `PROVISIONAL`; con ronda resuelta y empates pasa a `READY_FOR_TIEBREAK`; sin empates a `READY_FOR_PUBLICATION`. Detecta empates pero no aplica todavía desempates, cortes ni premiación. |
+| 159 | `159_fix_tipo_holes_motor_neto_masivo.sql` | Corrige error 42883 detectado en la UI real: `count(*)` promovía `expected_holes` a `bigint` dentro de `obtener_resultados_oficiales_ronda(uuid)`, pero `calcular_golpes_handicap_hoyo` recibe `integer`. Se agrega cast explícito `r.expected_holes::integer`. No modifica datos, lógica GROSS/NETO ni leaderboard. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -914,6 +915,35 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - probarla contra la ronda actual, donde debe aparecer como `PROVISIONAL`;
   - después diseñar el motor de desempates usando las reglas ya existentes en `tournament_tiebreak_rules`.
 
+### Migración 159 — Fix de tipo `bigint` en fuente masiva de resultados
+
+- Error detectado en prueba física de la UI:
+  - código PostgreSQL `42883`;
+  - `function public.calcular_golpes_handicap_hoyo(integer, integer, bigint) does not exist`.
+- Causa:
+  - `shape.hole_rows` proviene de `count(*)`, cuyo tipo PostgreSQL es `bigint`;
+  - `expected_holes = COALESCE(c.holes_expected, s.hole_rows)` queda promovido a `bigint`;
+  - `calcular_golpes_handicap_hoyo` está correctamente definida con tercer parámetro `integer`.
+- Corrección:
+  - en `obtener_resultados_oficiales_ronda(uuid)`, la llamada usa `r.expected_holes::integer`.
+- No se crea una sobrecarga bigint del motor:
+  - se mantiene una sola firma canónica `(integer, integer, integer)`.
+- La 159 no modifica:
+  - tablas;
+  - datos;
+  - captura digital;
+  - captura física;
+  - conciliación;
+  - GROSS oficial;
+  - fórmula NETO;
+  - outcomes;
+  - leaderboard.
+- `obtener_leaderboard_ronda(uuid)` de la 158 no requiere cambios:
+  - consume automáticamente la fuente 155/159 ya corregida.
+- Después de ejecutar 159:
+  - volver a abrir `/rondas/<roundId>/resultados`;
+  - la RPC ya debe cargar el leaderboard real.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -925,7 +955,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155, outcomes/cierre 156-157 y leaderboard GROSS+NETO por ronda 158. `OFFICIAL` permanece derivado; WD/DNF/DQ/DNS/NO_CARD quedan visibles sin posición. Pendiente: validar leaderboard real y construir desempates antes de premiación.
+- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155, outcomes/cierre 156-157, leaderboard 158 y fix de tipo bigint→integer en la fuente masiva 159. Pendiente: revalidar la UI real y luego construir desempates antes de premiación.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
