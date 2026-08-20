@@ -423,6 +423,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 151 | `151_lectura_conciliacion_scorecard.sql` | Agrega `obtener_conciliacion_tarjeta_score(uuid)`, RPC administrativa de solo lectura que, únicamente después de `CAPTURED`, consolida por hoyo el GROSS digital vigente, la inconformidad activa/histórica del jugador y el GROSS físico. Clasifica comparación (`COINCIDE`, `DIFERENCIA`, `SIN_CAPTURA_DIGITAL`, `PENDIENTE_CAPTURA_FISICA`) e inconformidad (`NONE`, `ACTIVE`, `HISTORICAL_PENDING`, `HISTORICAL_RESOLVED`) y deriva `needsReview`. No crea score oficial ni resoluciones. |
 | 152 | `152_resolucion_conciliacion_scorecard.sql` | Agrega la capa auditable de resolución de conciliación sin sobreescribir DIGITAL, FÍSICO ni reclamos. Crea cabecera por tarjeta, resoluciones sólo para hoyos que requieren revisión y bitácora append-only. Fuentes: `DIGITAL`, `PHYSICAL`, `PLAYER_CLAIM`, `MANUAL`; MANUAL exige motivo. No crea todavía `official_gross_score`. |
 | 153 | `153_score_oficial_consolidado_tarjeta.sql` | Agrega `obtener_score_oficial_tarjeta(uuid)`, RPC administrativa de solo lectura que construye el score oficial por hoyo únicamente después de captura física `CAPTURED` y conciliación `COMPLETED`. Los hoyos resueltos usan `resolved_gross_score`; los hoyos sin conflicto usan el valor físico inmutable, clasificando origen como `MATCHED` o `PHYSICAL_ONLY`. Devuelve `officialGrossScore`, `officialSource` y total GROSS oficial, sin sobrescribir evidencias ni materializar todavía una columna oficial. |
+| 154 | `154_motor_neto_oficial_tarjeta.sql` | Construye el motor NETO oficial por tarjeta sin depender de categoría: consume el GROSS oficial de la 153, usa exclusivamente `playing_handicap` congelado y distribuye golpes por `stroke_index`. Calcula siempre GROSS y NETO por hoyo y totales, incluyendo plus handicaps. No materializa NETO ni implementa leaderboard/premiación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -647,6 +648,28 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - publicación de resultados.
 - La siguiente fase debe validar esta lectura con una tarjeta conciliada real y después definir la fuente masiva por ronda para resultados, evitando N+1.
 
+### Migración 154 — Motor NETO oficial por tarjeta
+
+- Se reutiliza el número 154 porque la propuesta anterior GROSS/NET/BOTH no fue ejecutada.
+- Calcula siempre GROSS y NETO para toda tarjeta oficial.
+- Función pura: `calcular_golpes_handicap_hoyo(integer, integer, integer)`.
+- RPC: `obtener_resultado_neto_oficial_tarjeta(uuid)`.
+- El GROSS oficial proviene exclusivamente de `obtener_score_oficial_tarjeta(uuid)` de la Migración 153.
+- El hándicap proviene exclusivamente de `tournament_round_handicap_snapshots.playing_handicap`, enlazado mediante `tournament_round_start_validation_units.round_handicap_snapshot_id`.
+- No consulta ni recalcula el hándicap vivo del jugador.
+- Fórmula por hoyo: `officialNetScore = officialGrossScore - handicapStrokes`.
+- Playing Handicap positivo: asigna golpes empezando por SI 1 y soporta vueltas adicionales cuando PH > número de hoyos.
+- Plus handicap: devuelve golpes negativos y los cede empezando por el SI más alto.
+- Valida que el Stroke Index congelado forme una secuencia completa 1..N.
+- Valida que la suma de golpes distribuidos sea exactamente igual al Playing Handicap.
+- Devuelve por hoyo: hoyo, secuencia, par, SI, GROSS oficial, fuente GROSS, golpes de hándicap y NETO oficial.
+- Devuelve snapshot de hándicap y totales GROSS/NETO.
+- No depende de nombre/categoría para calcular.
+- No materializa NETO en tablas.
+- No implementa todavía leaderboard, premiación, cortes ni desempates.
+- La elección GROSS/NETO para premiación por categoría se definirá después; no es requisito del motor.
+- Siguiente paso: verificar esta migración con Supabase y probar la tarjeta conciliada real antes de construir la fuente masiva por ronda.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -658,7 +681,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Reconciliación y score oficial:** recepción/captura física construida en 149, listado masivo en 150, lectura consolidada en 151, resolución auditable en 152 y lectura oficial determinística por tarjeta en 153. Pendiente: validar score oficial con datos reales y construir fuente masiva por ronda para NETO/resultados sin N+1.
+- **Resultados oficiales:** recepción/captura física 149, listado masivo 150, conciliación 151-152, GROSS oficial validado en 153 y motor NETO oficial por tarjeta en 154. GROSS y NETO se calculan siempre; premiación por categoría queda para una fase posterior. Pendiente: validar NETO con datos reales y construir fuente masiva por ronda sin N+1.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
