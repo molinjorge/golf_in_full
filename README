@@ -429,6 +429,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 157 | `157_fix_cierre_resultados_null_outcome.sql` | Corrige `validar_cierre_resultados_ronda(uuid)`: una tarjeta sin outcome excepcional (`NULL`) se trata explícitamente como no resuelta cuando tampoco está `OFFICIAL_READY`. Evita el falso positivo `unresolvedCards=0 / readyToCloseResults=true` detectado en prueba real. No modifica datos ni tablas. |
 | 158 | `158_leaderboard_ronda_gross_neto.sql` | Agrega `obtener_leaderboard_ronda(uuid)`: leaderboard derivado por ronda y categoría, siempre con clasificación GROSS y NETO. Sólo `OFFICIAL_READY` recibe posición; WD/DNF/DQ/DNS/NO_CARD permanecen visibles sin rank. Mientras haya tarjetas sin resolver el estado es `PROVISIONAL`; con ronda resuelta y empates pasa a `READY_FOR_TIEBREAK`; sin empates a `READY_FOR_PUBLICATION`. Detecta empates pero no aplica todavía desempates, cortes ni premiación. |
 | 159 | `159_fix_tipo_holes_motor_neto_masivo.sql` | Corrige error 42883 detectado en la UI real: `count(*)` promovía `expected_holes` a `bigint` dentro de `obtener_resultados_oficiales_ronda(uuid)`, pero `calcular_golpes_handicap_hoyo` recibe `integer`. Se agrega cast explícito `r.expected_holes::integer`. No modifica datos, lógica GROSS/NETO ni leaderboard. |
+| 160 | `160_motor_desempates_ronda.sql` | Agrega motor de desempates de sólo lectura: helpers puros para calcular claves por método y evaluar secuencias, más `obtener_desempates_ronda(uuid)`. Resuelve configuración efectiva por categoría/tipo/alcance con precedencia `CATEGORY_SCOPE → CATEGORY_ALL → TOURNAMENT_SCOPE → TOURNAMENT_ALL`; soporta countback 9/6/3/1, tarjeta completa y hoyo por hoyo por Stroke Index. Métodos manuales o empate persistente quedan pendientes; no materializa ni modifica leaderboard. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -944,6 +945,93 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - volver a abrir `/rondas/<roundId>/resultados`;
   - la RPC ya debe cargar el leaderboard real.
 
+### Migración 160 — Motor de desempates de ronda
+
+- No crea un nuevo sistema de configuración:
+  - reutiliza `tournament_tiebreak_rules`;
+  - reutiliza `tiebreak_methods`;
+  - respeta `tipo_resultado_desempate`;
+  - respeta `alcance_desempate`.
+- Agrega helper puro:
+  - `calcular_clave_metodo_desempate(text,tipo_resultado_desempate,jsonb)`
+- Agrega helper puro:
+  - `evaluar_secuencia_desempate_tarjeta(jsonb,tipo_resultado_desempate,jsonb)`
+- Agrega RPC:
+  - `obtener_desempates_ronda(uuid)`
+- Configuración efectiva por grupo empatado:
+  1. categoría + alcance exacto;
+  2. categoría + alcance `todos`;
+  3. default torneo + alcance exacto;
+  4. default torneo + alcance `todos`.
+- Se selecciona una sola fuente:
+  - no se mezclan pasos específicos y default.
+- El motor evalúa por separado:
+  - GROSS;
+  - NETO.
+- Alcance:
+  - empate en rank 1 -> `primer_lugar`;
+  - empate en cualquier otra posición -> `otros_lugares`.
+- Métodos automáticos:
+  - `TARJETA_ULTIMOS_9`;
+  - `TARJETA_ULTIMOS_6`;
+  - `TARJETA_ULTIMOS_3`;
+  - `TARJETA_ULTIMO_HOYO`;
+  - `TARJETA_18`;
+  - `HOYO_POR_HOYO_HANDICAP`.
+- Countback:
+  - usa scores oficiales por hoyo;
+  - GROSS usa `officialGrossScore`;
+  - NETO usa `officialNetScore`.
+- `HOYO_POR_HOYO_HANDICAP`:
+  - compara lexicográficamente desde Stroke Index 1, después 2, 3, etc.;
+  - no usa el número físico de hoyo como prioridad.
+- Métodos no automáticos:
+  - `MUERTE_SUBITA`;
+  - `SORTEO`;
+  - códigos no soportados.
+- Si el empate llega a uno de ellos:
+  - `MANUAL_PENDING`;
+  - no inventa ganador.
+- Si se agotan los pasos automáticos y persiste el empate:
+  - `TIE_PERSISTS_AFTER_RULES`.
+- Si no existe configuración efectiva para un grupo:
+  - `CONFIG_MISSING`.
+- Si se resuelve automáticamente:
+  - `RESOLVED_AUTOMATIC`;
+  - devuelve `resolvedAtStep`;
+  - devuelve `resolvedByMethodCode`;
+  - devuelve `resolvedByMethodName`;
+  - devuelve `tiebreakOrder`;
+  - devuelve `finalRank`.
+- Evidencia:
+  - cada jugador conserva por paso:
+    - método;
+    - clave del paso;
+    - clave acumulada.
+- Estado del motor:
+  - `NO_TIES`;
+  - `PROVISIONAL_RESOLVED`;
+  - `RESOLVED`;
+  - `PROVISIONAL_CONFIGURATION_REQUIRED`;
+  - `CONFIGURATION_REQUIRED`;
+  - `PROVISIONAL_ACTION_REQUIRED`;
+  - `ACTION_REQUIRED`.
+- La ronda puede estar incompleta:
+  - el motor puede evaluar empates actuales;
+  - el resultado se considera provisional mientras `roundResolved=false`.
+- La 160 no:
+  - modifica reglas;
+  - materializa desempates;
+  - modifica posiciones del leaderboard 158;
+  - decide premiación GROSS/NETO por categoría;
+  - calcula cortes;
+  - aplica MC;
+  - publica resultados.
+- Próximo paso:
+  - verificar la 160;
+  - crear una prueba controlada de empate con rollback o utilizar un empate real;
+  - después integrar el resultado del motor al leaderboard/UI.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -955,7 +1043,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 
 - **PWA de captura de scores:** interfaz móvil que consuma las RPC de la Migración 146.
 - **Notificación al dueño del score:** push/PWA/WhatsApp u otro canal para avisar que su marcador capturó un hoyo y solicitar confirmación.
-- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155, outcomes/cierre 156-157, leaderboard 158 y fix de tipo bigint→integer en la fuente masiva 159. Pendiente: revalidar la UI real y luego construir desempates antes de premiación.
+- **Resultados oficiales:** físico 149-150, conciliación 151-152, GROSS 153, NETO 154, fuente masiva 155, outcomes/cierre 156-157, leaderboard 158, fix 159 y motor de desempates de sólo lectura 160. Pendiente: validar el motor con un empate real/controlado e integrarlo posteriormente al leaderboard antes de premiación.
 - **Motor de resultados:** Gross total, Net por hoyo/total, score vs PAR, clasificación, desempates y cortes.
 
 - Inscripción por EQUIPOS — Fase 2: que el jugador cree su propio equipo y busque compañeros por apellido (necesita una función de búsqueda acotada por apellido, accesible para cualquier jugador, no solo administradores)
