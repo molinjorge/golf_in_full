@@ -1,54 +1,177 @@
-# README MIGRACIÓN 162 — GOLF IN FULL / Tee Central
+# README MIGRACIÓN 163 — GOLF IN FULL / Tee Central
 
-## Migración 162 — Estado formal de cierre competitivo de ronda
+## Migración 163 — Base de provisionamiento de torneos
 
-Agrega `public.obtener_estado_cierre_competitivo_ronda(uuid)`.
+### Objetivo
 
-La RPC combina exclusivamente fuentes ya construidas y validadas:
+Separar formalmente dos responsabilidades:
 
-- `validar_cierre_resultados_ronda(uuid)` — tarjetas/outcomes.
-- `obtener_desempates_ronda(uuid)` — motor automático 160.
-- `obtener_resoluciones_desempate_ronda(uuid)` — persistencia manual 161.
+1. **Superadmin:** crea/provisiona el torneo como servicio cobrable de Tee Central.
+2. **Organizador:** completa posteriormente la configuración deportiva del torneo que le fue asignado.
 
-### Estados
+Se mantiene `public.tournaments` como entidad única y canónica. No se crea una segunda tabla de torneos.
 
-- `PROVISIONAL`: todavía existen tarjetas/resultados sin resolver.
-- `TIEBREAKS_PENDING`: todas las tarjetas están resueltas, pero queda al menos un desempate pendiente.
-- `FINAL`: tarjetas/resultados completos y todos los desempates resueltos.
+### Hallazgos del diagnóstico previo
 
-### Invariantes
+`tournaments` exigía seis columnas sin default:
 
-`FINAL` exige simultáneamente:
+- `club_id`
+- `nombre`
+- `fecha_inicio`
+- `fecha_fin`
+- `cupo_maximo`
+- `tournament_format_id`
 
-- `cardsReady = true`
-- `tiebreaksReady = true`
-- `competitivelyClosed = true`
+En el nuevo flujo, el Superadmin sí conoce al provisionar:
 
-Un grupo de desempate está resuelto si:
+- nombre
+- fecha inicial
+- fecha final
 
-- el motor 160 devuelve `RESOLVED_AUTOMATIC`; o
-- existe una resolución manual 161 con `status = COMPLETED`.
+El organizador completará posteriormente:
 
-Las resoluciones `VOIDED` no cuentan para cierre.
+- club
+- cupo
+- formato
+- campo
+- rondas
+- categorías
+- tarifas
+- demás configuración deportiva
 
-### No hace
+### Cambios de la 163
 
-La 162 NO:
+#### 1. Nuevo eje `estado_servicio`
 
-- modifica GROSS o NETO;
-- modifica tarjetas;
-- modifica outcomes;
-- modifica motor 160;
-- modifica persistencia 161;
-- modifica leaderboard;
-- materializa el cierre;
-- calcula cortes;
-- calcula premiación;
-- publica resultados.
+Se agrega el enum:
 
-### Próximo paso
+`public.estado_servicio_torneo`
 
-1. Ejecutar Migración 162.
-2. Ejecutar verificador.
-3. Probar la RPC con la ronda actual: debe devolver `PROVISIONAL`.
-4. Integrar después el estado competitivo formal a la UI.
+Valores:
+
+- `provisionado`
+- `activo`
+- `pausado`
+- `archivado`
+- `cancelado`
+
+Y la columna:
+
+`tournaments.estado_servicio`
+
+Este estado es independiente de `tournaments.estatus`, que conserva el ciclo deportivo:
+
+- planificado
+- inscripciones_abiertas
+- inscripcion_cerrada
+- en_curso
+- finalizado
+- cancelado
+
+Los torneos históricos existentes quedan con:
+
+`estado_servicio = activo`
+
+#### 2. Campos deportivos pendientes durante provisionamiento
+
+Se permite `NULL` temporalmente en:
+
+- `club_id`
+- `cupo_maximo`
+- `tournament_format_id`
+
+Se mantienen obligatorios:
+
+- `nombre`
+- `fecha_inicio`
+- `fecha_fin`
+
+#### 3. Creación restringida a Superadmin
+
+La policy `tournaments_insert` cambia de:
+
+`Superadmin OR Club Admin`
+
+a:
+
+`Superadmin solamente`
+
+Esto formaliza la regla comercial de Tee Central: un organizador o club no puede crear por sí solo un torneo cobrable.
+
+#### 4. Organizador conserva edición
+
+La policy `tournaments_update` no se modifica.
+
+El organizador asignado continúa pudiendo configurar el torneo mediante la autorización existente:
+
+`is_tournament_organizer(auth.uid(), tournament_id)`
+
+#### 5. Estado de servicio protegido
+
+Se agrega:
+
+- `proteger_estado_servicio_torneo()`
+- `trg_proteger_estado_servicio_torneo`
+
+El organizador puede configurar datos deportivos, pero no cambiar por sí mismo el estado comercial/de servicio del torneo.
+
+### Esta fase NO implementa todavía
+
+- perfil comercial/contrato;
+- datos del contratante;
+- monto de plataforma;
+- estado de pago;
+- constancia fiscal;
+- bucket comercial;
+- invitación para organizador no registrado;
+- creación automática de `admin_role_assignments`;
+- RPC transaccional de provisionamiento;
+- activación formal;
+- pausa automática;
+- archivado automático;
+- UI.
+
+### Próximas fases propuestas
+
+#### 164 — Perfil comercial/contratante
+
+Tabla 1:1 asociada a `tournaments` para:
+
+- contratante;
+- RFC;
+- domicilio;
+- teléfonos;
+- correo;
+- monto contratado;
+- moneda;
+- estado de pago;
+- fecha/referencia de pago;
+- constancia fiscal.
+
+#### 165 — Invitación de organizador
+
+Soportar dos casos:
+
+- organizador ya registrado → asignación directa;
+- organizador no registrado → invitación pendiente.
+
+Sin crear `admin_user` falso.
+
+#### 166 — RPC transaccional de provisionamiento
+
+Una única operación server-side que:
+
+1. valida Superadmin;
+2. crea `tournaments` en `provisionado`;
+3. crea perfil comercial;
+4. asigna organizador existente o crea invitación;
+5. devuelve `tournament_id`;
+6. revierte todo si cualquier paso falla.
+
+#### Fases posteriores
+
+- UI Superadmin de provisionamiento;
+- UI Organizador para completar configuración;
+- validación de configuración mínima antes de activar;
+- pausa/archivo automático después de fecha/gracia;
+- tratamiento de torneos históricos.
