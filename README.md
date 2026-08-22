@@ -438,6 +438,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 166 | `166_rpc_provisionar_torneo.sql` | Agrega `provisionar_torneo(...)`, RPC transaccional exclusiva de Superadmin: crea torneo `provisionado` con `activo=false`, perfil comercial y, según el email, asignación directa a un organizador existente o invitación `pending`. No crea usuarios ni contraseñas. |
 | 167 | `167_aceptacion_invitacion_organizador.sql` | Agrega `aceptar_invitacion_organizador_torneo(uuid,text,text)`: un usuario ya autenticado y con email verificado puede aceptar una invitación `pending` sólo si su email coincide. Crea/vincula `admin_users`, materializa `tournament_organizer` y marca la invitación `accepted`. No crea usuarios Auth ni contraseñas. |
 | 168 | `168_trazabilidad_envio_invitacion_organizador.sql` | Agrega trazabilidad de envío a `tournament_organizer_invitations`: `last_sent_at`, `sent_count` y `last_sent_by`. No envía correos; prepara el control para el envío manual por Superadmin vía Resend. |
+| 169 | `169_generalizacion_invitaciones_administrativas.sql` | Generaliza las invitaciones administrativas en `admin_user_invitations`, agrega rol/ámbito y unifica asignación, invitación y aceptación para `club_admin` y `tournament_organizer`. Adapta `provisionar_torneo` y conserva la RPC 167 como wrapper. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1162,6 +1163,13 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Agrega `last_sent_at`, `sent_count` y `last_sent_by` a las invitaciones de organizador.
 - Permite saber si se envió, cuándo fue el último envío y cuántas veces se reenvió.
 - No envía correo; el envío será manual desde Superadmin mediante Resend.
+
+### Migración 169 — Invitaciones administrativas genéricas
+
+- Generaliza la tabla existente; no crea un sistema paralelo.
+- Unifica invitación/asignación/aceptación para `club_admin` y `tournament_organizer`.
+- `provisionar_torneo` usa el motor genérico y la RPC 167 queda como wrapper compatible.
+- Pendiente UI: correo genérico, `/activar-acceso`, reemplazar altas con contraseña temporal y retirar código legado tras pruebas.
 
 ## Cómo agregar una migración nueva
 
