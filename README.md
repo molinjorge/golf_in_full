@@ -435,6 +435,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 163 | `163_provisionamiento_torneos_base.sql` | Base de provisionamiento comercial sin duplicar `tournaments`: agrega `estado_servicio` (`provisionado`, `activo`, `pausado`, `archivado`, `cancelado`), mantiene separado el estatus deportivo, permite `club_id`, `cupo_maximo` y `tournament_format_id` NULL durante provisionamiento, restringe la creación a Superadmin y protege cambios del estado de servicio. |
 | 164 | `164_perfil_comercial_contratante_torneo.sql` | Agrega perfil comercial/fiscal 1:1 por torneo (`tournament_commercial_profiles`): contratante independiente del organizador, monto de plataforma, pagado/no pagado, datos de pago y ruta de Constancia Fiscal. Crea bucket privado `tournament-contract-fiscal-documents`. Lectura/escritura comercial y documentos restringidos a Superadmin. |
 | 165 | `165_invitaciones_organizador_torneo.sql` | Agrega invitaciones para organizadores aún no registrados, sin crear usuarios falsos ni guardar contraseñas. Los organizadores existentes continúan usando `admin_role_assignments`. La invitación sólo reserva nombre/email/teléfono y no concede permisos hasta que exista un `admin_user` real y se materialice su asignación. |
+| 166 | `166_rpc_provisionar_torneo.sql` | Agrega `provisionar_torneo(...)`, RPC transaccional exclusiva de Superadmin: crea torneo `provisionado` con `activo=false`, perfil comercial y, según el email, asignación directa a un organizador existente o invitación `pending`. No crea usuarios ni contraseñas. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1138,6 +1139,14 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La invitación no concede permisos hasta su aceptación y asignación real.
 - Los torneos y organizadores actuales no se modifican.
 - Pendiente: aceptación/registro y RPC transaccional de provisionamiento.
+
+### Migración 166 — RPC de provisionamiento
+
+- `provisionar_torneo(...)` es exclusiva de Superadmin y atómica.
+- Crea torneo mínimo `provisionado`, `activo=false`, perfil comercial y organizador.
+- Organizador existente: `admin_role_assignments`; no existente: invitación `pending`.
+- No crea cuentas ni contraseñas.
+- Pendiente: aceptación/registro del invitado, UI Superadmin y activación del torneo.
 
 ## Cómo agregar una migración nueva
 
