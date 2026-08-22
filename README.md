@@ -436,6 +436,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 164 | `164_perfil_comercial_contratante_torneo.sql` | Agrega perfil comercial/fiscal 1:1 por torneo (`tournament_commercial_profiles`): contratante independiente del organizador, monto de plataforma, pagado/no pagado, datos de pago y ruta de Constancia Fiscal. Crea bucket privado `tournament-contract-fiscal-documents`. Lectura/escritura comercial y documentos restringidos a Superadmin. |
 | 165 | `165_invitaciones_organizador_torneo.sql` | Agrega invitaciones para organizadores aún no registrados, sin crear usuarios falsos ni guardar contraseñas. Los organizadores existentes continúan usando `admin_role_assignments`. La invitación sólo reserva nombre/email/teléfono y no concede permisos hasta que exista un `admin_user` real y se materialice su asignación. |
 | 166 | `166_rpc_provisionar_torneo.sql` | Agrega `provisionar_torneo(...)`, RPC transaccional exclusiva de Superadmin: crea torneo `provisionado` con `activo=false`, perfil comercial y, según el email, asignación directa a un organizador existente o invitación `pending`. No crea usuarios ni contraseñas. |
+| 167 | `167_aceptacion_invitacion_organizador.sql` | Agrega `aceptar_invitacion_organizador_torneo(uuid,text,text)`: un usuario ya autenticado y con email verificado puede aceptar una invitación `pending` sólo si su email coincide. Crea/vincula `admin_users`, materializa `tournament_organizer` y marca la invitación `accepted`. No crea usuarios Auth ni contraseñas. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1147,6 +1148,13 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Organizador existente: `admin_role_assignments`; no existente: invitación `pending`.
 - No crea cuentas ni contraseñas.
 - Pendiente: aceptación/registro del invitado, UI Superadmin y activación del torneo.
+
+### Migración 167 — Aceptación de invitación
+
+- Usuario autenticado y con email verificado acepta sólo la invitación pendiente de su propio correo.
+- Crea/vincula `admin_users`, asigna `tournament_organizer` y marca la invitación `accepted`.
+- No crea cuentas Auth ni contraseñas; eso permanece en Supabase Auth.
+- Pendiente UI: envío manual de invitación, verificación/alta inicial y “Olvidé mi contraseña”.
 
 ## Cómo agregar una migración nueva
 
