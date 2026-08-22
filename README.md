@@ -437,6 +437,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 165 | `165_invitaciones_organizador_torneo.sql` | Agrega invitaciones para organizadores aún no registrados, sin crear usuarios falsos ni guardar contraseñas. Los organizadores existentes continúan usando `admin_role_assignments`. La invitación sólo reserva nombre/email/teléfono y no concede permisos hasta que exista un `admin_user` real y se materialice su asignación. |
 | 166 | `166_rpc_provisionar_torneo.sql` | Agrega `provisionar_torneo(...)`, RPC transaccional exclusiva de Superadmin: crea torneo `provisionado` con `activo=false`, perfil comercial y, según el email, asignación directa a un organizador existente o invitación `pending`. No crea usuarios ni contraseñas. |
 | 167 | `167_aceptacion_invitacion_organizador.sql` | Agrega `aceptar_invitacion_organizador_torneo(uuid,text,text)`: un usuario ya autenticado y con email verificado puede aceptar una invitación `pending` sólo si su email coincide. Crea/vincula `admin_users`, materializa `tournament_organizer` y marca la invitación `accepted`. No crea usuarios Auth ni contraseñas. |
+| 168 | `168_trazabilidad_envio_invitacion_organizador.sql` | Agrega trazabilidad de envío a `tournament_organizer_invitations`: `last_sent_at`, `sent_count` y `last_sent_by`. No envía correos; prepara el control para el envío manual por Superadmin vía Resend. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1155,6 +1156,12 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Crea/vincula `admin_users`, asigna `tournament_organizer` y marca la invitación `accepted`.
 - No crea cuentas Auth ni contraseñas; eso permanece en Supabase Auth.
 - Pendiente UI: envío manual de invitación, verificación/alta inicial y “Olvidé mi contraseña”.
+
+### Migración 168 — Trazabilidad de invitación
+
+- Agrega `last_sent_at`, `sent_count` y `last_sent_by` a las invitaciones de organizador.
+- Permite saber si se envió, cuándo fue el último envío y cuántas veces se reenvió.
+- No envía correo; el envío será manual desde Superadmin mediante Resend.
 
 ## Cómo agregar una migración nueva
 
