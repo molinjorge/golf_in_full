@@ -434,6 +434,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 162 | `162_estado_cierre_competitivo_ronda.sql` | Agrega `obtener_estado_cierre_competitivo_ronda(uuid)`, integra cierre de tarjetas/outcomes, motor de desempates 160 y resoluciones manuales 161, y formaliza `PROVISIONAL`, `TIEBREAKS_PENDING` y `FINAL`. `FINAL` exige resultados completos y cero desempates pendientes. No materializa cierre, no modifica leaderboard y no implementa publicación, cortes ni premiación. |
 | 163 | `163_provisionamiento_torneos_base.sql` | Base de provisionamiento comercial sin duplicar `tournaments`: agrega `estado_servicio` (`provisionado`, `activo`, `pausado`, `archivado`, `cancelado`), mantiene separado el estatus deportivo, permite `club_id`, `cupo_maximo` y `tournament_format_id` NULL durante provisionamiento, restringe la creación a Superadmin y protege cambios del estado de servicio. |
 | 164 | `164_perfil_comercial_contratante_torneo.sql` | Agrega perfil comercial/fiscal 1:1 por torneo (`tournament_commercial_profiles`): contratante independiente del organizador, monto de plataforma, pagado/no pagado, datos de pago y ruta de Constancia Fiscal. Crea bucket privado `tournament-contract-fiscal-documents`. Lectura/escritura comercial y documentos restringidos a Superadmin. |
+| 165 | `165_invitaciones_organizador_torneo.sql` | Agrega invitaciones para organizadores aún no registrados, sin crear usuarios falsos ni guardar contraseñas. Los organizadores existentes continúan usando `admin_role_assignments`. La invitación sólo reserva nombre/email/teléfono y no concede permisos hasta que exista un `admin_user` real y se materialice su asignación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1128,6 +1129,15 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Crea bucket privado `tournament-contract-fiscal-documents`.
 - Datos comerciales y documentos: sólo Superadmin.
 - Pendiente: invitaciones de organizador no registrado y RPC transaccional de provisionamiento.
+
+### Migración 165 — Invitación de organizador
+
+- Si el organizador ya existe, se conserva `admin_role_assignments`.
+- Si aún no existe, se guarda una invitación pendiente con nombre, email y teléfono.
+- No crea `admin_user` provisional ni almacena contraseñas.
+- La invitación no concede permisos hasta su aceptación y asignación real.
+- Los torneos y organizadores actuales no se modifican.
+- Pendiente: aceptación/registro y RPC transaccional de provisionamiento.
 
 ## Cómo agregar una migración nueva
 
