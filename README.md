@@ -444,6 +444,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 172 | `172_FASE1_conciliacion_desde_snapshots.sql` | Fase 1: `obtener_conciliacion_tarjeta_score` usa los snapshots de la ronda como universo de hoyos; la evidencia digital pasa a ser opcional y la física sigue siendo obligatoria. |
 | 173 | `173_FASE2_finalizacion_resolucion_desde_snapshots.sql` | Fase 2: finalización y resolución usan snapshots como universo; físico incompleto bloquea, mientras físico sin digital no requiere resolución. |
 | 174 | `174_FASE3_resultados_oficiales_desde_snapshots.sql` | Fase 3: resultados oficiales usan snapshots para hoyos esperados; físico es obligatorio y digital opcional, habilitando tarjetas 100% físicas sin crear sesiones digitales ficticias. |
+| 175 | `175_categorias_elegibles_inscripcion.sql` | Centraliza la elegibilidad de categorías en inscripción individual: permite la categoría natural por hándicap y categorías superiores (menor hándicap), respeta género y categorías por edad como Senior, conserva categorías abiertas y overrides del torneo. Agrega `obtener_mis_categorias_elegibles_inscripcion(uuid)` para el frontend y actualiza `resolver_categoria_y_marca()` para respetar selecciones superiores válidas y rechazar categorías inferiores o incompatibles. No modifica equipos, franjas de categoría única ni inscripciones históricas. Verificación: 14/14 OK. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1213,6 +1214,21 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La tarjeta física completa sigue siendo obligatoria.
 - La captura digital es opcional y `PHYSICAL_ONLY` es fuente válida.
 - El leaderboard no se modifica; consume el resultado oficial corregido.
+
+### Migración 175 — Categorías elegibles en inscripción
+
+- Centraliza la elegibilidad de categorías para inscripción individual.
+- El jugador puede elegir su categoría natural por hándicap o cualquier categoría superior, entendida como una categoría con menor rango de hándicap.
+- No puede elegir una categoría inferior ni una categoría de género incompatible.
+- Las categorías Senior se validan por edad y permanecen como alternativa adicional a la categoría regular por hándicap.
+- Las categorías abiertas (`genero IS NULL`) continúan disponibles para ambos sexos cuando corresponda.
+- Los rangos efectivos respetan primero los overrides de `tournament_categories` y, si no existen, los valores del catálogo `categories`.
+- Agrega la función interna `public._categorias_elegibles_jugador(uuid,uuid)`.
+- Agrega la RPC `public.obtener_mis_categorias_elegibles_inscripcion(uuid)` para que el frontend muestre únicamente opciones válidas al jugador autenticado.
+- Actualiza `public.resolver_categoria_y_marca()` para respetar una selección superior válida en lugar de reasignarla automáticamente a la categoría natural.
+- La asignación de marca de salida continúa derivándose de la categoría finalmente aceptada.
+- La lógica de equipos, torneos de categoría única con franjas e inscripciones históricas no se modifica.
+- Verificación ejecutada: **14 verificaciones, 0 errores**.
 
 ## Cómo agregar una migración nueva
 
