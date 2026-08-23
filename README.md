@@ -439,6 +439,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 167 | `167_aceptacion_invitacion_organizador.sql` | Agrega `aceptar_invitacion_organizador_torneo(uuid,text,text)`: un usuario ya autenticado y con email verificado puede aceptar una invitación `pending` sólo si su email coincide. Crea/vincula `admin_users`, materializa `tournament_organizer` y marca la invitación `accepted`. No crea usuarios Auth ni contraseñas. |
 | 168 | `168_trazabilidad_envio_invitacion_organizador.sql` | Agrega trazabilidad de envío a `tournament_organizer_invitations`: `last_sent_at`, `sent_count` y `last_sent_by`. No envía correos; prepara el control para el envío manual por Superadmin vía Resend. |
 | 169 | `169_generalizacion_invitaciones_administrativas.sql` | Generaliza las invitaciones administrativas en `admin_user_invitations`, agrega rol/ámbito y unifica asignación, invitación y aceptación para `club_admin` y `tournament_organizer`. Adapta `provisionar_torneo` y conserva la RPC 167 como wrapper. |
+| 170 | `170_datos_estructurados_invitacion_admin.sql` | Agrega `nombres` y `apellidos` estructurados a `admin_user_invitations`; nuevas invitaciones guardan esos datos desde el alta y `aceptar_invitacion_admin(uuid)` los usa como fuente de verdad. Conserva wrappers temporales para compatibilidad y evita pedir nombres/apellidos otra vez durante la activación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1170,6 +1171,15 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Unifica invitación/asignación/aceptación para `club_admin` y `tournament_organizer`.
 - `provisionar_torneo` usa el motor genérico y la RPC 167 queda como wrapper compatible.
 - Pendiente UI: correo genérico, `/activar-acceso`, reemplazar altas con contraseña temporal y retirar código legado tras pruebas.
+
+### Migración 170 — Datos estructurados en invitaciones administrativas
+
+- Agrega `nombres` y `apellidos` a `admin_user_invitations`.
+- Las nuevas altas administrativas capturan esos datos una sola vez desde Superadmin.
+- `aceptar_invitacion_admin(uuid)` toma nombres/apellidos directamente de la invitación.
+- El invitado ya no debe volver a capturarlos durante la activación; sólo verifica OTP y crea su contraseña.
+- Se conservan temporalmente las firmas anteriores de aceptación como wrappers compatibles.
+- Las invitaciones antiguas sin nombres/apellidos no se completan automáticamente ni se inventan datos.
 
 ## Cómo agregar una migración nueva
 
