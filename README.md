@@ -450,6 +450,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 178 | `178_categorias_elegibles_reserva_telefonica.sql` | Agrega `obtener_categorias_elegibles_jugador_inscripcion(uuid,uuid)` para que Superadmin u Organizador consulten las categorías elegibles de un jugador seleccionado en flujos administrativos como Reserva telefónica. Reutiliza `_categorias_elegibles_jugador(...)`, conserva las reglas de hándicap, género, edad, categoría natural y superiores, y devuelve rangos efectivos de hándicap. |
 | 178 Fase 2 | `178_FASE2_FIX_CATEGORIA_ESTANDAR_MARCA_TEXT.sql` | Corrige la RPC administrativa de categorías elegibles: mantiene `categoria_estandar_marca` como `text` y castea explícitamente el enum `categoria_marca_salida` devuelto por `_categorias_elegibles_jugador(...)`. No cambia reglas de elegibilidad ni permisos. |
 | 179 | `179_cupo_categoria_contacto_y_validacion_configuracion.sql` | Refuerza el cupo por categoría reutilizando `validar_cupo_categoria_cruzado()`: serializa altas por categoría, agrega el trigger faltante en `phone_reservations` y mantiene el conteo cruzado de inscripciones, pre-reservas y reservas telefónicas. Cuando el cupo está lleno devuelve `CATEGORY_FULL` con mensaje amigable y contacto del organizador. Agrega `obtener_cupos_categorias_torneo(uuid)` para consultar cupo, ocupados, disponibles y estado `llena` sin recalcular en frontend. Además, `validar_configuracion_minima_torneo()` exige cupo > 0 en todas las categorías y que su suma coincida con `tournaments.cupo_maximo`. |
+| 179 Fase 2 | `179_FASE2_RPC_DISPONIBILIDAD_CATEGORIAS.sql` | Agrega `obtener_cupos_categorias_torneo(uuid)` como fuente única de consulta de cupo por categoría. Devuelve cupo máximo, inscripciones activas, pre-reservas activas no convertidas, reservas telefónicas activas, ocupados, disponibles y estado `llena`. No modifica triggers ni reglas de bloqueo de la Migración 179. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1287,6 +1288,14 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Evita doble conteo al convertir una reserva telefónica de un contacto nuevo en pre-reserva formal.
 - `validar_configuracion_minima_torneo()` exige que todas las categorías tengan `cupo_maximo > 0` y que la suma sea igual a `tournaments.cupo_maximo`.
 - No altera torneos históricos ni descongela configuraciones existentes.
+
+### Migración 179 Fase 2 — Disponibilidad por categoría
+
+- Agrega `obtener_cupos_categorias_torneo(tournament_id)`.
+- Devuelve por categoría `cupo_maximo`, inscripciones activas, pre-reservas activas no convertidas, reservas telefónicas activas, `ocupados`, `disponibles` y `llena`.
+- La UI debe consumir esta RPC en lugar de recalcular cupos por su cuenta.
+- `disponibles` nunca baja de cero; en categorías históricas con `cupo_maximo = NULL`, devuelve `disponibles = NULL` y `llena = false`.
+- No modifica el control de concurrencia, triggers ni mensajes `CATEGORY_FULL` de la Migración 179.
 
 ## Cómo agregar una migración nueva
 
