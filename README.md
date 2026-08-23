@@ -440,6 +440,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 168 | `168_trazabilidad_envio_invitacion_organizador.sql` | Agrega trazabilidad de envío a `tournament_organizer_invitations`: `last_sent_at`, `sent_count` y `last_sent_by`. No envía correos; prepara el control para el envío manual por Superadmin vía Resend. |
 | 169 | `169_generalizacion_invitaciones_administrativas.sql` | Generaliza las invitaciones administrativas en `admin_user_invitations`, agrega rol/ámbito y unifica asignación, invitación y aceptación para `club_admin` y `tournament_organizer`. Adapta `provisionar_torneo` y conserva la RPC 167 como wrapper. |
 | 170 | `170_V2_datos_estructurados_invitacion_admin.sql` | Agrega `nombres` y `apellidos` estructurados a `admin_user_invitations` y una aceptación simplificada que toma esos datos de la invitación. Conserva temporalmente firmas anteriores para una transición segura del frontend. |
+| 171 | `171_provisionamiento_torneo_organizador_estructurado.sql` | Agrega una nueva firma de `provisionar_torneo` con nombres/apellidos separados y la conecta al motor administrativo estructurado de la 170. Conserva temporalmente la firma anterior para una transición segura del frontend. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1179,6 +1180,13 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Agrega `aceptar_invitacion_admin(uuid)` como firma canónica.
 - Conserva temporalmente las firmas anteriores para no romper el frontend durante la transición.
 - `provisionar_torneo` se conserva en esta migración y se adaptará junto con el frontend para evitar una ruptura entre UI y backend.
+
+### Migración 171 — Provisionamiento con organizador estructurado
+
+- Agrega una firma de `provisionar_torneo` con nombres y apellidos separados.
+- El provisionamiento usa la firma canónica de `asignar_o_invitar_admin` creada en la 170.
+- Mantiene creación transaccional de torneo, perfil comercial y asignación/invitación.
+- La firma anterior permanece temporalmente hasta que el frontend migre por completo.
 
 ## Cómo agregar una migración nueva
 
