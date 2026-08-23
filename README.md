@@ -443,6 +443,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 171 | `171_provisionamiento_torneo_organizador_estructurado.sql` | Agrega una nueva firma de `provisionar_torneo` con nombres/apellidos separados y la conecta al motor administrativo estructurado de la 170. Conserva temporalmente la firma anterior para una transición segura del frontend. |
 | 172 | `172_FASE1_conciliacion_desde_snapshots.sql` | Fase 1: `obtener_conciliacion_tarjeta_score` usa los snapshots de la ronda como universo de hoyos; la evidencia digital pasa a ser opcional y la física sigue siendo obligatoria. |
 | 173 | `173_FASE2_finalizacion_resolucion_desde_snapshots.sql` | Fase 2: finalización y resolución usan snapshots como universo; físico incompleto bloquea, mientras físico sin digital no requiere resolución. |
+| 174 | `174_FASE3_resultados_oficiales_desde_snapshots.sql` | Fase 3: resultados oficiales usan snapshots para hoyos esperados; físico es obligatorio y digital opcional, habilitando tarjetas 100% físicas sin crear sesiones digitales ficticias. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1205,6 +1206,13 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La ausencia de digital no requiere resolución.
 - Las diferencias y disputas pendientes sí requieren resolución.
 - Resultados oficiales y leaderboard se mantienen sin cambios en esta fase.
+
+### Migración 174 — Fase 3: resultados oficiales
+
+- Los hoyos esperados salen de los snapshots de la ronda.
+- La tarjeta física completa sigue siendo obligatoria.
+- La captura digital es opcional y `PHYSICAL_ONLY` es fuente válida.
+- El leaderboard no se modifica; consume el resultado oficial corregido.
 
 ## Cómo agregar una migración nueva
 
