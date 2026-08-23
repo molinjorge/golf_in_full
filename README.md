@@ -448,6 +448,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 176 | `176_control_administrativo_liberacion_torneo.sql` | Formaliza el cierre de configuración por el organizador y el control comercial previo a publicación. Agrega trazabilidad de configuración en `tournaments`, trazabilidad de pago/liberación en `tournament_commercial_profiles`, RPCs para finalizar/reabrir configuración, confirmar pago y liberar el torneo, además de `obtener_control_administrativo_torneos()` para la futura pestaña administrativa del Superadmin. La liberación exige configuración finalizada + pago confirmado y deja `estado_servicio=activo` con `activo=true`. Verificación: pendiente de ejecutar. |
 | 177 | `177_telefono_permanente_admin_users.sql` | Incorpora `admin_users.telefono` como dato permanente del perfil administrativo. Recupera teléfonos históricos desde invitaciones aceptadas, actualiza `aceptar_invitacion_admin(uuid)` para copiar `admin_user_invitations.phone` al perfil y adapta ambas firmas de `asignar_o_invitar_admin(...)` para conservar/actualizar el teléfono de administradores existentes. No crea una tabla específica de organizadores: perfil en `admin_users`, roles y alcances en `admin_role_assignments`. |
 | 178 | `178_categorias_elegibles_reserva_telefonica.sql` | Agrega `obtener_categorias_elegibles_jugador_inscripcion(uuid,uuid)` para que Superadmin u Organizador consulten las categorías elegibles de un jugador seleccionado en flujos administrativos como Reserva telefónica. Reutiliza `_categorias_elegibles_jugador(...)`, conserva las reglas de hándicap, género, edad, categoría natural y superiores, y devuelve rangos efectivos de hándicap. |
+| 178 Fase 2 | `178_FASE2_FIX_CATEGORIA_ESTANDAR_MARCA_TEXT.sql` | Corrige la RPC administrativa de categorías elegibles: mantiene `categoria_estandar_marca` como `text` y castea explícitamente el enum `categoria_marca_salida` devuelto por `_categorias_elegibles_jugador(...)`. No cambia reglas de elegibilidad ni permisos. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1266,6 +1267,13 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Devuelve `handicap_minimo`, `handicap_maximo`, `tipo_elegibilidad` y `es_categoria_natural`.
 - Solo usuarios autenticados pueden ejecutarla y valida Superadmin u Organizador del torneo.
 - No modifica el autoservicio del jugador ni datos existentes.
+
+### Migración 178 Fase 2 — Corrección de tipo en RPC administrativa
+
+- Corrige el error PostgreSQL `42804` en `obtener_categorias_elegibles_jugador_inscripcion(uuid,uuid)`.
+- `_categorias_elegibles_jugador(...)` devuelve `categoria_estandar_marca` como enum `categoria_marca_salida`; la RPC pública lo convierte explícitamente a `text`.
+- Conserva firma pública, permisos y reglas de elegibilidad.
+- No modifica datos ni otros flujos de inscripción.
 
 ## Cómo agregar una migración nueva
 
