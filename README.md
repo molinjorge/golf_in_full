@@ -441,6 +441,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 169 | `169_generalizacion_invitaciones_administrativas.sql` | Generaliza las invitaciones administrativas en `admin_user_invitations`, agrega rol/ámbito y unifica asignación, invitación y aceptación para `club_admin` y `tournament_organizer`. Adapta `provisionar_torneo` y conserva la RPC 167 como wrapper. |
 | 170 | `170_V2_datos_estructurados_invitacion_admin.sql` | Agrega `nombres` y `apellidos` estructurados a `admin_user_invitations` y una aceptación simplificada que toma esos datos de la invitación. Conserva temporalmente firmas anteriores para una transición segura del frontend. |
 | 171 | `171_provisionamiento_torneo_organizador_estructurado.sql` | Agrega una nueva firma de `provisionar_torneo` con nombres/apellidos separados y la conecta al motor administrativo estructurado de la 170. Conserva temporalmente la firma anterior para una transición segura del frontend. |
+| 172 | `172_FASE1_conciliacion_desde_snapshots.sql` | Fase 1: `obtener_conciliacion_tarjeta_score` usa los snapshots de la ronda como universo de hoyos; la evidencia digital pasa a ser opcional y la física sigue siendo obligatoria. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1187,6 +1188,14 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - El provisionamiento usa la firma canónica de `asignar_o_invitar_admin` creada en la 170.
 - Mantiene creación transaccional de torneo, perfil comercial y asignación/invitación.
 - La firma anterior permanece temporalmente hasta que el frontend migre por completo.
+
+### Migración 172 — Fase 1: conciliación desde snapshots
+
+- La conciliación parte de `tournament_round_hole_snapshots`.
+- La captura digital deja de ser requisito estructural.
+- La tarjeta física continúa siendo obligatoria.
+- `SIN_CAPTURA_DIGITAL` es informativo; no bloquea revisión por sí solo.
+- No modifica todavía resolución, finalización, resultados oficiales ni leaderboard.
 
 ## Cómo agregar una migración nueva
 
