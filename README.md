@@ -447,6 +447,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 175 | `175_categorias_elegibles_inscripcion.sql` | Centraliza la elegibilidad de categorías en inscripción individual: permite la categoría natural por hándicap y categorías superiores (menor hándicap), respeta género y categorías por edad como Senior, conserva categorías abiertas y overrides del torneo. Agrega `obtener_mis_categorias_elegibles_inscripcion(uuid)` para el frontend y actualiza `resolver_categoria_y_marca()` para respetar selecciones superiores válidas y rechazar categorías inferiores o incompatibles. No modifica equipos, franjas de categoría única ni inscripciones históricas. Verificación: 14/14 OK. |
 | 176 | `176_control_administrativo_liberacion_torneo.sql` | Formaliza el cierre de configuración por el organizador y el control comercial previo a publicación. Agrega trazabilidad de configuración en `tournaments`, trazabilidad de pago/liberación en `tournament_commercial_profiles`, RPCs para finalizar/reabrir configuración, confirmar pago y liberar el torneo, además de `obtener_control_administrativo_torneos()` para la futura pestaña administrativa del Superadmin. La liberación exige configuración finalizada + pago confirmado y deja `estado_servicio=activo` con `activo=true`. Verificación: pendiente de ejecutar. |
 | 177 | `177_telefono_permanente_admin_users.sql` | Incorpora `admin_users.telefono` como dato permanente del perfil administrativo. Recupera teléfonos históricos desde invitaciones aceptadas, actualiza `aceptar_invitacion_admin(uuid)` para copiar `admin_user_invitations.phone` al perfil y adapta ambas firmas de `asignar_o_invitar_admin(...)` para conservar/actualizar el teléfono de administradores existentes. No crea una tabla específica de organizadores: perfil en `admin_users`, roles y alcances en `admin_role_assignments`. |
+| 178 | `178_categorias_elegibles_reserva_telefonica.sql` | Agrega `obtener_categorias_elegibles_jugador_inscripcion(uuid,uuid)` para que Superadmin u Organizador consulten las categorías elegibles de un jugador seleccionado en flujos administrativos como Reserva telefónica. Reutiliza `_categorias_elegibles_jugador(...)`, conserva las reglas de hándicap, género, edad, categoría natural y superiores, y devuelve rangos efectivos de hándicap. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1255,6 +1256,16 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Ambas firmas de `asignar_o_invitar_admin(...)` conservan compatibilidad y actualizan el teléfono permanente cuando se proporciona uno explícitamente.
 - No se crea una tabla exclusiva para organizadores: nombres, apellidos, email y teléfono viven en `admin_users`; roles y torneos asignados permanecen en `admin_role_assignments`.
 - No altera asignaciones ni permisos existentes.
+
+### Migración 178 — Categorías elegibles para inscripción administrativa
+
+- Agrega `obtener_categorias_elegibles_jugador_inscripcion(tournament_id, player_id)`.
+- Está destinada a flujos donde Superadmin u Organizador seleccionan un jugador, como **Reserva telefónica**.
+- Reutiliza `_categorias_elegibles_jugador(...)`; no duplica reglas de negocio.
+- Respeta categoría natural, categorías superiores, género y categorías por edad/Senior.
+- Devuelve `handicap_minimo`, `handicap_maximo`, `tipo_elegibilidad` y `es_categoria_natural`.
+- Solo usuarios autenticados pueden ejecutarla y valida Superadmin u Organizador del torneo.
+- No modifica el autoservicio del jugador ni datos existentes.
 
 ## Cómo agregar una migración nueva
 
