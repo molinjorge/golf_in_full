@@ -445,6 +445,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 173 | `173_FASE2_finalizacion_resolucion_desde_snapshots.sql` | Fase 2: finalización y resolución usan snapshots como universo; físico incompleto bloquea, mientras físico sin digital no requiere resolución. |
 | 174 | `174_FASE3_resultados_oficiales_desde_snapshots.sql` | Fase 3: resultados oficiales usan snapshots para hoyos esperados; físico es obligatorio y digital opcional, habilitando tarjetas 100% físicas sin crear sesiones digitales ficticias. |
 | 175 | `175_categorias_elegibles_inscripcion.sql` | Centraliza la elegibilidad de categorías en inscripción individual: permite la categoría natural por hándicap y categorías superiores (menor hándicap), respeta género y categorías por edad como Senior, conserva categorías abiertas y overrides del torneo. Agrega `obtener_mis_categorias_elegibles_inscripcion(uuid)` para el frontend y actualiza `resolver_categoria_y_marca()` para respetar selecciones superiores válidas y rechazar categorías inferiores o incompatibles. No modifica equipos, franjas de categoría única ni inscripciones históricas. Verificación: 14/14 OK. |
+| 176 | `176_control_administrativo_liberacion_torneo.sql` | Formaliza el cierre de configuración por el organizador y el control comercial previo a publicación. Agrega trazabilidad de configuración en `tournaments`, trazabilidad de pago/liberación en `tournament_commercial_profiles`, RPCs para finalizar/reabrir configuración, confirmar pago y liberar el torneo, además de `obtener_control_administrativo_torneos()` para la futura pestaña administrativa del Superadmin. La liberación exige configuración finalizada + pago confirmado y deja `estado_servicio=activo` con `activo=true`. Verificación: pendiente de ejecutar. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1229,6 +1230,20 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La asignación de marca de salida continúa derivándose de la categoría finalmente aceptada.
 - La lógica de equipos, torneos de categoría única con franjas e inscripciones históricas no se modifica.
 - Verificación ejecutada: **14 verificaciones, 0 errores**.
+
+### Migración 176 — Control administrativo y liberación del torneo
+
+- El Organizador puede **finalizar la configuración** del torneo mediante RPC; esto no lo publica ni cambia su estado de servicio.
+- La configuración puede reabrirse mientras el torneo siga `provisionado`.
+- `tournaments` registra `configuracion_finalizada_at` y `configuracion_finalizada_por`.
+- `tournament_commercial_profiles` agrega `paid_by`, `released_at` y `released_by` para trazabilidad.
+- El Superadmin confirma el pago de plataforma mediante `confirmar_pago_plataforma_torneo(...)`.
+- El Superadmin libera el torneo mediante `liberar_torneo(uuid)`.
+- La liberación exige **configuración finalizada + pago confirmado**.
+- Se protege la coherencia: `estado_servicio='activo'` implica `activo=true`, y viceversa.
+- Agrega `obtener_control_administrativo_torneos()` como fuente para una futura pestaña administrativa separada de la configuración deportiva.
+- No modifica automáticamente torneos históricos ni publica el torneo de prueba al ejecutar la migración.
+- Verificación Supabase: **pendiente de ejecutar**.
 
 ## Cómo agregar una migración nueva
 
