@@ -452,6 +452,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 179 | `179_cupo_categoria_contacto_y_validacion_configuracion.sql` | Refuerza el cupo por categoría reutilizando `validar_cupo_categoria_cruzado()`: serializa altas por categoría, agrega el trigger faltante en `phone_reservations` y mantiene el conteo cruzado de inscripciones, pre-reservas y reservas telefónicas. Cuando el cupo está lleno devuelve `CATEGORY_FULL` con mensaje amigable y contacto del organizador. Agrega `obtener_cupos_categorias_torneo(uuid)` para consultar cupo, ocupados, disponibles y estado `llena` sin recalcular en frontend. Además, `validar_configuracion_minima_torneo()` exige cupo > 0 en todas las categorías y que su suma coincida con `tournaments.cupo_maximo`. |
 | 179 Fase 2 | `179_FASE2_RPC_DISPONIBILIDAD_CATEGORIAS.sql` | Agrega `obtener_cupos_categorias_torneo(uuid)` como fuente única de consulta de cupo por categoría. Devuelve cupo máximo, inscripciones activas, pre-reservas activas no convertidas, reservas telefónicas activas, ocupados, disponibles y estado `llena`. No modifica triggers ni reglas de bloqueo de la Migración 179. |
 | 180 | `180_bloquear_validacion_salidas_con_inscripciones_abiertas.sql` | Corrige `previsualizar_validacion_salidas_ronda(uuid)` para que un torneo con estatus distinto de `inscripcion_cerrada` o `en_curso` produzca un error bloqueante en vez de una advertencia. `REVISAR SALIDAS` sigue permitido como diagnóstico; `VALIDAR Y CERRAR SALIDAS` queda bloqueado hasta cerrar inscripciones. No modifica grupos, snapshots, tarjetas ni otras reglas del validador. |
+| 181 Fase 1 | `181_FASE1_CICLO_VIDA_TORNEO_E_INICIALIZACION_CAPTURA.sql` | Formaliza RPCs para abrir, cerrar y reabrir inscripciones; la reapertura queda prohibida después del freeze. Agrega `iniciar_torneo(uuid)` para la transición manual `inscripcion_cerrada → en_curso`, exigiendo que la primera ronda tenga freeze, salidas validadas, tarjetas oficiales y captura digital inicializada. Además, `emitir_tarjetas_score_ronda(uuid)` inicializa la captura digital en la misma transacción, incluso para emisiones históricas ya existentes. `planificado` se conserva como enum y la UI debe mostrarlo como `EN PLANIFICACIÓN`. La finalización formal del torneo queda deliberadamente pendiente hasta definir el cierre oficial de la última ronda. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1309,6 +1310,33 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - No modifica la preparación de grupos, turnos, snapshots, congelamiento de condiciones, emisión de tarjetas, scorecards ni resultados.
 - La migración es defensiva: solo sustituye el bloque esperado si lo encuentra exactamente una vez; si la definición cambió, se detiene sin modificar la función.
 
+### Migración 181 Fase 1 — Ciclo de vida del torneo e inicialización de captura
+
+- Mantiene el enum deportivo existente: `planificado`, `inscripciones_abiertas`, `inscripcion_cerrada`, `en_curso`, `finalizado`, `cancelado`.
+- La etiqueta visible de `planificado` debe mostrarse en UI como **EN PLANIFICACIÓN**; no se cambia el valor del enum.
+- Agrega `abrir_inscripciones_torneo(tournament_id)`:
+  - transición `planificado → inscripciones_abiertas`;
+  - exige configuración finalizada;
+  - exige `estado_servicio = activo` y `activo = true`;
+  - sólo Superadmin u organizador asignado.
+- Agrega `cerrar_inscripciones_torneo(tournament_id)`:
+  - transición manual `inscripciones_abiertas → inscripcion_cerrada`;
+  - no depende automáticamente de la fecha límite.
+- Agrega `reabrir_inscripciones_torneo(tournament_id)`:
+  - transición `inscripcion_cerrada → inscripciones_abiertas`;
+  - sólo antes de congelar condiciones y hándicaps;
+  - también rechaza estados históricos inconsistentes con salidas validadas o tarjetas ya emitidas.
+- Agrega `iniciar_torneo(tournament_id)`:
+  - transición manual `inscripcion_cerrada → en_curso`;
+  - usa la primera ronda activa por `numero_ronda`;
+  - exige freeze, salidas validadas, tarjetas oficiales emitidas y una sesión digital por cada tarjeta emitida.
+- Corrige la brecha de captura digital:
+  - `emitir_tarjetas_score_ronda(round_id)` llama a `inicializar_captura_scores_ronda(round_id)` dentro de la misma transacción;
+  - si la inicialización falla, se revierte también la emisión nueva;
+  - si ya existía una emisión histórica, volver a invocar la RPC completa las sesiones digitales sin duplicar tarjetas.
+- **No se crea todavía `finalizar_torneo()`**: primero debe definirse/diagnosticarse cuál es el cierre oficial de una ronda y qué condición hace definitiva a la última ronda.
+- **No se bloquean todavía los `UPDATE` directos a `tournaments.estatus`**: primero se debe cablear Lovable a las nuevas RPCs; después se agregará la protección backend para impedir saltos manuales.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
@@ -1351,7 +1379,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Selector de ciudades + listado de torneos por ciudad (pantalla de jugador, antes de inscribirse) — no construido todavía
 - Sistema de QR de acceso al club/campo: respaldo de búsqueda manual por nombre para quien no tenga el QR a la mano — pendiente de decidir
 - Evaluar si al EDITAR (no crear) una regla de corte conviene pedir un motivo del cambio, además de lo que ya registra `audit_log` automáticamente — sin urgencia, decidir más adelante
-- Automatización de transiciones de estatus de torneo (ej. pasar solo a "Inscripción Cerrada" al llegar la fecha límite, o a "En Curso" al llegar `fecha_inicio`) — no está construida; habría que decidir el mecanismo (¿trigger por fecha? ¿tarea programada?) y qué transiciones son válidas (esa regla viviría en código/trigger, ya que el estatus se quedó como enum fijo, no catálogo)
+- Ciclo de vida deportivo — **Fase 1 construida en 181**: abrir/cerrar/reabrir inscripciones mediante RPCs controladas; la reapertura queda bloqueada después del freeze; `INICIAR TORNEO` cambia manualmente `inscripcion_cerrada → en_curso` sólo si la primera ronda está totalmente preparada. Pendiente: cablear Lovable a estas RPCs, bloquear luego los `UPDATE` directos a `tournaments.estatus`, y diseñar `FINALIZAR TORNEO` una vez definido el cierre oficial de la última ronda.
 - Motor de cálculo de resultados (Course Handicap → Playing Handicap → score neto → aplicar cortes → aplicar desempates encadenados) — hoy solo existe la estructura de datos/reglas, no la lógica de cálculo
 - Definir los "motores" (`scoring_engine`) de cada modalidad en `tournament_formats` — hoy solo existe la estructura
 - Después de la migración 030, hay que volver a dar de alta el torneo de prueba (se borró) y reasignar a Pedro Pérez como organizador si se sigue necesitando
