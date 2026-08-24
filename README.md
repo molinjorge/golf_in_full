@@ -462,6 +462,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 182 Fase 4 | `182_FASE4_DISPATCH_VALIDADORES_SALIDA.sql` | Desacopla la API pública de previsualización de las reglas específicas de Shotgun. Agrega `supports_start_validation` y `start_validation_handler` al registro de motores; renombra el validador operativo existente como `_previsualizar_validacion_salidas_shotgun_v1(uuid)` sin reescribir su lógica; crea `_resolver_validador_salida_ronda(uuid)` y convierte `previsualizar_validacion_salidas_ronda(uuid)` en dispatcher genérico. La RPC pública ya no consulta tablas Shotgun ni contiene reglas A/B o decisiones directas por Stroke individual. `validar_salidas_ronda(uuid)` conserva su firma y automáticamente consume el dispatcher junto con el contrato común v2. Tee Times permanece fail-closed hasta implementar y registrar su handler. |
 | 183 Fase 1 | `183_FASE1_CONFIGURACION_TEE_TIMES.sql` | Inicia el motor Tee Times creando únicamente su configuración. Reutiliza `tournament_round_shifts.hora_salida` como primera hora del turno; crea `tournament_tee_time_shift_configs` para intervalo entre grupos, `tournament_tee_time_shift_start_holes` para uno o dos streams de salida sin hardcodear hoyos 1/10 y `tournament_tee_time_category_configs` para tamaño normal/máximo y orden de categorías. Registra `tee_times_v1 / stroke_individual_tee_times_v1` en el registro central, pero deja `supports_start_validation=false` y `supports_scorecard_emission=false` para mantener fail-closed. No prepara grupos, no valida definitivamente y no emite tarjetas todavía. Shotgun permanece intacto. |
 | 183 Fase 2 | `183_FASE2_PREPARACION_GRUPOS_TEE_TIMES.sql` | Implementa la preparación/materialización Tee Times sobre las tablas comunes `tournament_groups` y `tournament_group_players`, manteniendo nulos los campos Shotgun. Crea `tournament_tee_time_groups` para metadata específica (categoría, stream de inicio y secuencia), `hora_salida_tee_time()` para derivar horarios desde turno + offset + intervalo, y las RPC `obtener_conformacion_tee_times` / `materializar_conformacion_tee_times`. La materialización opera por turno completo para evitar colisiones entre categorías, impide jugadores duplicados en la ronda y respeta tamaño máximo. `_construir_contrato_salida_tee_times_v1` produce el contrato común v2 con `startPosition=NULL`, y el dispatcher común ya reconoce Tee Times. Validación definitiva y emisión permanecen fail-closed. |
+| 183 Fase 3 | `183_FASE3_VALIDADOR_TEE_TIMES.sql` | Implementa el handler `tee_times_v1` para revisión y validación definitiva de Tee Times individual Stroke. Valida freeze/snapshots, estatus operativo, configuración por turno, uno o dos streams, configuración de categorías con elegibles, orden único de categorías, metadata Tee Times en todos los grupos, ausencia de campos Shotgun, slots stream+secuencia únicos, hora derivada exacta, grupo no vacío, máximo, orden interno, categoría correcta, elegibilidad, participante exactamente una vez, ausencia de equipos, orden de bloques por `sequence_order`, distancias congeladas y warnings de retirados/grupos incompletos. Habilita `supports_start_validation=true` con handler `tee_times_v1` y extiende el dispatcher público. `validar_salidas_ronda` reutiliza el mismo pipeline común; emisión de tarjetas sigue fail-closed. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1645,6 +1646,56 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - `supports_scorecard_emission = false`.
 - Shotgun no se modifica.
 - Fase 3 deberá implementar y habilitar el handler de validación Tee Times; sólo después podrá cerrarse formalmente la salida.
+
+### Migración 183 Fase 3 — Validador Tee Times
+
+- Se implementa `_previsualizar_validacion_salidas_tee_times_v1(round_id)`.
+- El handler comparte las precondiciones competitivas ya consolidadas:
+  - ronda activa;
+  - torneo congelado;
+  - snapshot de ronda;
+  - formato congelado consistente;
+  - torneo en `inscripcion_cerrada` o `en_curso`;
+  - 18 hoyos congelados;
+  - distancias congeladas completas;
+  - participantes activos con snapshot de ronda.
+- Reglas específicas Tee Times:
+  - la ronda debe ser `tee_times`;
+  - sólo Stroke Play individual en esta versión;
+  - cada turno activo debe tener configuración Tee Times;
+  - cada configuración de turno debe tener uno o dos streams/tees de inicio;
+  - cada categoría-turno con participantes elegibles debe tener configuración;
+  - `sequence_order` debe ser único dentro del turno;
+  - todo grupo activo de la ronda debe tener metadata `tournament_tee_time_groups`;
+  - los grupos Tee Times no pueden contener `tournament_shotgun_category_hole_id` ni `posicion_salida`;
+  - grupo, categoría, turno y tee de inicio deben formar una cadena activa/consistente;
+  - `startHoleId + sequenceNumber` no puede repetirse;
+  - `tournament_groups.hora_salida` debe coincidir exactamente con `hora_salida_tee_time(...)`;
+  - ningún grupo puede estar vacío;
+  - ningún grupo puede superar `tamano_grupo_maximo`;
+  - `orden_en_grupo` debe ser completo y único;
+  - cada jugador debe pertenecer a la categoría del bloque;
+  - cada asignación debe ser activa y tener snapshot;
+  - cada participante elegible debe aparecer exactamente una vez;
+  - no pueden existir unidades de equipo;
+  - los bloques de categoría deben respetar `sequence_order` en cada stream.
+- Warnings:
+  - congelamiento con advertencias;
+  - inscripciones congeladas posteriormente retiradas;
+  - grupos por debajo de `tamano_grupo_normal`.
+- Se agrega `validar_orden_categoria_tee_times()` como guard de `sequence_order` único por turno.
+- `tournament_start_engine_registry` queda:
+  - `supports_start_validation = true`;
+  - `start_validation_handler = tee_times_v1`.
+- `previsualizar_validacion_salidas_ronda(round_id)` despacha ahora tanto:
+  - `shotgun_v1`;
+  - `tee_times_v1`.
+- `validar_salidas_ronda(round_id)` no se duplica ni se reescribe: usa el dispatcher público y el contrato común.
+- Después de esta fase Tee Times puede:
+  - REVISAR SALIDAS;
+  - VALIDAR Y CERRAR SALIDAS.
+- La emisión oficial de tarjetas permanece deshabilitada hasta 183 Fase 4.
+- Shotgun permanece intacto.
 
 ## Cómo agregar una migración nueva
 
