@@ -454,6 +454,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 180 | `180_bloquear_validacion_salidas_con_inscripciones_abiertas.sql` | Corrige `previsualizar_validacion_salidas_ronda(uuid)` para que un torneo con estatus distinto de `inscripcion_cerrada` o `en_curso` produzca un error bloqueante en vez de una advertencia. `REVISAR SALIDAS` sigue permitido como diagnóstico; `VALIDAR Y CERRAR SALIDAS` queda bloqueado hasta cerrar inscripciones. No modifica grupos, snapshots, tarjetas ni otras reglas del validador. |
 | 181 Fase 1 | `181_FASE1_CICLO_VIDA_TORNEO_E_INICIALIZACION_CAPTURA.sql` | Formaliza RPCs para abrir, cerrar y reabrir inscripciones; la reapertura queda prohibida después del freeze. Agrega `iniciar_torneo(uuid)` para la transición manual `inscripcion_cerrada → en_curso`, exigiendo que la primera ronda tenga freeze, salidas validadas, tarjetas oficiales y captura digital inicializada. Además, `emitir_tarjetas_score_ronda(uuid)` inicializa la captura digital en la misma transacción, incluso para emisiones históricas ya existentes. `planificado` se conserva como enum y la UI debe mostrarlo como `EN PLANIFICACIÓN`. La finalización formal del torneo queda deliberadamente pendiente hasta definir el cierre oficial de la última ronda. |
 | 181 Fase 2 | `181_FASE2_PROTEGER_ESTATUS_Y_CANCELAR_TORNEO.sql` | Protege `tournaments.estatus` contra UPDATE directos mediante `trg_proteger_cambio_estatus_torneo`; las RPCs abrir/cerrar/reabrir/iniciar reciben permiso interno transaccional para efectuar sus transiciones. Agrega `cancelar_torneo(uuid,text)` como transición manual controlada desde planificación, inscripciones abiertas/cerradas o en curso; exige motivo de al menos 10 caracteres y no permite cancelar un torneo finalizado. `finalizar_torneo()` continúa pendiente hasta formalizar el cierre oficial de la última ronda. |
+| 181 Fase 3 | `181_FASE3_CIERRE_FORMAL_RONDA.sql` | Formaliza el cierre competitivo por ronda mediante `tournament_round_competitive_closures` y `cerrar_ronda_competitiva(uuid,text)`. Sólo permite cerrar cuando `obtener_estado_cierre_competitivo_ronda(uuid)` devuelve `competitiveStatus=FINAL`; funciona sin empates porque `pendingGroups=0` permite llegar directamente a FINAL, y con empates exige que todos estén resueltos. Persiste una fotografía JSON auditable e inmutable y bloquea cambios posteriores en tarjetas, captura digital/física, conciliación, outcomes y resoluciones manuales de desempate. `finalizar_torneo()` queda para Fase 4 y deberá exigir que todas las rondas activas tengan cierre formal. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1357,6 +1358,40 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - La cancelación cambia únicamente el **estatus deportivo**. No modifica `estado_servicio`, que sigue siendo el eje comercial/operativo independiente de Tee Central.
 - El trigger general `trg_audit_tournaments` ya existente continúa registrando el cambio de fila en `audit_log`.
 - `finalizar_torneo()` sigue deliberadamente pendiente hasta formalizar qué evento hace oficial el cierre de la última ronda.
+
+### Migración 181 Fase 3 — Cierre formal y auditable de ronda
+
+- Crea `tournament_round_competitive_closures`, una fila única por ronda.
+- El cierre almacena:
+  - torneo y ronda;
+  - número y fecha de ronda;
+  - `competitive_status = FINAL`;
+  - fotografía JSON completa devuelta por `obtener_estado_cierre_competitivo_ronda`;
+  - administrador que cerró;
+  - fecha/hora y notas.
+- Agrega `cerrar_ronda_competitiva(round_id, notas)`:
+  - sólo Superadmin u organizador asignado;
+  - exige torneo `en_curso`;
+  - reevalúa server-side `obtener_estado_cierre_competitivo_ronda`;
+  - sólo cierra cuando `status.competitiveStatus = FINAL`;
+  - es idempotente si la ronda ya estaba cerrada.
+- **Rondas sin empate:** no requieren tratamiento especial. Si las tarjetas están resueltas y `pendingGroups=0`, el motor 162 devuelve `FINAL` y la ronda puede cerrarse.
+- **Rondas con empate:** sólo pueden cerrarse cuando los desempates automáticos/manuales necesarios estén resueltos y el motor devuelva `FINAL`.
+- Agrega `obtener_cierre_formal_ronda(round_id)` para consultar el sello persistido.
+- El cierre es histórico e inmutable: no admite `UPDATE` ni `DELETE`.
+- Después del cierre se bloquean cambios en las tablas competitivas principales:
+  - `tournament_score_cards`;
+  - `tournament_scorecard_capture_sessions`;
+  - `tournament_scorecard_hole_scores`;
+  - `tournament_scorecard_physical_receptions`;
+  - `tournament_scorecard_physical_hole_scores`;
+  - `tournament_scorecard_reconciliations`;
+  - `tournament_scorecard_hole_resolutions`;
+  - `tournament_scorecard_round_outcomes`;
+  - `tournament_tiebreak_resolutions`.
+- Las bitácoras históricas append-only existentes no se reescriben.
+- No se implementa reapertura de ronda; si alguna vez se requiere deberá ser una operación extraordinaria y auditada.
+- `finalizar_torneo()` sigue pendiente para **181 Fase 4** y deberá exigir cierre formal en todas las rondas activas.
 
 ## Cómo agregar una migración nueva
 
