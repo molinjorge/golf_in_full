@@ -457,6 +457,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 181 Fase 3 | `181_FASE3_CIERRE_FORMAL_RONDA.sql` | Formaliza el cierre competitivo por ronda mediante `tournament_round_competitive_closures` y `cerrar_ronda_competitiva(uuid,text)`. Sólo permite cerrar cuando `obtener_estado_cierre_competitivo_ronda(uuid)` devuelve `competitiveStatus=FINAL`; funciona sin empates porque `pendingGroups=0` permite llegar directamente a FINAL, y con empates exige que todos estén resueltos. Persiste una fotografía JSON auditable e inmutable y bloquea cambios posteriores en tarjetas, captura digital/física, conciliación, outcomes y resoluciones manuales de desempate. `finalizar_torneo()` queda para Fase 4 y deberá exigir que todas las rondas activas tengan cierre formal. |
 | 181 Fase 4 | `181_FASE4_FINALIZAR_TORNEO.sql` | Completa la máquina de estados deportiva con `finalizar_torneo(uuid,text)` y `previsualizar_finalizacion_torneo(uuid)`. La transición manual `en_curso → finalizado` sólo se permite cuando existe al menos una ronda activa y todas las rondas activas tienen cierre formal `FINAL` de la Fase 3. Crea `tournament_competitive_finalizations` como sello auditable, único e inmutable con snapshot de las rondas al momento de finalizar. La lógica es agnóstica a modalidad y formato de salida: no contiene reglas de Stroke, Stableford, equipos, Shotgun ni tee time; los motores específicos deben resolver cada ronda antes de llegar aquí. |
 | 182 Fase 1 | `182_FASE1_CONTRATO_COMUN_MOTOR_SALIDAS.sql` | Inicia la refactorización del motor de salidas sin cambiar el flujo Shotgun existente. Crea `tournament_start_engine_registry`, registra el motor vigente `shotgun_v1 / stroke_individual_shotgun_v1`, agrega el contrato común versionado y generaliza futuros grupos validados con `source_format_slot_id` y `source_format_metadata`; `start_position` deja de ser obligatorio estructuralmente. **No hace backfill ni UPDATE sobre validaciones históricas**, porque su detalle es inmutable por `_impedir_mutacion_detalle_validacion_salida()`; la conversión Shotgun legacy → contrato común se hace en lectura. Agrega `obtener_motor_salida_ronda(uuid)` y `_construir_contrato_salida_ronda(uuid)`. Las RPC operativas de preview, validación y emisión quedan intactas en esta fase. |
+| 182 Fase 2 | `182_FASE2_SHOTGUN_SOBRE_CONTRATO_COMUN_V2.sql` | Migra internamente el motor Shotgun existente al contrato común `tee_central_round_start` v2 sin cambiar sus reglas operativas. Crea `_construir_contrato_salida_shotgun_v2(uuid)` como fuente directa; `_construir_contrato_salida_ronda(uuid)` pasa a despachar por motor; la antigua `_construir_fotografia_salida_ronda(uuid)` queda como adaptador de compatibilidad derivado desde el contrato común. `validar_salidas_ronda(uuid)` persiste nuevas validaciones con `start_contract_version=2`, `source_format_slot_id` y `source_format_metadata`, conservando a la vez `source_shotgun_hole_id` para compatibilidad. La previsualización y la emisión mantienen exactamente las restricciones actuales de Stroke Play individual + Shotgun. No se modifican validaciones históricas inmutables. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1444,6 +1445,38 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - En esta fase el contrato común sólo adapta la fotografía Shotgun existente; todavía no sustituye las RPC operativas.
 - No se modifican `previsualizar_validacion_salidas_ronda`, `validar_salidas_ronda` ni `emitir_tarjetas_score_ronda`, para garantizar que Shotgun siga funcionando exactamente igual.
 - Fase 2: hacer que Shotgun produzca y consuma el contrato común v2 con prueba de equivalencia antes de implementar Tee Times.
+
+### Migración 182 Fase 2 — Shotgun sobre contrato común v2
+
+- El motor Shotgun deja de producir primero una fotografía legacy.
+- Se agrega `_construir_contrato_salida_shotgun_v2(round_id)`, que genera directamente el contrato común:
+  - `contract = tee_central_round_start`
+  - `schemaVersion = 2`
+  - `contractVersion = 2`
+  - `preparationEngine = shotgun_v1`
+  - `validationEngine = stroke_individual_shotgun_v1`
+- `_construir_contrato_salida_ronda(round_id)` se convierte en dispatcher por motor de preparación.
+- La firma histórica `_construir_fotografia_salida_ronda(round_id)` se conserva, pero ahora se deriva mediante `_adaptar_contrato_salida_a_snapshot_legacy(contract)`.
+- Se invierte así la dependencia:
+  - antes: Shotgun legacy → contrato común;
+  - desde esta fase: Shotgun → contrato común → adaptación legacy sólo si algún consumidor antiguo la necesita.
+- `previsualizar_validacion_salidas_ronda` mantiene intactas todas sus reglas actuales; todavía sólo valida Stroke Play individual + Shotgun.
+- `validar_salidas_ronda` ahora:
+  - consume `_construir_contrato_salida_ronda`;
+  - persiste `validation_snapshot` en contrato v2;
+  - marca `start_contract_version = 2`;
+  - persiste `source_format_slot_id`;
+  - persiste `source_format_metadata`;
+  - conserva `source_shotgun_hole_id` para compatibilidad del motor vigente;
+  - admite contractualmente `teamId`, aunque el motor actual siga produciendo `unitType=registration`.
+- `emitir_tarjetas_score_ronda` no se modifica todavía y conserva las restricciones:
+  - `validator_engine = stroke_individual_shotgun_v1`;
+  - `start_format = shotgun`;
+  - `participation_type = individual`;
+  - `scoring_engine = stroke`;
+  - `unit_type = registration`.
+- No se hace ningún UPDATE sobre validaciones históricas; el guard de inmutabilidad permanece intacto.
+- Objetivo de la Fase 3: desacoplar la emisión de tarjetas del nombre `stroke_individual_shotgun_v1`, haciendo que consuma las unidades normalizadas validadas y una capacidad explícita del motor, sin implementar aún Tee Times.
 
 ## Cómo agregar una migración nueva
 
