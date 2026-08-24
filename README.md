@@ -463,6 +463,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 183 Fase 1 | `183_FASE1_CONFIGURACION_TEE_TIMES.sql` | Inicia el motor Tee Times creando únicamente su configuración. Reutiliza `tournament_round_shifts.hora_salida` como primera hora del turno; crea `tournament_tee_time_shift_configs` para intervalo entre grupos, `tournament_tee_time_shift_start_holes` para uno o dos streams de salida sin hardcodear hoyos 1/10 y `tournament_tee_time_category_configs` para tamaño normal/máximo y orden de categorías. Registra `tee_times_v1 / stroke_individual_tee_times_v1` en el registro central, pero deja `supports_start_validation=false` y `supports_scorecard_emission=false` para mantener fail-closed. No prepara grupos, no valida definitivamente y no emite tarjetas todavía. Shotgun permanece intacto. |
 | 183 Fase 2 | `183_FASE2_PREPARACION_GRUPOS_TEE_TIMES.sql` | Implementa la preparación/materialización Tee Times sobre las tablas comunes `tournament_groups` y `tournament_group_players`, manteniendo nulos los campos Shotgun. Crea `tournament_tee_time_groups` para metadata específica (categoría, stream de inicio y secuencia), `hora_salida_tee_time()` para derivar horarios desde turno + offset + intervalo, y las RPC `obtener_conformacion_tee_times` / `materializar_conformacion_tee_times`. La materialización opera por turno completo para evitar colisiones entre categorías, impide jugadores duplicados en la ronda y respeta tamaño máximo. `_construir_contrato_salida_tee_times_v1` produce el contrato común v2 con `startPosition=NULL`, y el dispatcher común ya reconoce Tee Times. Validación definitiva y emisión permanecen fail-closed. |
 | 183 Fase 3 | `183_FASE3_VALIDADOR_TEE_TIMES.sql` | Implementa el handler `tee_times_v1` para revisión y validación definitiva de Tee Times individual Stroke. Valida freeze/snapshots, estatus operativo, configuración por turno, uno o dos streams, configuración de categorías con elegibles, orden único de categorías, metadata Tee Times en todos los grupos, ausencia de campos Shotgun, slots stream+secuencia únicos, hora derivada exacta, grupo no vacío, máximo, orden interno, categoría correcta, elegibilidad, participante exactamente una vez, ausencia de equipos, orden de bloques por `sequence_order`, distancias congeladas y warnings de retirados/grupos incompletos. Habilita `supports_start_validation=true` con handler `tee_times_v1` y extiende el dispatcher público. `validar_salidas_ronda` reutiliza el mismo pipeline común; emisión de tarjetas sigue fail-closed. |
+| 183 Fase 4 | `183_FASE4_EMISION_TARJETAS_TEE_TIMES_CORREGIDA.sql` | Habilita emisión oficial de tarjetas para Tee Times individual Stroke reutilizando el emisor genérico `official_scorecard_registration_v1`. Registra `supports_scorecard_emission=true` y unidad `registration` para `tee_times_v1 / stroke_individual_tee_times_v1`. Ajusta únicamente el orden genérico de folios: Shotgun conserva `shift/hole/A-B`, mientras Tee Times usa `start_at` cuando `start_position` es NULL. Se reutilizan sin duplicar `tournament_score_card_emissions`, `tournament_score_cards`, `inicializar_captura_scores_ronda`, sesiones de captura, scores por hoyo y asignación circular de marcadores. La secuencia de juego parte del `hole_number` común del grupo validado. Con esta fase el backend Tee Times individual Stroke queda conectado de preparación a captura; modalidades team permanecen no habilitadas. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1696,6 +1697,50 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - VALIDAR Y CERRAR SALIDAS.
 - La emisión oficial de tarjetas permanece deshabilitada hasta 183 Fase 4.
 - Shotgun permanece intacto.
+
+### Migración 183 Fase 4 — Emisión de tarjetas Tee Times
+
+**Corrección de construcción:** el primer archivo de 183 Fase 4 contenía un `IF NOT FOUND`
+fuera de un bloque PL/pgSQL. La versión corregida encapsula la actualización del registro
+del motor dentro de `DO $migration$ ... $migration$`, usa `GET DIAGNOSTICS ... ROW_COUNT`
+y exige exactamente una fila actualizada. El intento anterior falló dentro de la transacción
+y no dejó cambios aplicados.
+
+- Se habilita en `tournament_start_engine_registry` para Tee Times individual Stroke:
+  - `supports_scorecard_emission = true`;
+  - `scorecard_unit_type = registration`;
+  - `scorecard_emission_engine = official_scorecard_registration_v1`.
+- No se crea una función `emitir_tarjetas_tee_times`: Tee Times reutiliza `emitir_tarjetas_score_ronda(round_id)`.
+- El emisor sigue resolviendo la capacidad desde la validación formal sellada mediante `_resolver_capacidad_emision_tarjetas_ronda`.
+- Se hace un único ajuste de orden de folios para soportar ambos formatos:
+  - Shotgun conserva su orden histórico por `shift_number`, `hole_number`, `start_position`, jugador;
+  - Tee Times, donde `start_position` es `NULL`, incorpora `start_at` para respetar el orden cronológico real antes de ordenar por hoyo/jugador.
+- El folio oficial permanece `Rxx-Vxx-xxxx`.
+- Tee Times reutiliza:
+  - `tournament_score_card_emissions`;
+  - `tournament_score_cards`;
+  - `inicializar_captura_scores_ronda`;
+  - `tournament_scorecard_capture_sessions`;
+  - `tournament_scorecard_hole_scores`;
+  - `tournament_scorecard_marker_assignments`.
+- `inicializar_captura_scores_ronda` ya consume el grupo validado común:
+  - exige unidades `registration` con jugador/inscripción;
+  - usa `tournament_round_start_validation_groups.hole_number` como punto de inicio;
+  - no depende de `source_shotgun_hole_id`.
+- Por ello el `play_sequence` funciona también para Tee Times: comienza en el tee/hoyo inicial validado del grupo.
+- La asignación circular de marcadores continúa siendo por grupo validado y es independiente del formato de salida.
+- La emisión permanece idempotente.
+- Shotgun continúa habilitado y usando el mismo emisor.
+- No se habilitan unidades `team` ni modalidades por equipos.
+- Con esta fase, el backend Tee Times individual Stroke queda enlazado de punta a punta:
+  - configuración;
+  - conformación/materialización;
+  - contrato común;
+  - revisión;
+  - validación/cierre de salidas;
+  - emisión de tarjetas;
+  - inicialización de captura física/digital.
+- El siguiente trabajo ya es principalmente frontend/UX: convertir la pestaña `SALIDAS SHOTGUN` en `SALIDAS` y mostrar el preparador correspondiente según `tournament_rounds.formato_salida`.
 
 ## Cómo agregar una migración nueva
 
