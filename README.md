@@ -460,6 +460,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 182 Fase 2 | `182_FASE2_SHOTGUN_SOBRE_CONTRATO_COMUN_V2.sql` | Migra internamente el motor Shotgun existente al contrato común `tee_central_round_start` v2 sin cambiar sus reglas operativas. Crea `_construir_contrato_salida_shotgun_v2(uuid)` como fuente directa; `_construir_contrato_salida_ronda(uuid)` pasa a despachar por motor; la antigua `_construir_fotografia_salida_ronda(uuid)` queda como adaptador de compatibilidad derivado desde el contrato común. `validar_salidas_ronda(uuid)` persiste nuevas validaciones con `start_contract_version=2`, `source_format_slot_id` y `source_format_metadata`, conservando a la vez `source_shotgun_hole_id` para compatibilidad. La previsualización y la emisión mantienen exactamente las restricciones actuales de Stroke Play individual + Shotgun. No se modifican validaciones históricas inmutables. |
 | 182 Fase 3 | `182_FASE3_CAPACIDADES_MOTOR_EMISION_TARJETAS_CORREGIDA.sql` | Desacopla la emisión oficial de tarjetas de los hardcodes del motor Shotgun mediante capacidades explícitas (`supports_scorecard_emission`, `scorecard_unit_type`, `scorecard_emission_engine`). Sólo Shotgun individual Stroke queda habilitado. `_resolver_capacidad_emision_tarjetas_ronda(uuid)` usa la validación formal sellada; `_contar_unidades_invalidas_emision_tarjetas(uuid,text)` conserva las exigencias actuales de unidad individual y prepara contractualmente unidades team sin habilitarlas. `emitir_tarjetas_score_ronda(uuid)` se reconstruye explícitamente, sin SQL dinámico, preservando idempotencia, conteos, creación de emisión, creación de tarjetas, folios Rxx-Vxx-xxxx e inicialización automática de captura. No se habilita Tee Times ni se mutan históricos. |
 | 182 Fase 4 | `182_FASE4_DISPATCH_VALIDADORES_SALIDA.sql` | Desacopla la API pública de previsualización de las reglas específicas de Shotgun. Agrega `supports_start_validation` y `start_validation_handler` al registro de motores; renombra el validador operativo existente como `_previsualizar_validacion_salidas_shotgun_v1(uuid)` sin reescribir su lógica; crea `_resolver_validador_salida_ronda(uuid)` y convierte `previsualizar_validacion_salidas_ronda(uuid)` en dispatcher genérico. La RPC pública ya no consulta tablas Shotgun ni contiene reglas A/B o decisiones directas por Stroke individual. `validar_salidas_ronda(uuid)` conserva su firma y automáticamente consume el dispatcher junto con el contrato común v2. Tee Times permanece fail-closed hasta implementar y registrar su handler. |
+| 183 Fase 1 | `183_FASE1_CONFIGURACION_TEE_TIMES.sql` | Inicia el motor Tee Times creando únicamente su configuración. Reutiliza `tournament_round_shifts.hora_salida` como primera hora del turno; crea `tournament_tee_time_shift_configs` para intervalo entre grupos, `tournament_tee_time_shift_start_holes` para uno o dos streams de salida sin hardcodear hoyos 1/10 y `tournament_tee_time_category_configs` para tamaño normal/máximo y orden de categorías. Registra `tee_times_v1 / stroke_individual_tee_times_v1` en el registro central, pero deja `supports_start_validation=false` y `supports_scorecard_emission=false` para mantener fail-closed. No prepara grupos, no valida definitivamente y no emite tarjetas todavía. Shotgun permanece intacto. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1560,6 +1561,45 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Esta fase separa **orquestación genérica** de **reglas específicas del motor** sin reescribir el validador Shotgun probado.
 - Tee Times continúa pendiente y no queda habilitado accidentalmente.
 - Próximo paso recomendado: implementar el motor de preparación/validación Tee Times contra estas interfaces comunes, antes de hacer cambios de UI generales en la pestaña SALIDAS.
+
+### Migración 183 Fase 1 — Configuración del motor Tee Times
+
+- `formato_salida` permanece en `tournament_rounds`; no se mueve al torneo.
+- La primera hora de salida se reutiliza desde `tournament_round_shifts.hora_salida`. No se crea una segunda fuente de verdad.
+- Se crea `tournament_tee_time_shift_configs`:
+  - una configuración activa por turno;
+  - intervalo entre grupos;
+  - auditoría y baja lógica.
+- Se crea `tournament_tee_time_shift_start_holes`:
+  - uno o dos streams/tees de inicio;
+  - `lane_order` 1/2;
+  - `hoyo_id` genérico;
+  - `offset_inicio_minutos`;
+  - permite single tee o double tee sin asumir necesariamente hoyos 1 y 10.
+- Se crea `tournament_tee_time_category_configs`:
+  - una configuración activa por categoría-turno;
+  - tamaño normal;
+  - tamaño máximo;
+  - `sequence_order` para definir el orden de bloques de categoría dentro del turno.
+- Se agregan helpers/RLS para lectura y administración de configuración Tee Times.
+- Se registra en `tournament_start_engine_registry`:
+  - `start_format = tee_times`;
+  - `participation_type = individual`;
+  - `scoring_engine = stroke`;
+  - `preparation_engine = tee_times_v1`;
+  - `validation_engine = stroke_individual_tee_times_v1`;
+  - `contract_version = 2`.
+- El motor queda deliberadamente fail-closed:
+  - `supports_start_validation = false`;
+  - `start_validation_handler = NULL`;
+  - `supports_scorecard_emission = false`;
+  - `scorecard_unit_type = NULL`;
+  - `scorecard_emission_engine = NULL`.
+- Esta fase NO crea grupos ni secuencia horarios reales.
+- Esta fase NO construye todavía el contrato común Tee Times.
+- Esta fase NO habilita validación/cierre ni emisión.
+- Shotgun permanece intacto.
+- Fase 2 deberá construir la preparación Tee Times y materializar grupos/horarios sobre `tournament_groups`, reutilizando `hoyo_id`, `hora_salida` y la asignación existente de jugadores/grupos sin inventar campos Shotgun.
 
 ## Cómo agregar una migración nueva
 
