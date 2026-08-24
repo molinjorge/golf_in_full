@@ -453,6 +453,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 179 Fase 2 | `179_FASE2_RPC_DISPONIBILIDAD_CATEGORIAS.sql` | Agrega `obtener_cupos_categorias_torneo(uuid)` como fuente única de consulta de cupo por categoría. Devuelve cupo máximo, inscripciones activas, pre-reservas activas no convertidas, reservas telefónicas activas, ocupados, disponibles y estado `llena`. No modifica triggers ni reglas de bloqueo de la Migración 179. |
 | 180 | `180_bloquear_validacion_salidas_con_inscripciones_abiertas.sql` | Corrige `previsualizar_validacion_salidas_ronda(uuid)` para que un torneo con estatus distinto de `inscripcion_cerrada` o `en_curso` produzca un error bloqueante en vez de una advertencia. `REVISAR SALIDAS` sigue permitido como diagnóstico; `VALIDAR Y CERRAR SALIDAS` queda bloqueado hasta cerrar inscripciones. No modifica grupos, snapshots, tarjetas ni otras reglas del validador. |
 | 181 Fase 1 | `181_FASE1_CICLO_VIDA_TORNEO_E_INICIALIZACION_CAPTURA.sql` | Formaliza RPCs para abrir, cerrar y reabrir inscripciones; la reapertura queda prohibida después del freeze. Agrega `iniciar_torneo(uuid)` para la transición manual `inscripcion_cerrada → en_curso`, exigiendo que la primera ronda tenga freeze, salidas validadas, tarjetas oficiales y captura digital inicializada. Además, `emitir_tarjetas_score_ronda(uuid)` inicializa la captura digital en la misma transacción, incluso para emisiones históricas ya existentes. `planificado` se conserva como enum y la UI debe mostrarlo como `EN PLANIFICACIÓN`. La finalización formal del torneo queda deliberadamente pendiente hasta definir el cierre oficial de la última ronda. |
+| 181 Fase 2 | `181_FASE2_PROTEGER_ESTATUS_Y_CANCELAR_TORNEO.sql` | Protege `tournaments.estatus` contra UPDATE directos mediante `trg_proteger_cambio_estatus_torneo`; las RPCs abrir/cerrar/reabrir/iniciar reciben permiso interno transaccional para efectuar sus transiciones. Agrega `cancelar_torneo(uuid,text)` como transición manual controlada desde planificación, inscripciones abiertas/cerradas o en curso; exige motivo de al menos 10 caracteres y no permite cancelar un torneo finalizado. `finalizar_torneo()` continúa pendiente hasta formalizar el cierre oficial de la última ronda. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1336,6 +1337,26 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - si ya existía una emisión histórica, volver a invocar la RPC completa las sesiones digitales sin duplicar tarjetas.
 - **No se crea todavía `finalizar_torneo()`**: primero debe definirse/diagnosticarse cuál es el cierre oficial de una ronda y qué condición hace definitiva a la última ronda.
 - **No se bloquean todavía los `UPDATE` directos a `tournaments.estatus`**: primero se debe cablear Lovable a las nuevas RPCs; después se agregará la protección backend para impedir saltos manuales.
+
+### Migración 181 Fase 2 — Protección del estatus y cancelación formal
+
+- Agrega `proteger_cambio_estatus_torneo()` y el trigger `trg_proteger_cambio_estatus_torneo`.
+- Todo `UPDATE` directo que intente cambiar `tournaments.estatus` queda rechazado salvo que la operación autorizada establezca el permiso transaccional interno `app.permitir_cambio_estatus_torneo=1`.
+- Las RPCs de 181 Fase 1 quedan adaptadas para atravesar el guard:
+  - `abrir_inscripciones_torneo()`
+  - `cerrar_inscripciones_torneo()`
+  - `reabrir_inscripciones_torneo()`
+  - `iniciar_torneo()`
+- Se agrega `cancelar_torneo(tournament_id, motivo)`:
+  - acción manual;
+  - sólo Superadmin u organizador asignado;
+  - exige motivo de al menos 10 caracteres;
+  - admite cancelación desde `planificado`, `inscripciones_abiertas`, `inscripcion_cerrada` y `en_curso`;
+  - es idempotente si ya está `cancelado`;
+  - un torneo `finalizado` no puede cancelarse.
+- La cancelación cambia únicamente el **estatus deportivo**. No modifica `estado_servicio`, que sigue siendo el eje comercial/operativo independiente de Tee Central.
+- El trigger general `trg_audit_tournaments` ya existente continúa registrando el cambio de fila en `audit_log`.
+- `finalizar_torneo()` sigue deliberadamente pendiente hasta formalizar qué evento hace oficial el cierre de la última ronda.
 
 ## Cómo agregar una migración nueva
 
