@@ -456,6 +456,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 181 Fase 2 | `181_FASE2_PROTEGER_ESTATUS_Y_CANCELAR_TORNEO.sql` | Protege `tournaments.estatus` contra UPDATE directos mediante `trg_proteger_cambio_estatus_torneo`; las RPCs abrir/cerrar/reabrir/iniciar reciben permiso interno transaccional para efectuar sus transiciones. Agrega `cancelar_torneo(uuid,text)` como transición manual controlada desde planificación, inscripciones abiertas/cerradas o en curso; exige motivo de al menos 10 caracteres y no permite cancelar un torneo finalizado. `finalizar_torneo()` continúa pendiente hasta formalizar el cierre oficial de la última ronda. |
 | 181 Fase 3 | `181_FASE3_CIERRE_FORMAL_RONDA.sql` | Formaliza el cierre competitivo por ronda mediante `tournament_round_competitive_closures` y `cerrar_ronda_competitiva(uuid,text)`. Sólo permite cerrar cuando `obtener_estado_cierre_competitivo_ronda(uuid)` devuelve `competitiveStatus=FINAL`; funciona sin empates porque `pendingGroups=0` permite llegar directamente a FINAL, y con empates exige que todos estén resueltos. Persiste una fotografía JSON auditable e inmutable y bloquea cambios posteriores en tarjetas, captura digital/física, conciliación, outcomes y resoluciones manuales de desempate. `finalizar_torneo()` queda para Fase 4 y deberá exigir que todas las rondas activas tengan cierre formal. |
 | 181 Fase 4 | `181_FASE4_FINALIZAR_TORNEO.sql` | Completa la máquina de estados deportiva con `finalizar_torneo(uuid,text)` y `previsualizar_finalizacion_torneo(uuid)`. La transición manual `en_curso → finalizado` sólo se permite cuando existe al menos una ronda activa y todas las rondas activas tienen cierre formal `FINAL` de la Fase 3. Crea `tournament_competitive_finalizations` como sello auditable, único e inmutable con snapshot de las rondas al momento de finalizar. La lógica es agnóstica a modalidad y formato de salida: no contiene reglas de Stroke, Stableford, equipos, Shotgun ni tee time; los motores específicos deben resolver cada ronda antes de llegar aquí. |
+| 182 Fase 1 | `182_FASE1_CONTRATO_COMUN_MOTOR_SALIDAS.sql` | Inicia la refactorización del motor de salidas sin cambiar el flujo Shotgun existente. Crea `tournament_start_engine_registry`, registra el motor vigente `shotgun_v1 / stroke_individual_shotgun_v1`, agrega el contrato común versionado y generaliza futuros grupos validados con `source_format_slot_id` y `source_format_metadata`; `start_position` deja de ser obligatorio estructuralmente. **No hace backfill ni UPDATE sobre validaciones históricas**, porque su detalle es inmutable por `_impedir_mutacion_detalle_validacion_salida()`; la conversión Shotgun legacy → contrato común se hace en lectura. Agrega `obtener_motor_salida_ronda(uuid)` y `_construir_contrato_salida_ronda(uuid)`. Las RPC operativas de preview, validación y emisión quedan intactas en esta fase. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1426,6 +1427,23 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
   - `inscripcion_cerrada → en_curso`
   - `en_curso → finalizado`
   - cancelación controlada desde estados permitidos.
+
+### Migración 182 Fase 1 — Contrato común del motor de salidas
+
+- Mantiene `tournament_rounds.formato_salida` como dato propio de la ronda.
+- Crea `tournament_start_engine_registry` para separar formalmente formato de salida, tipo de participación y motor de puntuación.
+- Registra sin alterar el único motor operativo actual: `shotgun + individual + stroke` → `shotgun_v1 / stroke_individual_shotgun_v1`.
+- Agrega `start_contract_version` a `tournament_round_start_validations`; el flujo legacy permanece en versión 1 y el contrato común nuevo queda definido como versión 2.
+- Generaliza `tournament_round_start_validation_groups` para validaciones futuras con `source_format_slot_id` y `source_format_metadata`.
+- `start_position` pasa a nullable: A/B es un concepto de Shotgun y no debe ser obligatorio para Tee Times.
+- `source_shotgun_hole_id` se conserva por compatibilidad histórica.
+- **Las validaciones históricas no se modifican.** No se realiza backfill ni `UPDATE` sobre `tournament_round_start_validation_groups` o `tournament_round_start_validation_units`, porque `_impedir_mutacion_detalle_validacion_salida()` protege esos datos como históricos e inmutables.
+- La equivalencia de campos Shotgun legacy (`source_shotgun_hole_id`, A/B) hacia el contrato común se resuelve **en tiempo de lectura** dentro de `_construir_contrato_salida_ronda(uuid)`.
+- Agrega `obtener_motor_salida_ronda(uuid)` para resolver el motor efectivo desde la ronda y su modalidad competitiva.
+- Agrega `_construir_contrato_salida_ronda(uuid)` con contrato `tee_central_round_start`, `schemaVersion = 2`.
+- En esta fase el contrato común sólo adapta la fotografía Shotgun existente; todavía no sustituye las RPC operativas.
+- No se modifican `previsualizar_validacion_salidas_ronda`, `validar_salidas_ronda` ni `emitir_tarjetas_score_ronda`, para garantizar que Shotgun siga funcionando exactamente igual.
+- Fase 2: hacer que Shotgun produzca y consuma el contrato común v2 con prueba de equivalencia antes de implementar Tee Times.
 
 ## Cómo agregar una migración nueva
 
