@@ -459,6 +459,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 182 Fase 1 | `182_FASE1_CONTRATO_COMUN_MOTOR_SALIDAS.sql` | Inicia la refactorización del motor de salidas sin cambiar el flujo Shotgun existente. Crea `tournament_start_engine_registry`, registra el motor vigente `shotgun_v1 / stroke_individual_shotgun_v1`, agrega el contrato común versionado y generaliza futuros grupos validados con `source_format_slot_id` y `source_format_metadata`; `start_position` deja de ser obligatorio estructuralmente. **No hace backfill ni UPDATE sobre validaciones históricas**, porque su detalle es inmutable por `_impedir_mutacion_detalle_validacion_salida()`; la conversión Shotgun legacy → contrato común se hace en lectura. Agrega `obtener_motor_salida_ronda(uuid)` y `_construir_contrato_salida_ronda(uuid)`. Las RPC operativas de preview, validación y emisión quedan intactas en esta fase. |
 | 182 Fase 2 | `182_FASE2_SHOTGUN_SOBRE_CONTRATO_COMUN_V2.sql` | Migra internamente el motor Shotgun existente al contrato común `tee_central_round_start` v2 sin cambiar sus reglas operativas. Crea `_construir_contrato_salida_shotgun_v2(uuid)` como fuente directa; `_construir_contrato_salida_ronda(uuid)` pasa a despachar por motor; la antigua `_construir_fotografia_salida_ronda(uuid)` queda como adaptador de compatibilidad derivado desde el contrato común. `validar_salidas_ronda(uuid)` persiste nuevas validaciones con `start_contract_version=2`, `source_format_slot_id` y `source_format_metadata`, conservando a la vez `source_shotgun_hole_id` para compatibilidad. La previsualización y la emisión mantienen exactamente las restricciones actuales de Stroke Play individual + Shotgun. No se modifican validaciones históricas inmutables. |
 | 182 Fase 3 | `182_FASE3_CAPACIDADES_MOTOR_EMISION_TARJETAS_CORREGIDA.sql` | Desacopla la emisión oficial de tarjetas de los hardcodes del motor Shotgun mediante capacidades explícitas (`supports_scorecard_emission`, `scorecard_unit_type`, `scorecard_emission_engine`). Sólo Shotgun individual Stroke queda habilitado. `_resolver_capacidad_emision_tarjetas_ronda(uuid)` usa la validación formal sellada; `_contar_unidades_invalidas_emision_tarjetas(uuid,text)` conserva las exigencias actuales de unidad individual y prepara contractualmente unidades team sin habilitarlas. `emitir_tarjetas_score_ronda(uuid)` se reconstruye explícitamente, sin SQL dinámico, preservando idempotencia, conteos, creación de emisión, creación de tarjetas, folios Rxx-Vxx-xxxx e inicialización automática de captura. No se habilita Tee Times ni se mutan históricos. |
+| 182 Fase 4 | `182_FASE4_DISPATCH_VALIDADORES_SALIDA.sql` | Desacopla la API pública de previsualización de las reglas específicas de Shotgun. Agrega `supports_start_validation` y `start_validation_handler` al registro de motores; renombra el validador operativo existente como `_previsualizar_validacion_salidas_shotgun_v1(uuid)` sin reescribir su lógica; crea `_resolver_validador_salida_ronda(uuid)` y convierte `previsualizar_validacion_salidas_ronda(uuid)` en dispatcher genérico. La RPC pública ya no consulta tablas Shotgun ni contiene reglas A/B o decisiones directas por Stroke individual. `validar_salidas_ronda(uuid)` conserva su firma y automáticamente consume el dispatcher junto con el contrato común v2. Tee Times permanece fail-closed hasta implementar y registrar su handler. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1521,6 +1522,44 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - `previsualizar_validacion_salidas_ronda` sigue deliberadamente limitado al motor Shotgun actual.
 - Tee Times sigue pendiente y no queda habilitado accidentalmente.
 - No se modifican validaciones históricas.
+
+### Migración 182 Fase 4 — Dispatcher de validadores de salida
+
+- Se agregan capacidades de validación a `tournament_start_engine_registry`:
+  - `supports_start_validation`;
+  - `start_validation_handler`.
+- La configuración es fail-closed y sólo habilita el motor operativo actual:
+  - Shotgun;
+  - individual;
+  - Stroke;
+  - handler `shotgun_v1`.
+- La función pública existente `previsualizar_validacion_salidas_ronda(uuid)` deja de contener las reglas específicas del formato.
+- El validador actual se conserva íntegro mediante rename a:
+  - `_previsualizar_validacion_salidas_shotgun_v1(uuid)`.
+- Esto preserva exactamente los códigos, mensajes y reglas existentes:
+  - configuración Shotgun por categoría/turno;
+  - hoyos habilitados;
+  - grupos ligados a configuración activa;
+  - posiciones A/B;
+  - salida doble;
+  - consistencia de hoyo/turno/hora;
+  - límites de grupo;
+  - asignación individual;
+  - warnings existentes.
+- `_resolver_validador_salida_ronda(round_id)` determina si el motor de la ronda tiene un handler activo.
+- `previsualizar_validacion_salidas_ronda(round_id)` pasa a ser un dispatcher genérico:
+  - conserva la misma firma pública;
+  - conserva autenticación/autorización;
+  - para el motor actual despacha a `shotgun_v1`;
+  - para motores no soportados devuelve `ready=false` con error estructurado, en vez de un fallo técnico;
+  - no consulta directamente tablas `tournament_shotgun_*`;
+  - no contiene reglas A/B;
+  - no decide directamente por `Stroke Play individual + Shotgun`.
+- `validar_salidas_ronda(round_id)` no necesita reescritura: ya llama la RPC pública de preview y construye el contrato común v2.
+- `emitir_tarjetas_score_ronda(round_id)` continúa desacoplada mediante las capacidades introducidas en Fase 3.
+- Esta fase separa **orquestación genérica** de **reglas específicas del motor** sin reescribir el validador Shotgun probado.
+- Tee Times continúa pendiente y no queda habilitado accidentalmente.
+- Próximo paso recomendado: implementar el motor de preparación/validación Tee Times contra estas interfaces comunes, antes de hacer cambios de UI generales en la pestaña SALIDAS.
 
 ## Cómo agregar una migración nueva
 
