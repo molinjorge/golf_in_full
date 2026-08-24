@@ -455,6 +455,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 181 Fase 1 | `181_FASE1_CICLO_VIDA_TORNEO_E_INICIALIZACION_CAPTURA.sql` | Formaliza RPCs para abrir, cerrar y reabrir inscripciones; la reapertura queda prohibida después del freeze. Agrega `iniciar_torneo(uuid)` para la transición manual `inscripcion_cerrada → en_curso`, exigiendo que la primera ronda tenga freeze, salidas validadas, tarjetas oficiales y captura digital inicializada. Además, `emitir_tarjetas_score_ronda(uuid)` inicializa la captura digital en la misma transacción, incluso para emisiones históricas ya existentes. `planificado` se conserva como enum y la UI debe mostrarlo como `EN PLANIFICACIÓN`. La finalización formal del torneo queda deliberadamente pendiente hasta definir el cierre oficial de la última ronda. |
 | 181 Fase 2 | `181_FASE2_PROTEGER_ESTATUS_Y_CANCELAR_TORNEO.sql` | Protege `tournaments.estatus` contra UPDATE directos mediante `trg_proteger_cambio_estatus_torneo`; las RPCs abrir/cerrar/reabrir/iniciar reciben permiso interno transaccional para efectuar sus transiciones. Agrega `cancelar_torneo(uuid,text)` como transición manual controlada desde planificación, inscripciones abiertas/cerradas o en curso; exige motivo de al menos 10 caracteres y no permite cancelar un torneo finalizado. `finalizar_torneo()` continúa pendiente hasta formalizar el cierre oficial de la última ronda. |
 | 181 Fase 3 | `181_FASE3_CIERRE_FORMAL_RONDA.sql` | Formaliza el cierre competitivo por ronda mediante `tournament_round_competitive_closures` y `cerrar_ronda_competitiva(uuid,text)`. Sólo permite cerrar cuando `obtener_estado_cierre_competitivo_ronda(uuid)` devuelve `competitiveStatus=FINAL`; funciona sin empates porque `pendingGroups=0` permite llegar directamente a FINAL, y con empates exige que todos estén resueltos. Persiste una fotografía JSON auditable e inmutable y bloquea cambios posteriores en tarjetas, captura digital/física, conciliación, outcomes y resoluciones manuales de desempate. `finalizar_torneo()` queda para Fase 4 y deberá exigir que todas las rondas activas tengan cierre formal. |
+| 181 Fase 4 | `181_FASE4_FINALIZAR_TORNEO.sql` | Completa la máquina de estados deportiva con `finalizar_torneo(uuid,text)` y `previsualizar_finalizacion_torneo(uuid)`. La transición manual `en_curso → finalizado` sólo se permite cuando existe al menos una ronda activa y todas las rondas activas tienen cierre formal `FINAL` de la Fase 3. Crea `tournament_competitive_finalizations` como sello auditable, único e inmutable con snapshot de las rondas al momento de finalizar. La lógica es agnóstica a modalidad y formato de salida: no contiene reglas de Stroke, Stableford, equipos, Shotgun ni tee time; los motores específicos deben resolver cada ronda antes de llegar aquí. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1392,6 +1393,39 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Las bitácoras históricas append-only existentes no se reescriben.
 - No se implementa reapertura de ronda; si alguna vez se requiere deberá ser una operación extraordinaria y auditada.
 - `finalizar_torneo()` sigue pendiente para **181 Fase 4** y deberá exigir cierre formal en todas las rondas activas.
+
+### Migración 181 Fase 4 — Finalización formal del torneo
+
+- Completa la transición deportiva `en_curso → finalizado`.
+- Agrega `previsualizar_finalizacion_torneo(tournament_id)`:
+  - lista todas las rondas activas;
+  - indica cuáles tienen cierre competitivo formal de Fase 3;
+  - devuelve `readyToFinalize`;
+  - exige al menos una ronda activa y cero rondas pendientes.
+- Agrega `finalizar_torneo(tournament_id, notas)`:
+  - acción manual;
+  - sólo Superadmin u organizador asignado;
+  - exige `estatus = en_curso`;
+  - reevalúa el preview en backend;
+  - sólo finaliza si **todas las rondas activas** están formalmente cerradas;
+  - atraviesa el guard de estatus mediante `app.permitir_cambio_estatus_torneo`;
+  - cambia `tournaments.estatus` a `finalizado`.
+- Crea `tournament_competitive_finalizations`:
+  - una fila única por torneo;
+  - snapshot JSON de las rondas y sus cierres;
+  - actor y fecha/hora de finalización;
+  - notas opcionales;
+  - sello histórico inmutable.
+- La operación es idempotente si el torneo ya está `finalizado` y existe su sello.
+- Si un dato histórico figura `finalizado` sin sello formal, la RPC falla de manera explícita y no reconstruye silenciosamente el cierre.
+- **Arquitectura multimodal:** esta fase no inspecciona `scoring_engine`, `participation_type`, `start_format`, Stroke, Stableford, equipos, Shotgun ni tee time. Sólo exige que cada ronda haya llegado previamente a su cierre formal común.
+- Con esto queda completo el ciclo deportivo formal:
+  - `planificado → inscripciones_abiertas`
+  - `inscripciones_abiertas → inscripcion_cerrada`
+  - `inscripcion_cerrada → inscripciones_abiertas` (sólo antes del freeze)
+  - `inscripcion_cerrada → en_curso`
+  - `en_curso → finalizado`
+  - cancelación controlada desde estados permitidos.
 
 ## Cómo agregar una migración nueva
 
