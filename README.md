@@ -1851,6 +1851,19 @@ y no dejó cambios aplicados.
 - Se preservan todas las ramas existentes para Shotgun, grupos comunes, jugadores y equipos.
 - El helper continúa cerrado a `authenticated`.
 
+| 185 Fase 1D | `185_FASE1D_ENRIQUECER_CONFORMACION_TEE_TIMES.sql` | Enriquece `obtener_conformacion_tee_times(uuid)` para que la UI de salidas preparadas reciba categoría, lane real, preferencia, jugadores, folio y hándicap desde snapshots congelados, además de `horaSalidaLocal` (`HH:MM`) en la zona horaria del campo. Conserva el `timestamptz` oficial y todos los identificadores previos. |
+
+### Migración 185 Fase 1D — Lectura completa de salidas preparadas Tee Times
+
+- La materialización de Tee Times ya contenía correctamente grupos, jugadores y horas; el problema estaba en el contrato de lectura de `obtener_conformacion_tee_times`.
+- La RPC ahora expone por grupo: `tournamentCategoryId`, `categoryId`, `categoryCode`, `categoryName`, `categoryDisplayOrder`, `categoryPreferredStartLane`, `actualLaneOrder` y `startLaneOverride`.
+- `horaSalida` conserva el `timestamptz` oficial.
+- Se agrega `horaSalidaLocal` en formato `HH:MM`, calculado con `campos_golf.timezone_id`.
+- La respuesta superior incluye `timezone`.
+- Cada unidad conserva `id` y `orden`, y agrega `registrationId`, `playerId`, `playerName`, `registrationFolio`, `handicapIndex`, `handicapSource`, `tournamentCategoryId` y `categoryName`.
+- Los datos de jugador, folio y hándicap provienen de `tournament_round_handicap_snapshots → tournament_handicap_snapshots`, para respetar la fotografía congelada del torneo y no reconstruir la salida desde datos vivos.
+- No se modifica materialización, validación, Shotgun ni datos existentes.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
