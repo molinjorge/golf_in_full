@@ -1825,6 +1825,20 @@ y no dejó cambios aplicados.
 - No se modifica `materializar_conformacion_tee_times`, `preferred_start_lane`, grupos existentes, Shotgun ni ninguna fila de datos.
 - `hora_salida_tee_time` permanece como helper backend y no se expone directamente a `authenticated`.
 
+| 185 Fase 1B | `185_FASE1B_ORDEN_MANUAL_GRUPOS_TEE_TIMES.sql` | Separa `sequence_order` de la secuencia real Tee Times. La propuesta automática sigue usando `sequence_order`, pero VALIDAR Y CERRAR deja de rechazar reordenamientos manuales entre categorías. El validador previo se conserva como core y un wrapper elimina únicamente `orden_categorias_inconsistente`, recalculando `counts.errors` y `ready`; las demás validaciones permanecen intactas. |
+
+### Migración 185 Fase 1B — Orden manual de grupos Tee Times
+
+- `sequence_order` queda formalizado como criterio de generación de la propuesta automática, no como restricción del orden real.
+- El organizador puede usar SUBIR / BAJAR para cruzar grupos de categorías distintas dentro del mismo punto de salida.
+- El orden real materializado queda definido por `tournament_tee_time_start_hole_id + sequence_number`.
+- La implementación previa de `_previsualizar_validacion_salidas_tee_times_v1` se conserva como `_previsualizar_validacion_salidas_tee_times_v1_core_1851b`.
+- La firma `_previsualizar_validacion_salidas_tee_times_v1(uuid)` permanece estable para el dispatcher y actúa como wrapper.
+- El wrapper elimina únicamente el error `orden_categorias_inconsistente`, recalcula `counts.errors` y `ready`.
+- No se convierte en warning porque el reordenamiento manual ya es una decisión válida del organizador.
+- Continúan intactas las validaciones de slots duplicados, horarios, tamaño máximo, categoría del jugador, participante único, snapshots y warnings de grupos incompletos.
+- No se modifica `materializar_conformacion_tee_times`, `sequence_order`, `preferred_start_lane`, Shotgun ni datos históricos.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
