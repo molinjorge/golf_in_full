@@ -1864,6 +1864,20 @@ y no dejó cambios aplicados.
 - Los datos de jugador, folio y hándicap provienen de `tournament_round_handicap_snapshots → tournament_handicap_snapshots`, para respetar la fotografía congelada del torneo y no reconstruir la salida desde datos vivos.
 - No se modifica materialización, validación, Shotgun ni datos existentes.
 
+| 185 Fase 1E | `185_FASE1E_FAIL_CLOSED_MATERIALIZACION_TEE_TIMES.sql` | Hace fail-closed la materialización Tee Times: exige inscripciones cerradas/en curso, congelamiento, snapshot de condiciones de la ronda y snapshots de hándicap antes de crear grupos. Preserva el materializador anterior como core y agrega `descartar_conformacion_tee_times(uuid,text)` para limpiar conformaciones no validadas y sin tarjetas. |
+
+### Migración 185 Fase 1E — Fail-closed y descarte seguro de conformación Tee Times
+
+- Se corrige una brecha de flujo: Tee Times permitía materializar grupos con `inscripciones_abiertas`, antes del congelamiento y sin snapshots.
+- `materializar_conformacion_tee_times(uuid,jsonb)` se conserva como firma pública estable y pasa a ser un wrapper de precondiciones.
+- La implementación previa se preserva como `materializar_conformacion_tee_times_core_1851e(uuid,jsonb)`.
+- Antes de delegar al core se exige: torneo en `inscripcion_cerrada` o `en_curso`, congelamiento existente, snapshot de condiciones de la ronda y al menos un snapshot de hándicap de ronda del mismo freeze.
+- También se bloquea rematerialización si la ronda ya está validada o tiene tarjetas oficiales emitidas.
+- Se agrega `descartar_conformacion_tee_times(uuid,text)` para eliminar de forma controlada una conformación persistida que todavía no es histórica/oficial.
+- El descarte exige permiso administrativo, motivo, ronda no validada y ausencia de tarjetas; elimina primero `tournament_group_players`, después metadata `tournament_tee_time_groups` y finalmente los `tournament_groups` asociados.
+- Se incluye un script separado de limpieza para conformaciones prematuras detectables (torneo aún abierto y sin freeze). No forma parte automática de la migración.
+- No se modifica Shotgun, validación competitiva, emisión de tarjetas ni resultados.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
