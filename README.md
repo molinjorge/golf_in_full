@@ -1813,6 +1813,18 @@ y no dejó cambios aplicados.
 - Esta fase no modifica `materializar_conformacion_tee_times`, validación, intervalos, offsets, horarios, grupos existentes, Shotgun ni emisión de tarjetas.
 - La siguiente fase corresponde al frontend: selector Hoyo 1 / Hoyo 10 / Ambos por categoría y uso de esa preferencia al generar la propuesta automática.
 
+| 185 Fase 1A | `185_FASE1A_CORRECCION_TIMEZONE_TEE_TIMES.sql` | Corrige `hora_salida_tee_time(uuid,integer)`: elimina la referencia inválida `clubs.timezone` y adopta la misma fuente autoritativa usada por Shotgun, `tournament_rounds.campo_golf_id → campos_golf.timezone_id → timezones.iana_id`. Conserva intervalo, offset, secuencia, materialización y Shotgun sin cambios. |\n
+### Migración 185 Fase 1A — Corrección de zona horaria en Tee Times
+
+- Se corrige un error detectado al confirmar la materialización Tee Times: `column c.timezone does not exist`.
+- La cadena del error era `materializar_conformacion_tee_times` → `hora_salida_tee_time` → `clubs c` → `c.timezone`.
+- `public.clubs` no tiene columna `timezone`; la relación disponible es `city_id`, pero esa ruta no se utiliza en esta corrección.
+- Se adopta la misma fuente autoritativa ya utilizada por `hora_salida_shotgun`: `tournament_rounds.campo_golf_id → campos_golf.timezone_id`.
+- El `timezone_id` se valida además contra `timezones.iana_id` activo.
+- El cálculo mantiene exactamente la fórmula vigente: fecha de la ronda + hora inicial del turno + offset del punto de salida + `(sequence_number - 1) × intervalo_grupos_minutos`, interpretado en la zona horaria del campo.
+- No se modifica `materializar_conformacion_tee_times`, `preferred_start_lane`, grupos existentes, Shotgun ni ninguna fila de datos.
+- `hora_salida_tee_time` permanece como helper backend y no se expone directamente a `authenticated`.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
