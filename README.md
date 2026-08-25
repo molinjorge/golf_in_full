@@ -1909,6 +1909,16 @@ y no dejó cambios aplicados.
 - `materializar_conformacion_tee_times` sigue siendo la operación de creación inicial; `actualizar_conformacion_tee_times` es exclusivamente para edición posterior.
 - No se modifica Shotgun.
 
+| 185 Fase 1G | `185_FASE1G_CATEGORY_NAME_CONTRATO_TEE_TIMES.sql` | Corrige `_construir_contrato_salida_tee_times_v1(uuid)` para incluir `categoryName` en cada grupo usando `tournament_handicap_snapshots.category_name` congelado, permitiendo persistir `tournament_round_start_validation_groups.category_name NOT NULL`. |
+
+### Migración 185 Fase 1G — `categoryName` en contrato Tee Times
+
+- `VALIDAR Y CERRAR` fallaba porque el contrato Tee Times omitía `categoryName`.
+- El nombre de categoría ahora sale del snapshot congelado del grupo.
+- `validar_salidas_ronda(uuid)` permanece intacto.
+- La restricción `category_name NOT NULL` permanece.
+- Shotgun no se modifica.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
