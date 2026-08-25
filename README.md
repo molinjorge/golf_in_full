@@ -465,6 +465,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 183 Fase 3 | `183_FASE3_VALIDADOR_TEE_TIMES.sql` | Implementa el handler `tee_times_v1` para revisión y validación definitiva de Tee Times individual Stroke. Valida freeze/snapshots, estatus operativo, configuración por turno, uno o dos streams, configuración de categorías con elegibles, orden único de categorías, metadata Tee Times en todos los grupos, ausencia de campos Shotgun, slots stream+secuencia únicos, hora derivada exacta, grupo no vacío, máximo, orden interno, categoría correcta, elegibilidad, participante exactamente una vez, ausencia de equipos, orden de bloques por `sequence_order`, distancias congeladas y warnings de retirados/grupos incompletos. Habilita `supports_start_validation=true` con handler `tee_times_v1` y extiende el dispatcher público. `validar_salidas_ronda` reutiliza el mismo pipeline común; emisión de tarjetas sigue fail-closed. |
 | 183 Fase 4 | `183_FASE4_EMISION_TARJETAS_TEE_TIMES_CORREGIDA.sql` | Habilita emisión oficial de tarjetas para Tee Times individual Stroke reutilizando el emisor genérico `official_scorecard_registration_v1`. Registra `supports_scorecard_emission=true` y unidad `registration` para `tee_times_v1 / stroke_individual_tee_times_v1`. Ajusta únicamente el orden genérico de folios: Shotgun conserva `shift/hole/A-B`, mientras Tee Times usa `start_at` cuando `start_position` es NULL. Se reutilizan sin duplicar `tournament_score_card_emissions`, `tournament_score_cards`, `inicializar_captura_scores_ronda`, sesiones de captura, scores por hoyo y asignación circular de marcadores. La secuencia de juego parte del `hole_number` común del grupo validado. Con esta fase el backend Tee Times individual Stroke queda conectado de preparación a captura; modalidades team permanecen no habilitadas. |
 | 184 Fase 1 | `184_FASE1_NRQ_AUTOCIERRE_CONCILIACION.sql` | Introduce el estado operativo NRQ (No requiere conciliación) para tarjetas físicas sin captura digital real. Agrega `reconciliation_requirement` (`REQUIRED`/`NOT_REQUIRED`) a `tournament_scorecard_reconciliations`, reclasifica históricos `COMPLETED` physical-only como `NOT_REQUIRED`, y al finalizar la captura física dispara un trigger que, si no hubo digital real, crea/completa la conciliación técnica como `COMPLETED` en la misma transacción y registra `reconciliation_not_required`. Un guard impide capturar digital después de NRQ. La nueva RPC `obtener_estados_conciliacion_ronda(uuid)` expone `NRQ`, `CONCILIADA` y `PENDIENTE_CONCILIAR` junto con categoría, permitiendo filtros de UI sin alterar las reglas de resultados oficiales. |
+| 184 Fase 1A | `184_FASE1A_CORRECCION_PRIVILEGIOS_HELPERS_NRQ.sql` | Corrección de seguridad posterior a la verificación de 184 Fase 1. Revoca `EXECUTE` directo de `PUBLIC`, `anon` y `authenticated` sobre los helpers trigger internos `_autocompletar_conciliacion_nrq_al_finalizar_fisica()` y `_proteger_captura_digital_despues_nrq()`, manteniendo su uso interno mediante triggers y `service_role`. No modifica lógica NRQ, datos, resultados ni conciliación. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1770,6 +1771,33 @@ y no dejó cambios aplicados.
 - La RPC incluye resumen de cantidades `nrq`, `conciliadas` y `pendientesConciliar`, facilitando el botón global y los filtros por categoría/estado.
 - No se modifica la autoridad de resultados oficiales: `obtener_resultados_oficiales_ronda` y `obtener_score_oficial_tarjeta` siguen requiriendo técnicamente conciliación `COMPLETED`; las tarjetas NRQ satisfacen ese requisito automáticamente al terminar la captura física.
 - La tarjeta física continúa siendo obligatoria y la digital continúa siendo opcional.
+
+### Migración 184 Fase 1A — Corrección de privilegios de helpers NRQ
+
+- Esta migración es una corrección posterior a la ejecución y verificación de **184 Fase 1**.
+- La verificación original de 184 Fase 1 reportó **25 verificaciones; 1 error**, únicamente en `25_HELPERS_PRIVADOS`.
+- El diagnóstico confirmó que:
+  - `_tarjeta_tiene_captura_digital_real(uuid)` ya estaba correctamente cerrado al frontend.
+  - `_autocompletar_conciliacion_nrq_al_finalizar_fisica()` conservaba `EXECUTE` para `authenticated`.
+  - `_proteger_captura_digital_despues_nrq()` conservaba `EXECUTE` para `authenticated`.
+- La corrección revoca `ALL` para:
+  - `PUBLIC`;
+  - `anon`;
+  - `authenticated`.
+- Después concede `EXECUTE` únicamente a `service_role`.
+- Los triggers continúan funcionando normalmente porque PostgreSQL puede ejecutar sus funciones trigger sin requerir que el usuario frontend tenga `EXECUTE` directo sobre ellas.
+- No se modifica:
+  - el estado operativo `NRQ`;
+  - `reconciliation_requirement`;
+  - el autocierre a `COMPLETED`;
+  - el evento `reconciliation_not_required`;
+  - el backfill histórico;
+  - la protección contra captura digital posterior;
+  - los resultados oficiales;
+  - Gross/Neto;
+  - la conciliación;
+  - ninguna fila de datos.
+- Después de aplicar esta corrección debe volver a ejecutarse la verificación de **184 Fase 1**, cuyo resultado esperado es **25 verificaciones; 0 errores**.
 
 ## Cómo agregar una migración nueva
 
