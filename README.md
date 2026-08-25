@@ -1799,6 +1799,20 @@ y no dejó cambios aplicados.
   - ninguna fila de datos.
 - Después de aplicar esta corrección debe volver a ejecutarse la verificación de **184 Fase 1**, cuyo resultado esperado es **25 verificaciones; 0 errores**.
 
+| 185 Fase 1 | `185_FASE1_PREFERENCIA_PUNTO_SALIDA_CATEGORIA_TEE_TIMES.sql` | Agrega `preferred_start_lane` a `tournament_tee_time_category_configs` con valores `LANE_1`, `LANE_2` o `BOTH`. El organizador puede definir el punto de salida por categoría, mientras que `tournament_tee_time_groups.tournament_tee_time_start_hole_id` continúa siendo el punto real de cada grupo, permitiendo excepciones manuales. Las configuraciones existentes se inicializan como `BOTH` para preservar el comportamiento anterior. |
+
+### Migración 185 Fase 1 — Preferencia de punto de salida por categoría en Tee Times
+
+- Se formaliza la regla operativa indicada por golf: **el organizador define por cuál punto/hoyo de inicio sale cada categoría**; la asignación no se deriva del orden de categoría.
+- `tournament_tee_time_category_configs.preferred_start_lane` admite `LANE_1`, `LANE_2` y `BOTH`.
+- `LANE_1` y `LANE_2` representan el primer y segundo punto de salida configurados para el turno. La UI posterior mostrará sus hoyos reales (por ejemplo Hoyo 1 / Hoyo 10), evitando hardcodearlos en el modelo.
+- `BOTH` permite que los grupos de la categoría se distribuyan entre ambos puntos.
+- La preferencia de categoría funciona como criterio **por defecto** para construir la propuesta, no como restricción absoluta.
+- El punto real de cada grupo continúa persistido en `tournament_tee_time_groups.tournament_tee_time_start_hole_id`. Esto permite excepciones manuales, por ejemplo mover un grupo concreto al Hoyo 1 aunque su categoría normalmente salga por el Hoyo 10.
+- Las configuraciones existentes reciben `BOTH`, por lo que la migración no altera silenciosamente la conformación histórica ni obliga a elegir un punto antes de actualizar el frontend.
+- Esta fase no modifica `materializar_conformacion_tee_times`, validación, intervalos, offsets, horarios, grupos existentes, Shotgun ni emisión de tarjetas.
+- La siguiente fase corresponde al frontend: selector Hoyo 1 / Hoyo 10 / Ambos por categoría y uso de esa preferencia al generar la propuesta automática.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
