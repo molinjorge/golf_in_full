@@ -1839,6 +1839,18 @@ y no dejó cambios aplicados.
 - Continúan intactas las validaciones de slots duplicados, horarios, tamaño máximo, categoría del jugador, participante único, snapshots y warnings de grupos incompletos.
 - No se modifica `materializar_conformacion_tee_times`, `sequence_order`, `preferred_start_lane`, Shotgun ni datos históricos.
 
+| 185 Fase 1C | `185_FASE1C_SOPORTE_TEE_TIME_GROUPS_GUARD_SALIDAS.sql` | Agrega `tournament_tee_time_groups` al resolver genérico `_resolver_ronda_fila_salida(text,jsonb)`, permitiendo que el trigger de inmutabilidad Tee Times determine la ronda mediante `tournament_group_id → tournament_groups → tournament_round_shifts`. Corrige el error `Tabla de salida no soportada: tournament_tee_time_groups` sin modificar materialización, Shotgun ni datos. |
+
+### Migración 185 Fase 1C — Soporte de `tournament_tee_time_groups` en guard de salidas
+
+- Se corrige el error al confirmar la materialización Tee Times: `Tabla de salida no soportada: tournament_tee_time_groups`.
+- La cadena detectada fue `materializar_conformacion_tee_times` → `INSERT tournament_tee_time_groups` → `trg_proteger_cierre_salidas_tee_times` → `_proteger_objeto_salida_ronda_validada()` → `_resolver_ronda_fila_salida(...)`.
+- El resolver genérico no contemplaba `tournament_tee_time_groups`, aunque el trigger Tee Times ya estaba correctamente instalado.
+- La nueva rama resuelve la ronda desde `tournament_group_id → tournament_groups.tournament_round_shift_id → tournament_round_shifts.tournament_round_id`.
+- No se modifica el materializador ni el trigger; únicamente se amplía el resolver genérico para reconocer la tabla Tee Times.
+- Se preservan todas las ramas existentes para Shotgun, grupos comunes, jugadores y equipos.
+- El helper continúa cerrado a `authenticated`.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
