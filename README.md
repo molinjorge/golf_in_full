@@ -1878,6 +1878,18 @@ y no dejó cambios aplicados.
 - Se incluye un script separado de limpieza para conformaciones prematuras detectables (torneo aún abierto y sin freeze). No forma parte automática de la migración.
 - No se modifica Shotgun, validación competitiva, emisión de tarjetas ni resultados.
 
+| 185 Fase 1E-A | `185_FASE1EA_CORREGIR_DESCARTE_CONFORMACION_TEE_TIMES.sql` | Corrige `descartar_conformacion_tee_times(uuid,text)` para respetar `trg_validar_borrado_grupo_vacio`: tras eliminar jugadores y metadata Tee Times, desactiva y audita `tournament_groups` antes de su borrado físico. Mantiene intactas las defensas de ronda validada y tarjetas emitidas. |
+
+### Migración 185 Fase 1E-A — Corrección del descarte de conformación Tee Times
+
+- La RPC de descarte creada en 185 Fase 1E intentaba borrar `tournament_groups` todavía activos.
+- `trg_validar_borrado_grupo_vacio` exige que el grupo esté inactivo y sin jugadores antes del `DELETE`.
+- El orden corregido es: eliminar `tournament_group_players`, eliminar `tournament_tee_time_groups`, desactivar/auditar `tournament_groups` y finalmente eliminarlos.
+- La desactivación registra `fecha_baja`, `dado_de_baja_por` y `motivo_baja`.
+- Se mantienen todas las defensas previas: permisos administrativos, motivo obligatorio, lock de ronda, prohibición sobre ronda validada y prohibición si existen tarjetas emitidas.
+- No se elimina ni deshabilita ningún trigger existente.
+- Se incluye una versión V2 del script de mantenimiento para SQL Editor, que aplica el mismo orden sin depender de `auth.uid()`.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
