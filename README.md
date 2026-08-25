@@ -1919,6 +1919,21 @@ y no dejó cambios aplicados.
 - La restricción `category_name NOT NULL` permanece.
 - Shotgun no se modifica.
 
+| 185 Fase 1H | `185_FASE1H_PREVISUALIZACION_OFICIAL_TARJETAS.sql` | Agrega `previsualizar_tarjetas_score_ronda(uuid)`, una previsualización común para Shotgun y Tee Times basada exclusivamente en la validación formal y snapshots congelados. Replica la numeración/folio de `emitir_tarjetas_score_ronda` sin crear emisiones, tarjetas, QR ni captura digital. |
+
+### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
+
+- Agrega `previsualizar_tarjetas_score_ronda(uuid)` como preview común posterior a `VALIDAR Y CERRAR`.
+- Funciona para motores registrados con `official_scorecard_registration_v1`, incluyendo Shotgun individual y Tee Times individual.
+- Consume exclusivamente `tournament_round_start_validations`, sus grupos/unidades versionados y snapshots congelados de hándicap, tee, condiciones y hoyos.
+- Replica exactamente el `ORDER BY` de `emitir_tarjetas_score_ronda(uuid)` para calcular `prospectiveCardNumber`.
+- Calcula `prospectiveCardFolio` con el mismo formato oficial `Rxx-Vxx-xxxx`.
+- No crea `tournament_score_card_emissions`, `tournament_score_cards`, QR, sesiones de captura ni scores.
+- Cada tarjeta prevista incluye jugador, folio de inscripción, categoría, Handicap Index, Course Handicap, Playing Handicap, tee, salida, compañeros, hoyos, PAR, Stroke Index, distancias y totales.
+- `officiallyIssued` permite distinguir si la ronda ya tiene una emisión activa.
+- La emisión oficial y el payload posterior a emisión permanecen intactos.
+- El preview legacy `obtener_preview_tarjetas_score_shotgun_individual(uuid)` permanece sin cambios porque pertenece a la etapa de preparación Shotgun, no a la preemisión oficial.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
