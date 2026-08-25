@@ -464,6 +464,7 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 | 183 Fase 2 | `183_FASE2_PREPARACION_GRUPOS_TEE_TIMES.sql` | Implementa la preparación/materialización Tee Times sobre las tablas comunes `tournament_groups` y `tournament_group_players`, manteniendo nulos los campos Shotgun. Crea `tournament_tee_time_groups` para metadata específica (categoría, stream de inicio y secuencia), `hora_salida_tee_time()` para derivar horarios desde turno + offset + intervalo, y las RPC `obtener_conformacion_tee_times` / `materializar_conformacion_tee_times`. La materialización opera por turno completo para evitar colisiones entre categorías, impide jugadores duplicados en la ronda y respeta tamaño máximo. `_construir_contrato_salida_tee_times_v1` produce el contrato común v2 con `startPosition=NULL`, y el dispatcher común ya reconoce Tee Times. Validación definitiva y emisión permanecen fail-closed. |
 | 183 Fase 3 | `183_FASE3_VALIDADOR_TEE_TIMES.sql` | Implementa el handler `tee_times_v1` para revisión y validación definitiva de Tee Times individual Stroke. Valida freeze/snapshots, estatus operativo, configuración por turno, uno o dos streams, configuración de categorías con elegibles, orden único de categorías, metadata Tee Times en todos los grupos, ausencia de campos Shotgun, slots stream+secuencia únicos, hora derivada exacta, grupo no vacío, máximo, orden interno, categoría correcta, elegibilidad, participante exactamente una vez, ausencia de equipos, orden de bloques por `sequence_order`, distancias congeladas y warnings de retirados/grupos incompletos. Habilita `supports_start_validation=true` con handler `tee_times_v1` y extiende el dispatcher público. `validar_salidas_ronda` reutiliza el mismo pipeline común; emisión de tarjetas sigue fail-closed. |
 | 183 Fase 4 | `183_FASE4_EMISION_TARJETAS_TEE_TIMES_CORREGIDA.sql` | Habilita emisión oficial de tarjetas para Tee Times individual Stroke reutilizando el emisor genérico `official_scorecard_registration_v1`. Registra `supports_scorecard_emission=true` y unidad `registration` para `tee_times_v1 / stroke_individual_tee_times_v1`. Ajusta únicamente el orden genérico de folios: Shotgun conserva `shift/hole/A-B`, mientras Tee Times usa `start_at` cuando `start_position` es NULL. Se reutilizan sin duplicar `tournament_score_card_emissions`, `tournament_score_cards`, `inicializar_captura_scores_ronda`, sesiones de captura, scores por hoyo y asignación circular de marcadores. La secuencia de juego parte del `hole_number` común del grupo validado. Con esta fase el backend Tee Times individual Stroke queda conectado de preparación a captura; modalidades team permanecen no habilitadas. |
+| 184 Fase 1 | `184_FASE1_NRQ_AUTOCIERRE_CONCILIACION.sql` | Introduce el estado operativo NRQ (No requiere conciliación) para tarjetas físicas sin captura digital real. Agrega `reconciliation_requirement` (`REQUIRED`/`NOT_REQUIRED`) a `tournament_scorecard_reconciliations`, reclasifica históricos `COMPLETED` physical-only como `NOT_REQUIRED`, y al finalizar la captura física dispara un trigger que, si no hubo digital real, crea/completa la conciliación técnica como `COMPLETED` en la misma transacción y registra `reconciliation_not_required`. Un guard impide capturar digital después de NRQ. La nueva RPC `obtener_estados_conciliacion_ronda(uuid)` expone `NRQ`, `CONCILIADA` y `PENDIENTE_CONCILIAR` junto con categoría, permitiendo filtros de UI sin alterar las reglas de resultados oficiales. |
 
 ### Migración 148 — Rondas de score del jugador autenticado
 
@@ -1741,6 +1742,34 @@ y no dejó cambios aplicados.
   - emisión de tarjetas;
   - inicialización de captura física/digital.
 - El siguiente trabajo ya es principalmente frontend/UX: convertir la pestaña `SALIDAS SHOTGUN` en `SALIDAS` y mostrar el preparador correspondiente según `tournament_rounds.formato_salida`.
+
+### Migración 184 Fase 1 — NRQ y autocierre de conciliación
+
+- Se incorpora una distinción explícita entre el `status` técnico de conciliación y su requerimiento funcional:
+  - `reconciliation_requirement = REQUIRED`: hubo captura digital real y la conciliación aplica.
+  - `reconciliation_requirement = NOT_REQUIRED`: no hubo captura digital real; la UI debe mostrar **NRQ — No requiere conciliación**.
+- La existencia de una sesión `ready` o de filas de hoyos inicializadas NO se considera captura digital real, porque `inicializar_captura_scores_ronda` crea esas estructuras para todas las tarjetas.
+- Se considera captura digital real si existe al menos una de estas señales:
+  - `capture_session.started_at IS NOT NULL`;
+  - `capture_session.status IN ('in_progress','captured')`;
+  - al menos un `tournament_scorecard_hole_scores.gross_score` no nulo.
+- Al cambiar una recepción física a `CAPTURED`, `trg_autocompletar_conciliacion_nrq_al_finalizar_fisica` evalúa la tarjeta en la misma transacción:
+  - si hubo digital real, no interviene y continúa el flujo normal;
+  - si no hubo digital real, crea o completa `tournament_scorecard_reconciliations` con `status=COMPLETED` y `reconciliation_requirement=NOT_REQUIRED`.
+- El evento `reconciliation_not_required` deja auditoría explícita de la decisión NRQ.
+- Las conciliaciones `VOIDED` no son reactivadas automáticamente.
+- Se protege la inmutabilidad funcional del NRQ: después de cerrar una tarjeta como `NOT_REQUIRED`, un trigger en `tournament_scorecard_hole_scores` impide introducir posteriormente un score digital.
+- Se usa un advisory lock transaccional por `score_card_id` para serializar el cierre físico NRQ contra una captura digital concurrente.
+- Se normalizan también tarjetas históricas cuya captura física ya está `CAPTURED` y nunca tuvieron digital real: si no existe conciliación se crea directamente `COMPLETED/NOT_REQUIRED`; si existe y no está anulada, se completa y marca `NOT_REQUIRED`. Así no hay que esperar a que el trigger vuelva a dispararse. No se alteran scores ni resultados históricos.
+- Se crea `obtener_estados_conciliacion_ronda(uuid)` para frontend. Por tarjeta devuelve:
+  - categoría;
+  - `digitalUsed`;
+  - `reconciliationRequirement`;
+  - `technicalReconciliationStatus`;
+  - `operationalStatus`: `NRQ`, `CONCILIADA`, `PENDIENTE_CONCILIAR` o `NO_APLICA_AUN` mientras la física aún no termina y todavía no puede decidirse si habrá digital. Una tarjeta sin digital nunca se etiqueta `PENDIENTE_CONCILIAR`.
+- La RPC incluye resumen de cantidades `nrq`, `conciliadas` y `pendientesConciliar`, facilitando el botón global y los filtros por categoría/estado.
+- No se modifica la autoridad de resultados oficiales: `obtener_resultados_oficiales_ronda` y `obtener_score_oficial_tarjeta` siguen requiriendo técnicamente conciliación `COMPLETED`; las tarjetas NRQ satisfacen ese requisito automáticamente al terminar la captura física.
+- La tarjeta física continúa siendo obligatoria y la digital continúa siendo opcional.
 
 ## Cómo agregar una migración nueva
 
