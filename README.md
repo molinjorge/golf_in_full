@@ -1890,6 +1890,25 @@ y no dejó cambios aplicados.
 - No se elimina ni deshabilita ningún trigger existente.
 - Se incluye una versión V2 del script de mantenimiento para SQL Editor, que aplica el mismo orden sin depender de `auth.uid()`.
 
+| 185 Fase 1F | `185_FASE1F_EDICION_PERSISTENTE_CONFORMACION_TEE_TIMES.sql` | Agrega edición transaccional real de una conformación Tee Times ya materializada mediante `actualizar_conformacion_tee_times(uuid,jsonb)`: conserva `groupId` existentes, permite reordenar slots, cambiar tee, mover jugadores, crear grupos y dar de baja grupos omitidos sin descartar toda la conformación. Corrige además `validar_grupo_individual()` para que Tee Times use su categoría y `tamano_grupo_maximo` nativos. La edición queda bloqueada después de validar o emitir tarjetas. |
+
+### Migración 185 Fase 1F — Edición persistente de conformación Tee Times
+
+- Se formaliza el estado **PREPARADA — EDITABLE** entre materialización y validación.
+- La nueva RPC `actualizar_conformacion_tee_times(uuid,jsonb)` recibe el draft completo final de un turno Tee Times.
+- Los grupos existentes enviados con `groupId` conservan su identidad; sólo se actualizan hoyo, hora, categoría, tee de inicio y secuencia.
+- Los grupos con `groupId = null` se crean como grupos nuevos.
+- Los grupos existentes omitidos del payload se dan de baja lógicamente; no se destruyen físicamente.
+- Los jugadores se sincronizan de forma atómica dentro de la misma transacción para permitir movimientos entre grupos sin estados intermedios visibles.
+- Antes de reubicar slots, la metadata `tournament_tee_time_groups` se neutraliza temporalmente (`activo=false`) dentro de la transacción. Esto permite swaps de secuencias y lanes sin chocar temporalmente con el índice único `(start_hole_id, sequence_number)`.
+- El estado final exige slots únicos, jugadores únicos, ausencia de grupos vacíos, máximos por categoría y exactamente los participantes congelados asignados al turno.
+- Categorías y participantes se validan contra snapshots congelados.
+- Se mantienen las defensas: inscripciones cerradas/en curso, freeze vigente, ronda incluida en freeze, snapshots de hándicap, ronda no validada y ausencia de tarjetas oficiales.
+- `validar_grupo_individual()` incorpora una rama específica Tee Times y obtiene `tamano_grupo_maximo` y categoría desde `tournament_tee_time_groups → tournament_tee_time_category_configs → tournament_round_shift_categories`.
+- Los guards existentes continúan siendo la frontera definitiva: después de `VALIDAR Y CERRAR`, grupos, metadata Tee Times y jugadores no pueden modificarse.
+- `materializar_conformacion_tee_times` sigue siendo la operación de creación inicial; `actualizar_conformacion_tee_times` es exclusivamente para edición posterior.
+- No se modifica Shotgun.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
