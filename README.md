@@ -2102,6 +2102,17 @@ y no dejó cambios aplicados.
 - Las resoluciones manuales por ronda Stableford y toda la infraestructura Stroke Play permanecen intactas.
 - La infraestructura acumulada es genérica mediante `scoring_engine`, por lo que puede reutilizarse posteriormente en otras modalidades multirronda.
 
+### Migración 186 Fase 1O — Cierre competitivo de ronda agnóstico
+
+- Corrige una dependencia circular potencial: `obtener_desempates_stableford_ronda()` ya no llama al leaderboard Stableford; el leaderboard puede consumir el motor de desempates sin recursión.
+- `validar_cierre_resultados_ronda(uuid)` detecta `scoring_engine` y `participation_type` desde `tournament_round_condition_snapshots`.
+- Para Stroke Play conserva `obtener_resultados_oficiales_ronda(uuid)`; para Stableford Individual usa `obtener_resultados_stableford_oficiales_ronda(uuid)`.
+- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` siguen resolviendo competitivamente una tarjeta para permitir el cierre de la ronda, sin alterar todavía su efecto global multirronda.
+- `obtener_estado_cierre_competitivo_ronda(uuid)` selecciona también el motor de desempates correcto según scoring engine.
+- La capa común normaliza `tiedTotal` de Stroke Play y `tiedPoints` de Stableford para reutilizar la misma infraestructura de cierre y resoluciones manuales.
+- `cerrar_ronda_competitiva(uuid,text)` no se duplica: continúa consumiendo el estado competitivo común y sólo permite cerrar cuando tarjetas y desempates están resueltos.
+- La finalización global del torneo todavía no cambia en esta fase; se abordará después de verificar 1O.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
