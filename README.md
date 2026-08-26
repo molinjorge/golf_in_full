@@ -1947,7 +1947,7 @@ y no dejó cambios aplicados.
 - Crea `tournament_category_classification_snapshots` como fotografía inmutable de categoría + clasificación.
 - Extiende `previsualizar_congelamiento_torneo(uuid)` mediante wrapper para impedir el freeze si alguna categoría queda sin clasificación.
 - Extiende `congelar_condiciones_y_handicaps_torneo(uuid)` mediante wrapper, preservando el core existente, para materializar los snapshots de clasificación en la misma transacción y agregar `categoryClassifications` al `conditions_snapshot`.
-- Los freezes nuevos pasan a `schema_version >= 2`; los históricos existentes no se modifican ni reciben backfill de esta configuración.
+- Las clasificaciones se conservan en `tournament_category_classification_snapshots`; la fila principal de `tournament_condition_freezes` permanece inmutable y los freezes históricos no se modifican.
 - No calcula puntos Stableford, no modifica tarjetas/captura/conciliación/resultados/leaderboard y no habilita aún Stableford en el registro de motores.
 
 ### Migración 186 Fase 1B — Stableford Individual en motores comunes de salida
@@ -1992,6 +1992,15 @@ y no dejó cambios aplicados.
 - La finalización de conciliación detecta falta física por ausencia de fila, no por Gross nulo, evitando confundir PICKUP con hoyo faltante.
 - Las lecturas físicas y de resolución exponen los tipos de resultado.
 - No calcula todavía puntos Stableford ni modifica resultados/leaderboard.
+
+### Migración 186 Fase 1F — Corrección de inmutabilidad del freeze
+
+- Corrige una incompatibilidad detectada en el wrapper creado en 186 Fase 1A: `tournament_condition_freezes` es inmutable y no puede recibir un `UPDATE` después de ser creado.
+- Mantiene `tournament_category_classification_snapshots` como autoridad histórica estructurada de las clasificaciones Gross/Net congeladas.
+- El wrapper de `congelar_condiciones_y_handicaps_torneo(uuid)` ya no modifica la fila principal del freeze después del core.
+- Conserva la validación que revierte el congelamiento si el snapshot de clasificaciones queda incompleto.
+- Agrega inmutabilidad a `tournament_category_classification_snapshots` mediante `impedir_mutacion_snapshot_torneo()`.
+- No altera freezes históricos ni modifica scoring, tarjetas, conciliación o leaderboard.
 
 ## Cómo agregar una migración nueva
 
