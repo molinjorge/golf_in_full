@@ -1922,6 +1922,7 @@ y no dejó cambios aplicados.
 | 185 Fase 1H | `185_FASE1H_PREVISUALIZACION_OFICIAL_TARJETAS.sql` | Agrega `previsualizar_tarjetas_score_ronda(uuid)`, una previsualización común para Shotgun y Tee Times basada exclusivamente en la validación formal y snapshots congelados. Replica la numeración/folio de `emitir_tarjetas_score_ronda` sin crear emisiones, tarjetas, QR ni captura digital. |
 | 186 Fase 1A | `186_FASE1A_CLASIFICACIONES_COMPETITIVAS_STABLEFORD.sql` | Inicia la base configurable de Stableford sin tocar scoring: crea clasificaciones oficiales Gross/Net por categoría, preserva Gross+Net como default para categorías existentes no congeladas y nuevas, bloquea cambios tras el freeze y congela una fotografía estructurada por categoría dentro del mismo proceso de congelamiento. |
 | 186 Fase 1B | `186_FASE1B_STABLEFORD_MOTORES_SALIDA_COMUNES.sql` | Habilita Stableford Individual para Shotgun y Tee Times reutilizando los motores de preparación, handlers de validación, contrato común V2 y emisión oficial por inscripción. Generaliza únicamente guards que restringían las salidas a Stroke Play; todavía no agrega Pickup ni calcula puntos Stableford. |
+| 186 Fase 1C | `186_FASE1C_CONTRATO_RESULTADO_HOYO_SCORE_PICKUP.sql` | Introduce el contrato universal de resultado de hoyo en digital, físico y resolución: PENDING/SCORE/PICKUP. Hace backfill retrocompatible de datos históricos, permite Gross nulo únicamente cuando el resultado es PICKUP y extiende eventos para auditar el tipo de resultado. Todavía no habilita captura de PU desde las RPC. |
 
 ### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
 
@@ -1957,6 +1958,16 @@ y no dejó cambios aplicados.
 - Mantiene intactos los registros y comportamiento de Stroke Play.
 - No modifica tarjetas, captura, conciliación, resultados, leaderboard, desempates ni cálculo de puntos.
 - Pickup y el contrato universal de resultado de hoyo se implementan en una fase posterior.
+
+### Migración 186 Fase 1C — Contrato universal de resultado de hoyo
+
+- Agrega `result_type` (`PENDING`, `SCORE`, `PICKUP`) a la evidencia digital.
+- Agrega `player_claimed_result_type` para que una disputa futura pueda reclamar SCORE o PICKUP.
+- Agrega `physical_result_type` a la captura física y permite `physical_gross_score = NULL` sólo cuando el resultado es `PICKUP`.
+- Agrega snapshots de tipo de resultado y `resolved_result_type` a la resolución de conciliación; `resolved_gross_score` puede ser `NULL` sólo para `PICKUP`.
+- Extiende el esquema de eventos digitales, físicos y de conciliación para conservar el tipo de resultado además del Gross en eventos futuros; las bitácoras históricas permanecen intactas porque son append-only.
+- Hace backfill retrocompatible únicamente sobre tablas de estado mutables: resultados históricos existentes permanecen `SCORE`; filas digitales pendientes quedan `PENDING`; no se inventa ningún PICKUP histórico ni se reescriben bitácoras.
+- No habilita todavía captura de `PU` desde RPC/UI y no modifica cálculo de resultados ni leaderboard.
 
 ## Cómo agregar una migración nueva
 
