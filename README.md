@@ -2113,6 +2113,17 @@ y no dejó cambios aplicados.
 - `cerrar_ronda_competitiva(uuid,text)` no se duplica: continúa consumiendo el estado competitivo común y sólo permite cerrar cuando tarjetas y desempates están resueltos.
 - La finalización global del torneo todavía no cambia en esta fase; se abordará después de verificar 1O.
 
+### Migración 186 Fase 1P — Finalización global Stableford
+
+- Amplía `previsualizar_finalizacion_torneo(uuid)` a `schemaVersion = 2`.
+- Conserva el requisito histórico de que todas las rondas activas estén cerradas competitivamente.
+- Si todas las rondas activas congeladas son Stableford Individual, exige además que `obtener_leaderboard_stableford_torneo(uuid)` esté en `READY_FOR_PUBLICATION`.
+- El preview incorpora `aggregateCompetition`, incluyendo el leaderboard acumulado que justificará la finalización; ese preview queda posteriormente dentro de `tournament_competitive_finalizations.finalization_snapshot`.
+- `finalizar_torneo(uuid,text)` no se duplica ni reescribe: ya consume `readyToFinalize` del preview.
+- Para torneos sin Stableford se conserva el comportamiento histórico: la finalización depende de los cierres competitivos de ronda.
+- Si en el futuro existe una composición que mezcle Stableford con otro scoring engine o una participación Stableford no individual, el preview devuelve `UNSUPPORTED_TOURNAMENT_COMPOSITION` y no permite finalizar hasta diseñar explícitamente esa clasificación global.
+- Los outcomes excepcionales de ronda todavía no reciben una política global automática. Si provocan que el acumulado sea provisional, Stableford no podrá finalizar hasta resolver esa política en una fase posterior.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
