@@ -2036,6 +2036,20 @@ y no dejó cambios aplicados.
 - No modifica las RPC históricas de resultados ni leaderboard Stroke Play.
 - La acumulación multirronda y el desempate Stableford quedan para fases posteriores.
 
+### Migración 186 Fase 1J — Desempates automáticos Stableford
+
+- Reutiliza `tournament_tiebreak_rules`, `tiebreak_methods`, alcance y tipo de resultado; no crea un catálogo paralelo.
+- Crea `calcular_clave_metodo_desempate_stableford(...)`, que trabaja con `grossPoints` o `netPoints`.
+- En Stableford más puntos es mejor; las claves se normalizan para mantener comparación lexicográfica determinista.
+- Para countback usa los hoyos del campo 10–18, 13–18, 16–18 y 18. Esto es consistente entre Tee Times y Shotgun y evita usar los últimos hoyos jugados por cada salida.
+- `TARJETA_18` se conserva por compatibilidad de configuración, aunque normalmente no rompe un empate del total.
+- `HOYO_POR_HOYO_HANDICAP` se conserva como método local configurable y compara puntos hoyo por hoyo según Stroke Index.
+- `MUERTE_SUBITA` y `SORTEO` continúan siendo pasos manuales.
+- Crea `evaluar_secuencia_desempate_stableford(...)` y `obtener_desempates_stableford_ronda(uuid)`.
+- Sólo evalúa Gross/Net cuando esa clasificación está habilitada para la categoría.
+- No modifica el motor de desempate Stroke Play.
+- La persistencia de resoluciones manuales Stableford y su aplicación final al leaderboard quedan para la siguiente fase.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
