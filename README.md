@@ -2025,6 +2025,17 @@ y no dejó cambios aplicados.
 - La respuesta incluye clasificaciones Gross/Net configuradas para la categoría, totales de puntos, detalle por hoyo y trazabilidad de la regla especial.
 - No modifica todavía leaderboard, desempates, acumulación multirronda ni estados excepcionales DQ/WD/NS/DNF/NO CARD.
 
+### Migración 186 Fase 1I — Resultados y leaderboard Stableford de ronda
+
+- Crea `obtener_resultados_stableford_oficiales_ronda(uuid)` y reutiliza el motor oficial por tarjeta de 1H.
+- Crea `obtener_leaderboard_stableford_ronda(uuid)` separado del leaderboard Stroke Play.
+- Gross y Net se ordenan por puntos descendentes: más puntos = mejor posición.
+- Cada categoría sólo participa en las clasificaciones Gross/Net congeladas que tenga habilitadas.
+- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` se conservan como outcomes terminales y no reciben ranking.
+- Los empates se detectan y se marcan `READY_FOR_TIEBREAK`; esta fase no inventa ni aplica aún un criterio de desempate.
+- No modifica las RPC históricas de resultados ni leaderboard Stroke Play.
+- La acumulación multirronda y el desempate Stableford quedan para fases posteriores.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
