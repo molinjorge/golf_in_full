@@ -1981,6 +1981,18 @@ y no dejó cambios aplicados.
 - Paneles y detalle de captura reconocen SCORE/PICKUP y los eventos nuevos registran tipos de resultado.
 - No modifica todavía tarjeta física, conciliación ni cálculo de puntos Stableford.
 
+### Migración 186 Fase 1E — Físico, conciliación y resolución SCORE/PICKUP
+
+- Crea `guardar_resultado_fisico_hoyo(...)` para capturar `SCORE` o `PICKUP` desde tarjeta física.
+- `PICKUP` físico sólo se admite en rondas Stableford; `guardar_score_fisico_hoyo(...)` se conserva como wrapper SCORE.
+- La conciliación compara `result_type + gross`: `SCORE 5 ↔ SCORE 5` y `PICKUP ↔ PICKUP` coinciden; `SCORE ↔ PICKUP` requiere revisión.
+- Crea `resolver_hoyo_conciliacion_resultado(...)` para resolver discrepancias a `SCORE` o `PICKUP`.
+- `resolver_hoyo_conciliacion_score(...)` permanece como wrapper histórico.
+- Los eventos físicos y de conciliación nuevos conservan tipos de resultado.
+- La finalización de conciliación detecta falta física por ausencia de fila, no por Gross nulo, evitando confundir PICKUP con hoyo faltante.
+- Las lecturas físicas y de resolución exponen los tipos de resultado.
+- No calcula todavía puntos Stableford ni modifica resultados/leaderboard.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
