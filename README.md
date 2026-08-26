@@ -2002,6 +2002,29 @@ y no dejó cambios aplicados.
 - Agrega inmutabilidad a `tournament_category_classification_snapshots` mediante `impedir_mutacion_snapshot_torneo()`.
 - No altera freezes históricos ni modifica scoring, tarjetas, conciliación o leaderboard.
 
+### Migración 186 Fase 1G — Reglas especiales Stableford
+
+- Crea `tournament_stableford_special_rules` para reglas especiales configurables por torneo.
+- La primera regla soportada es `HOLE_IN_ONE_OVERRIDE`.
+- La regla es opcional; si existe y está habilitada, sus puntos sustituyen el cálculo Stableford normal del hoyo.
+- El valor de puntos es configurable por torneo; por ejemplo, el torneo puede declarar Hole in One = 5 puntos.
+- Crea `tournament_stableford_special_rule_snapshots` y congela las reglas dentro de la misma transacción del freeze.
+- Las reglas vivas quedan protegidas después del freeze y los snapshots son inmutables.
+- No calcula todavía puntos Stableford; el motor consumirá exclusivamente el snapshot en la siguiente fase.
+
+### Migración 186 Fase 1H — Motor Stableford Gross/Net por hoyo
+
+- Crea `tournament_stableford_engine_snapshots` para congelar la versión `stableford_individual_v1`, la tabla `R21.1_STANDARD_V1`, target `PAR`, mínimo 0, máximo 6 y Pickup 0.
+- Crea `calcular_puntos_stableford_estandar(score, target)` como función pura y topa la escala estándar en 6 puntos.
+- Crea `obtener_resultado_oficial_universal_tarjeta(uuid)` como autoridad común de resultado oficial por hoyo: `SCORE` con Gross o `PICKUP` sin Gross.
+- Stableford deja de depender de la RPC Stroke Play `obtener_score_oficial_tarjeta()`, que sigue intacta.
+- Crea `obtener_resultado_stableford_oficial_tarjeta(uuid)` para calcular simultáneamente puntos Gross y Net por hoyo.
+- En Net, primero distribuye el Playing Handicap congelado con `calcular_golpes_handicap_hoyo()` y después calcula los puntos.
+- `PICKUP` siempre produce 0 puntos Gross y Net.
+- Si el snapshot contiene `HOLE_IN_ONE_OVERRIDE`, un Gross oficial de 1 sustituye los puntos normales por el valor configurado, tanto Gross como Net.
+- La respuesta incluye clasificaciones Gross/Net configuradas para la categoría, totales de puntos, detalle por hoyo y trazabilidad de la regla especial.
+- No modifica todavía leaderboard, desempates, acumulación multirronda ni estados excepcionales DQ/WD/NS/DNF/NO CARD.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
