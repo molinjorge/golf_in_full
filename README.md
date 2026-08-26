@@ -2063,6 +2063,17 @@ y no dejó cambios aplicados.
 - El resolver manual y el leaderboard Stroke Play permanecen intactos.
 - La acumulación de varias rondas Stableford queda para una fase posterior.
 
+### Migración 186 Fase 1L — Acumulación multirronda Stableford
+
+- Crea `obtener_resultados_stableford_torneo(uuid)` y acumula por `tournament_registration_id`, que es la identidad estable entre rondas.
+- Considera únicamente rondas congeladas con `scoring_engine = stableford` y `participation_type = individual`.
+- Gross/Net se suman sólo cuando la inscripción tiene resultado oficial en todas las rondas Stableford requeridas.
+- Los resultados parciales se conservan para diagnóstico, pero no generan un total oficial mientras falte una ronda.
+- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` permanecen como excepciones de la ronda; esta fase no les asigna automáticamente un efecto global de torneo.
+- Crea `obtener_leaderboard_stableford_torneo(uuid)` con ranking por categoría y puntos descendentes.
+- Detecta empates acumulados y deja el estado `READY_FOR_TIEBREAK`; no inventa todavía un criterio de desempate multirronda.
+- Las RPC Stableford por ronda permanecen intactas.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
