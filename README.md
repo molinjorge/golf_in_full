@@ -2087,6 +2087,21 @@ y no dejó cambios aplicados.
 - No implementa todavía persistencia de resolución manual multirronda.
 - Los motores Stableford por ronda y Stroke Play permanecen intactos.
 
+### Migración 186 Fase 1N — Resolución manual multirronda Stableford
+
+- No reutiliza de forma forzada `tournament_tiebreak_resolutions`, porque esa infraestructura exige `tournament_round_id` y participantes por `score_card_id`.
+- Crea infraestructura genérica de desempate acumulado de torneo: `tournament_aggregate_tiebreak_resolutions`, `tournament_aggregate_tiebreak_resolution_players` y `tournament_aggregate_tiebreak_resolution_events`.
+- La identidad de participantes es `tournament_registration_id`, consistente con la acumulación multirronda de 1L.
+- Las tablas nuevas tienen RLS; `anon` y `authenticated` no reciben acceso directo. La operación se realiza mediante RPC `SECURITY DEFINER`.
+- La bitácora acumulada es append-only/inmutable.
+- Crea `resolver_desempate_manual_stableford_torneo(...)`, validado contra `obtener_desempates_stableford_torneo(uuid)`.
+- Conserva los modos `CONFIGURED_MANUAL_METHOD` y `COMMITTEE_OVERRIDE`.
+- Crea `anular_resolucion_desempate_acumulado(...)` y `obtener_resoluciones_desempate_torneo(...)`.
+- `obtener_leaderboard_stableford_torneo(uuid)` integra desempates automáticos de 1M y resoluciones manuales acumuladas activas, y devuelve `baseRank`, `finalRank`, método y `resolutionId`.
+- El leaderboard sólo queda `READY_FOR_PUBLICATION` cuando no existen jugadores pendientes ni desempates acumulados pendientes.
+- Las resoluciones manuales por ronda Stableford y toda la infraestructura Stroke Play permanecen intactas.
+- La infraestructura acumulada es genérica mediante `scoring_engine`, por lo que puede reutilizarse posteriormente en otras modalidades multirronda.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
