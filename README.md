@@ -2050,6 +2050,19 @@ y no dejó cambios aplicados.
 - No modifica el motor de desempate Stroke Play.
 - La persistencia de resoluciones manuales Stableford y su aplicación final al leaderboard quedan para la siguiente fase.
 
+### Migración 186 Fase 1K — Resoluciones manuales y leaderboard final Stableford
+
+- Crea `resolver_desempate_manual_stableford_ronda(...)`, validado contra `obtener_desempates_stableford_ronda()`.
+- Reutiliza `tournament_tiebreak_resolutions`, `tournament_tiebreak_resolution_players` y `tournament_tiebreak_resolution_events`; no crea otra infraestructura de auditoría.
+- Conserva los modos `CONFIGURED_MANUAL_METHOD` y `COMMITTEE_OVERRIDE`.
+- La bitácora identifica la resolución como `scoringEngine = stableford` dentro del payload del evento.
+- `anular_resolucion_desempate_manual(...)` y `obtener_resoluciones_desempate_ronda(...)` siguen siendo comunes para ambas modalidades.
+- `obtener_leaderboard_stableford_ronda(...)` integra los desempates automáticos de 1J y las resoluciones manuales activas.
+- Para cada clasificación devuelve `baseRank`, `finalRank`, estado del desempate, método aplicado y `resolutionId` cuando la resolución es manual.
+- Un empate sin resolución mantiene el leaderboard en `READY_FOR_TIEBREAK`; sólo pasa a `READY_FOR_PUBLICATION` cuando no quedan jugadores pendientes ni empates pendientes.
+- El resolver manual y el leaderboard Stroke Play permanecen intactos.
+- La acumulación de varias rondas Stableford queda para una fase posterior.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
