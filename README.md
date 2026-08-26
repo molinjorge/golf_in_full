@@ -1920,6 +1920,7 @@ y no dejó cambios aplicados.
 - Shotgun no se modifica.
 
 | 185 Fase 1H | `185_FASE1H_PREVISUALIZACION_OFICIAL_TARJETAS.sql` | Agrega `previsualizar_tarjetas_score_ronda(uuid)`, una previsualización común para Shotgun y Tee Times basada exclusivamente en la validación formal y snapshots congelados. Replica la numeración/folio de `emitir_tarjetas_score_ronda` sin crear emisiones, tarjetas, QR ni captura digital. |
+| 186 Fase 1A | `186_FASE1A_CLASIFICACIONES_COMPETITIVAS_STABLEFORD.sql` | Inicia la base configurable de Stableford sin tocar scoring: crea clasificaciones oficiales Gross/Net por categoría, preserva Gross+Net como default para categorías existentes no congeladas y nuevas, bloquea cambios tras el freeze y congela una fotografía estructurada por categoría dentro del mismo proceso de congelamiento. |
 
 ### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
 
@@ -1933,6 +1934,18 @@ y no dejó cambios aplicados.
 - `officiallyIssued` permite distinguir si la ronda ya tiene una emisión activa.
 - La emisión oficial y el payload posterior a emisión permanecen intactos.
 - El preview legacy `obtener_preview_tarjetas_score_shotgun_individual(uuid)` permanece sin cambios porque pertenece a la etapa de preparación Shotgun, no a la preemisión oficial.
+
+### Migración 186 Fase 1A — Clasificaciones competitivas por categoría y snapshot Stableford
+
+- Crea `tournament_category_classifications` para definir por categoría las clasificaciones oficiales `gross`, `neto` o ambas.
+- Preserva el comportamiento vigente: todas las categorías existentes de torneos no congelados reciben Gross + Neto y las categorías nuevas nacen con ambas por default; el organizador puede quitar una antes del freeze.
+- Reutiliza `tipo_resultado_desempate` para mantener alineados ranking y reglas Gross/Net sin duplicar el dominio.
+- Protege la configuración con el mismo candado de congelamiento usado por otras condiciones deportivas.
+- Crea `tournament_category_classification_snapshots` como fotografía inmutable de categoría + clasificación.
+- Extiende `previsualizar_congelamiento_torneo(uuid)` mediante wrapper para impedir el freeze si alguna categoría queda sin clasificación.
+- Extiende `congelar_condiciones_y_handicaps_torneo(uuid)` mediante wrapper, preservando el core existente, para materializar los snapshots de clasificación en la misma transacción y agregar `categoryClassifications` al `conditions_snapshot`.
+- Los freezes nuevos pasan a `schema_version >= 2`; los históricos existentes no se modifican ni reciben backfill de esta configuración.
+- No calcula puntos Stableford, no modifica tarjetas/captura/conciliación/resultados/leaderboard y no habilita aún Stableford en el registro de motores.
 
 ## Cómo agregar una migración nueva
 
