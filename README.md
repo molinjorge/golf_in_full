@@ -2074,6 +2074,19 @@ y no dejó cambios aplicados.
 - Detecta empates acumulados y deja el estado `READY_FOR_TIEBREAK`; no inventa todavía un criterio de desempate multirronda.
 - Las RPC Stableford por ronda permanecen intactas.
 
+### Migración 186 Fase 1M — Desempate automático multirronda Stableford
+
+- Agrega `ULTIMA_RONDA` al catálogo común `tiebreak_methods`; no crea un catálogo paralelo.
+- Crea `calcular_clave_metodo_desempate_stableford_multirronda(...)`.
+- Para `ULTIMA_RONDA`, Gross compara puntos Gross de la última ronda y Net compara puntos Net de la última ronda; más puntos es mejor.
+- Si la secuencia continúa con `TARJETA_ULTIMOS_9`, `TARJETA_ULTIMOS_6`, `TARJETA_ULTIMOS_3` o `TARJETA_ULTIMO_HOYO`, esos métodos se evalúan sobre los hoyos de la última ronda.
+- Crea `evaluar_secuencia_desempate_stableford_multirronda(...)` y `obtener_desempates_stableford_torneo(uuid)`.
+- Reutiliza `tournament_tiebreak_rules`, incluyendo precedencia por categoría/alcance y Gross/Net.
+- `obtener_leaderboard_stableford_torneo(uuid)` aplica los desempates automáticos acumulados y devuelve `baseRank/finalRank`.
+- Si la secuencia llega a un método manual o no rompe el empate, el leaderboard permanece `READY_FOR_TIEBREAK`.
+- No implementa todavía persistencia de resolución manual multirronda.
+- Los motores Stableford por ronda y Stroke Play permanecen intactos.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
