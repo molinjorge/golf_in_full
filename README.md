@@ -1923,6 +1923,7 @@ y no dejó cambios aplicados.
 | 186 Fase 1A | `186_FASE1A_CLASIFICACIONES_COMPETITIVAS_STABLEFORD.sql` | Inicia la base configurable de Stableford sin tocar scoring: crea clasificaciones oficiales Gross/Net por categoría, preserva Gross+Net como default para categorías existentes no congeladas y nuevas, bloquea cambios tras el freeze y congela una fotografía estructurada por categoría dentro del mismo proceso de congelamiento. |
 | 186 Fase 1B | `186_FASE1B_STABLEFORD_MOTORES_SALIDA_COMUNES.sql` | Habilita Stableford Individual para Shotgun y Tee Times reutilizando los motores de preparación, handlers de validación, contrato común V2 y emisión oficial por inscripción. Generaliza únicamente guards que restringían las salidas a Stroke Play; todavía no agrega Pickup ni calcula puntos Stableford. |
 | 186 Fase 1C | `186_FASE1C_CONTRATO_RESULTADO_HOYO_SCORE_PICKUP.sql` | Introduce el contrato universal de resultado de hoyo en digital, físico y resolución: PENDING/SCORE/PICKUP. Hace backfill retrocompatible de datos históricos, permite Gross nulo únicamente cuando el resultado es PICKUP y extiende eventos para auditar el tipo de resultado. Todavía no habilita captura de PU desde las RPC. |
+| 186 Fase 1D | `186_FASE1D_CAPTURA_DIGITAL_SCORE_PICKUP.sql` | Habilita captura digital SCORE/PICKUP, mantiene wrappers históricos de SCORE, permite confirmar y disputar PU, restringe PICKUP a Stableford y cambia completitud/conteos para usar result_type en lugar de gross no nulo. |
 
 ### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
 
@@ -1968,6 +1969,17 @@ y no dejó cambios aplicados.
 - Extiende el esquema de eventos digitales, físicos y de conciliación para conservar el tipo de resultado además del Gross en eventos futuros; las bitácoras históricas permanecen intactas porque son append-only.
 - Hace backfill retrocompatible únicamente sobre tablas de estado mutables: resultados históricos existentes permanecen `SCORE`; filas digitales pendientes quedan `PENDING`; no se inventa ningún PICKUP histórico ni se reescriben bitácoras.
 - No habilita todavía captura de `PU` desde RPC/UI y no modifica cálculo de resultados ni leaderboard.
+
+### Migración 186 Fase 1D — Captura digital SCORE/PICKUP
+
+- Crea `registrar_resultado_hoyo(uuid, uuid, text, integer)` para registrar `SCORE` o `PICKUP`.
+- `PICKUP` sólo puede registrarse si la validación congelada de la tarjeta tiene `scoring_engine = stableford`.
+- Conserva `registrar_score_hoyo(...)` y `disputar_score_hoyo(...)` como wrappers compatibles con Stroke Play.
+- `confirmar_score_hoyo(...)` confirma tanto `SCORE` como `PICKUP`.
+- Crea `disputar_resultado_hoyo(...)` para reclamar un SCORE o PICKUP.
+- La sesión queda `captured` cuando no quedan hoyos `PENDING`; PU cuenta como hoyo resuelto.
+- Paneles y detalle de captura reconocen SCORE/PICKUP y los eventos nuevos registran tipos de resultado.
+- No modifica todavía tarjeta física, conciliación ni cálculo de puntos Stableford.
 
 ## Cómo agregar una migración nueva
 
