@@ -2124,6 +2124,17 @@ y no dejó cambios aplicados.
 - Si en el futuro existe una composición que mezcle Stableford con otro scoring engine o una participación Stableford no individual, el preview devuelve `UNSUPPORTED_TOURNAMENT_COMPOSITION` y no permite finalizar hasta diseñar explícitamente esa clasificación global.
 - Los outcomes excepcionales de ronda todavía no reciben una política global automática. Si provocan que el acumulado sea provisional, Stableford no podrá finalizar hasta resolver esa política en una fase posterior.
 
+### Migración 186 Fase 1Q — Política global de outcomes Stableford
+
+- Formaliza la política `ALL_ROUNDS_REQUIRED_V1`: todas las rondas Stableford activas del torneo cuentan para la clasificación acumulada.
+- Para ser elegible al ranking, una inscripción debe tener resultado oficial en todas las rondas y no presentar outcomes terminales.
+- `DQ`, `WD`, `DNF`, `DNS` y `NO_CARD` son terminales para el acumulado: el jugador deja de ser elegible al ranking, pero su participación queda competitivamente resuelta y ya no bloquea la finalización del torneo.
+- No se asignan cero puntos ni scores ficticios a una ronda con outcome terminal.
+- `obtener_resultados_stableford_torneo(uuid)` separa `competitionResolved` de `eligibleForRanking`, conserva `terminalOutcomes` con ronda/motivo y mantiene `ready` como compatibilidad para “elegible al ranking”.
+- `obtener_leaderboard_stableford_torneo(uuid)` sólo rankea jugadores elegibles, muestra terminales con `NOT_ELIGIBLE` y calcula `pendingPlayers` únicamente sobre participaciones realmente no resueltas.
+- `previsualizar_finalizacion_torneo(uuid)` de 1P hereda automáticamente esta semántica: un jugador terminal ya no impide que el leaderboard llegue a `READY_FOR_PUBLICATION`.
+- Esta política corresponde al modelo actual donde todas las rondas cuentan. Un futuro formato “mejores N de M rondas” deberá tener otra política/versionado, ya que una DQ de una ronda podría no eliminar al jugador del resultado global cuando esa ronda no sea necesaria para determinar el ganador.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
