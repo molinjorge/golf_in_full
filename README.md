@@ -1921,6 +1921,7 @@ y no dejó cambios aplicados.
 
 | 185 Fase 1H | `185_FASE1H_PREVISUALIZACION_OFICIAL_TARJETAS.sql` | Agrega `previsualizar_tarjetas_score_ronda(uuid)`, una previsualización común para Shotgun y Tee Times basada exclusivamente en la validación formal y snapshots congelados. Replica la numeración/folio de `emitir_tarjetas_score_ronda` sin crear emisiones, tarjetas, QR ni captura digital. |
 | 186 Fase 1A | `186_FASE1A_CLASIFICACIONES_COMPETITIVAS_STABLEFORD.sql` | Inicia la base configurable de Stableford sin tocar scoring: crea clasificaciones oficiales Gross/Net por categoría, preserva Gross+Net como default para categorías existentes no congeladas y nuevas, bloquea cambios tras el freeze y congela una fotografía estructurada por categoría dentro del mismo proceso de congelamiento. |
+| 186 Fase 1B | `186_FASE1B_STABLEFORD_MOTORES_SALIDA_COMUNES.sql` | Habilita Stableford Individual para Shotgun y Tee Times reutilizando los motores de preparación, handlers de validación, contrato común V2 y emisión oficial por inscripción. Generaliza únicamente guards que restringían las salidas a Stroke Play; todavía no agrega Pickup ni calcula puntos Stableford. |
 
 ### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
 
@@ -1946,6 +1947,16 @@ y no dejó cambios aplicados.
 - Extiende `congelar_condiciones_y_handicaps_torneo(uuid)` mediante wrapper, preservando el core existente, para materializar los snapshots de clasificación en la misma transacción y agregar `categoryClassifications` al `conditions_snapshot`.
 - Los freezes nuevos pasan a `schema_version >= 2`; los históricos existentes no se modifican ni reciben backfill de esta configuración.
 - No calcula puntos Stableford, no modifica tarjetas/captura/conciliación/resultados/leaderboard y no habilita aún Stableford en el registro de motores.
+
+### Migración 186 Fase 1B — Stableford Individual en motores comunes de salida
+
+- Registra `stableford + individual + shotgun` y `stableford + individual + tee_times` en `tournament_start_engine_registry`.
+- Reutiliza `shotgun_v1`, `tee_times_v1`, los handlers comunes de validación y `official_scorecard_registration_v1`; no crea un pipeline paralelo.
+- Generaliza los guards internos de Shotgun y Tee Times para aceptar `stroke` o `stableford` cuando la participación es individual.
+- Los contratos de salida V2 reportan dinámicamente `stableford_individual_shotgun_v1` o `stableford_individual_tee_times_v1` según el snapshot congelado.
+- Mantiene intactos los registros y comportamiento de Stroke Play.
+- No modifica tarjetas, captura, conciliación, resultados, leaderboard, desempates ni cálculo de puntos.
+- Pickup y el contrato universal de resultado de hoyo se implementan en una fase posterior.
 
 ## Cómo agregar una migración nueva
 
