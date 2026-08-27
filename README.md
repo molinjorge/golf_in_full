@@ -1996,6 +1996,23 @@ y no dejó cambios aplicados.
 - No se modifican motores Stroke Play, Stableford, Shotgun, Tee Times, captura, conciliación, desempates ni cierres.
 - No se escriben datos.
 
+| 188 Fase 1 | `188_FASE1_ASISTENTE_OPERATIVO_GATE_STABLEFORD_ACUMULADO.sql` | Alinea el Asistente Operativo con la finalización Stableford multirronda: consulta `previsualizar_finalizacion_torneo`, no recomienda finalizar con acumulado `PROVISIONAL` o `READY_FOR_TIEBREAK`, sólo habilita la recomendación cuando el preview formal está listo y conserva Stroke Play sin duplicar reglas. El contrato sube a `schemaVersion = 3`. |
+
+### Migración 188 Fase 1 — Gate acumulado Stableford en el Asistente Operativo
+
+- Corrige la desalineación entre el Asistente Operativo y la autoridad formal de finalización del torneo.
+- Conserva 187 Fase 1A-1 como core interno y mantiene estable la RPC pública `obtener_asistente_operativo_torneo(uuid)`.
+- Cuando todas las rondas están formalmente cerradas, consulta `previsualizar_finalizacion_torneo(uuid)`, la misma autoridad que consume `finalizar_torneo(uuid,text)`.
+- Stableford Individual multirronda: `PROVISIONAL` dirige a revisar el acumulado; `READY_FOR_TIEBREAK` dirige a resolver desempates acumulados; sólo un preview con `readyToFinalize=true` permite recomendar la finalización formal.
+- Una composición `MIXED_OR_UNSUPPORTED` permanece fail-closed.
+- La acción de finalización se reserva a Organizador asignado o Superadmin.
+- Stroke Play conserva la semántica previa.
+- El contrato sube a `schemaVersion = 3` y agrega `tournamentCompetition` con evidencia resumida del gate acumulado.
+- Se recalculan `blockers`, `summary.blockingIssues` y `nextAction` después de ajustar el paso de finalización para mantener coherencia interna del contrato.
+- No modifica scores, puntos, snapshots, desempates, cierres, finalizaciones ni datos.
+- No duplica reglas deportivas: sólo orquesta el preview formal existente.
+
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
