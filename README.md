@@ -2117,3 +2117,12 @@ y no dejó cambios aplicados.
 - Eliminar la función huérfana `validar_cupo_categoria()` (sin `cruzado`) — no tiene ningún trigger enganchado (confirmado revisando `pg_trigger`), quedó reemplazada por `validar_cupo_categoria_cruzado()` (089) pero nunca se borró. No representa riesgo funcional, solo confusión para quien revise el catálogo de funciones. Detectado durante la prueba 4 (cupos), agosto 2026.
 - Agregar más ciudades a `cities` conforme se registren clubes en localidades nuevas (vía dashboard de superadmin)
 - Configurar SMTP personalizado en Supabase (Authentication → SMTP Settings) antes de lanzar con jugadores reales — el correo interno de Supabase tiene un límite de envíos muy bajo, solo sirve para pruebas
+
+
+### Migración 191 Fase 1 — Asistente: dependencias operativas y acciones disponibles
+
+**Archivo:** `191_FASE1_ASISTENTE_DEPENDENCIAS_OPERATIVAS.sql`
+
+Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **schemaVersion 5** sin alterar los estados de negocio existentes. Añade `availability.actionable/state/waitingFor` por paso, elimina CTAs de etapas futuras cuyos prerequisitos aún no se cumplen y recalcula `nextAction` y `blockers` usando únicamente pasos actualmente accionables. Así, por ejemplo, con inscripciones pendientes no se recomienda revisar salidas, tarjetas, captura o finalización. Las dependencias posteriores al freeze se mantienen por ronda para no forzar una secuencia artificial entre rondas distintas.
+
+**Verificación:** `VERIFICAR_191_FASE1_ASISTENTE_DEPENDENCIAS_OPERATIVAS.sql`.
