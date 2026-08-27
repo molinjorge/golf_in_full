@@ -2031,6 +2031,18 @@ y no dejó cambios aplicados.
 - Esta migración desbloquea la implementación frontend de Stableford UI Fase 10A.
 
 
+| 189 Fase 1A | `189_FASE1A_CORRECCION_PRIVILEGIOS_RPC_HIO_STABLEFORD.sql` | Corrige los privilegios de las RPC HIO: revoca `EXECUTE` explícitamente a `anon` (las default privileges del esquema se lo habían concedido al crear las funciones), preserva `authenticated/service_role` y no modifica lógica, datos, RLS ni snapshots. |
+
+### Migración 189 Fase 1A — Corrección de privilegios RPC HIO Stableford
+
+- Corrige la única desviación detectada por el verificador de 189 Fase 1: ambas RPC heredaron `EXECUTE` para `anon` desde las default privileges del esquema `public`.
+- Revoca `EXECUTE` explícitamente a `anon` y mantiene revocado `PUBLIC`.
+- Conserva `EXECUTE` para `authenticated` y `service_role`.
+- No recrea funciones ni cambia su contrato, `SECURITY DEFINER`, validaciones de rol o freeze.
+- No modifica tablas, políticas RLS, datos, snapshots, cálculo Stableford, leaderboard, desempates, cierre, finalización ni Asistente.
+- Tras esta corrección, la UI 10A puede consumir las RPC exclusivamente mediante sesión autenticada.
+
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
