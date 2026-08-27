@@ -2155,3 +2155,18 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_192_FASE1_LEADERBOARD_OPERATIVO_AGNOSTICO.sql`.
 
+| 192 Fase 1A | `192_FASE1A_CORRECCION_ALIAS_STROKE_CIERRE_RESULTADOS.sql` | Corrige `validar_cierre_resultados_ronda(uuid)` para aceptar `scoring_engine = stroke` y `stroke_play` como equivalentes en Stroke Play individual. No cambia Stableford ni la lógica competitiva. |
+
+### Migración 192 Fase 1A — Corrección de alias Stroke en cierre de resultados
+
+- Corrige una inconsistencia de nomenclatura detectada durante la prueba del preview preliminar.
+- Algunos snapshots reales almacenan `scoring_engine = 'stroke'`, mientras `validar_cierre_resultados_ronda(uuid)` sólo reconocía `stroke_play`.
+- Stroke Play individual acepta ahora ambos aliases: `stroke` y `stroke_play`.
+- Stroke continúa utilizando `obtener_resultados_oficiales_ronda(uuid)`.
+- Stableford individual permanece exactamente en su rama existente mediante `obtener_resultados_stableford_oficiales_ronda(uuid)`.
+- Los outcomes terminales `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` no cambian.
+- Motores/modalidades sin soporte siguen fallando explícitamente; no se agregan fallbacks.
+- No modifica snapshots existentes ni ningún dato histórico.
+
+**Verificación:** `VERIFICAR_192_FASE1A_CORRECCION_ALIAS_STROKE_CIERRE_RESULTADOS.sql`.
+
