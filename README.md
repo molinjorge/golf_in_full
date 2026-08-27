@@ -1920,10 +1920,6 @@ y no dejó cambios aplicados.
 - Shotgun no se modifica.
 
 | 185 Fase 1H | `185_FASE1H_PREVISUALIZACION_OFICIAL_TARJETAS.sql` | Agrega `previsualizar_tarjetas_score_ronda(uuid)`, una previsualización común para Shotgun y Tee Times basada exclusivamente en la validación formal y snapshots congelados. Replica la numeración/folio de `emitir_tarjetas_score_ronda` sin crear emisiones, tarjetas, QR ni captura digital. |
-| 186 Fase 1A | `186_FASE1A_CLASIFICACIONES_COMPETITIVAS_STABLEFORD.sql` | Inicia la base configurable de Stableford sin tocar scoring: crea clasificaciones oficiales Gross/Net por categoría, preserva Gross+Net como default para categorías existentes no congeladas y nuevas, bloquea cambios tras el freeze y congela una fotografía estructurada por categoría dentro del mismo proceso de congelamiento. |
-| 186 Fase 1B | `186_FASE1B_STABLEFORD_MOTORES_SALIDA_COMUNES.sql` | Habilita Stableford Individual para Shotgun y Tee Times reutilizando los motores de preparación, handlers de validación, contrato común V2 y emisión oficial por inscripción. Generaliza únicamente guards que restringían las salidas a Stroke Play; todavía no agrega Pickup ni calcula puntos Stableford. |
-| 186 Fase 1C | `186_FASE1C_CONTRATO_RESULTADO_HOYO_SCORE_PICKUP.sql` | Introduce el contrato universal de resultado de hoyo en digital, físico y resolución: PENDING/SCORE/PICKUP. Hace backfill retrocompatible de datos históricos, permite Gross nulo únicamente cuando el resultado es PICKUP y extiende eventos para auditar el tipo de resultado. Todavía no habilita captura de PU desde las RPC. |
-| 186 Fase 1D | `186_FASE1D_CAPTURA_DIGITAL_SCORE_PICKUP.sql` | Habilita captura digital SCORE/PICKUP, mantiene wrappers históricos de SCORE, permite confirmar y disputar PU, restringe PICKUP a Stableford y cambia completitud/conteos para usar result_type en lugar de gross no nulo. |
 
 ### Migración 185 Fase 1H — Previsualización oficial de tarjetas antes de emisión
 
@@ -1938,202 +1934,24 @@ y no dejó cambios aplicados.
 - La emisión oficial y el payload posterior a emisión permanecen intactos.
 - El preview legacy `obtener_preview_tarjetas_score_shotgun_individual(uuid)` permanece sin cambios porque pertenece a la etapa de preparación Shotgun, no a la preemisión oficial.
 
-### Migración 186 Fase 1A — Clasificaciones competitivas por categoría y snapshot Stableford
 
-- Crea `tournament_category_classifications` para definir por categoría las clasificaciones oficiales `gross`, `neto` o ambas.
-- Preserva el comportamiento vigente: todas las categorías existentes de torneos no congelados reciben Gross + Neto y las categorías nuevas nacen con ambas por default; el organizador puede quitar una antes del freeze.
-- Reutiliza `tipo_resultado_desempate` para mantener alineados ranking y reglas Gross/Net sin duplicar el dominio.
-- Protege la configuración con el mismo candado de congelamiento usado por otras condiciones deportivas.
-- Crea `tournament_category_classification_snapshots` como fotografía inmutable de categoría + clasificación.
-- Extiende `previsualizar_congelamiento_torneo(uuid)` mediante wrapper para impedir el freeze si alguna categoría queda sin clasificación.
-- Extiende `congelar_condiciones_y_handicaps_torneo(uuid)` mediante wrapper, preservando el core existente, para materializar los snapshots de clasificación en la misma transacción y agregar `categoryClassifications` al `conditions_snapshot`.
-- Las clasificaciones se conservan en `tournament_category_classification_snapshots`; la fila principal de `tournament_condition_freezes` permanece inmutable y los freezes históricos no se modifican.
-- No calcula puntos Stableford, no modifica tarjetas/captura/conciliación/resultados/leaderboard y no habilita aún Stableford en el registro de motores.
+| 186 | `186_CORREGIR_FORMAT_VALIDACION_CONFIGURACION.sql` | Corrige tres placeholders inválidos de `format()` en `validar_configuracion_minima_torneo(uuid)`: sustituye `%` por `%s` en los mensajes de rondas activas, categorías sin cupo y suma de cupos. No modifica ninguna regla funcional de configuración ni la RPC `finalizar_configuracion_torneo(uuid)`. |
 
-### Migración 186 Fase 1B — Stableford Individual en motores comunes de salida
+### Migración 186 — Corrección de `format()` en validación de configuración del torneo
 
-- Registra `stableford + individual + shotgun` y `stableford + individual + tee_times` en `tournament_start_engine_registry`.
-- Reutiliza `shotgun_v1`, `tee_times_v1`, los handlers comunes de validación y `official_scorecard_registration_v1`; no crea un pipeline paralelo.
-- Generaliza los guards internos de Shotgun y Tee Times para aceptar `stroke` o `stableford` cuando la participación es individual.
-- Los contratos de salida V2 reportan dinámicamente `stableford_individual_shotgun_v1` o `stableford_individual_tee_times_v1` según el snapshot congelado.
-- Mantiene intactos los registros y comportamiento de Stroke Play.
-- No modifica tarjetas, captura, conciliación, resultados, leaderboard, desempates ni cálculo de puntos.
-- Pickup y el contrato universal de resultado de hoyo se implementan en una fase posterior.
+- Corrige un error detectado al intentar confirmar la configuración de `POLLA AGOSTO VERSION 2`: PostgreSQL devolvía `unrecognized format() type specifier`.
+- La causa estaba en `validar_configuracion_minima_torneo(uuid)`, que utilizaba `%` como placeholder genérico dentro de tres llamadas a `format()`.
+- PostgreSQL exige especificadores válidos como `%s`; por ello se corrigen exclusivamente los tres mensajes afectados:
+  - cantidad esperada/actual de rondas activas;
+  - cantidad de categorías sin cupo válido;
+  - comparación entre suma de cupos de categorías y cupo máximo del torneo.
+- No cambia ninguna condición de validación ni ningún cálculo.
+- `finalizar_configuracion_torneo(uuid)` permanece intacta.
+- `SECURITY DEFINER`, `STABLE` y el `search_path` seguro de la función se preservan.
+- La verificación posterior confirmó que los tres `format()` quedaron corregidos y que la función vuelve a ejecutar normalmente.
+- Tras la corrección, `POLLA AGOSTO VERSION 2` dejó de mostrar el error técnico y expuso correctamente sus validaciones reales de configuración: categorías sin cupo válido y suma de cupos distinta al cupo máximo del torneo.
+- Esta migración no modifica categorías, cupos, rondas, reglas de desempate, inscripciones, congelamiento, salidas, tarjetas ni resultados.
 
-### Migración 186 Fase 1C — Contrato universal de resultado de hoyo
-
-- Agrega `result_type` (`PENDING`, `SCORE`, `PICKUP`) a la evidencia digital.
-- Agrega `player_claimed_result_type` para que una disputa futura pueda reclamar SCORE o PICKUP.
-- Agrega `physical_result_type` a la captura física y permite `physical_gross_score = NULL` sólo cuando el resultado es `PICKUP`.
-- Agrega snapshots de tipo de resultado y `resolved_result_type` a la resolución de conciliación; `resolved_gross_score` puede ser `NULL` sólo para `PICKUP`.
-- Extiende el esquema de eventos digitales, físicos y de conciliación para conservar el tipo de resultado además del Gross en eventos futuros; las bitácoras históricas permanecen intactas porque son append-only.
-- Hace backfill retrocompatible únicamente sobre tablas de estado mutables: resultados históricos existentes permanecen `SCORE`; filas digitales pendientes quedan `PENDING`; no se inventa ningún PICKUP histórico ni se reescriben bitácoras.
-- No habilita todavía captura de `PU` desde RPC/UI y no modifica cálculo de resultados ni leaderboard.
-
-### Migración 186 Fase 1D — Captura digital SCORE/PICKUP
-
-- Crea `registrar_resultado_hoyo(uuid, uuid, text, integer)` para registrar `SCORE` o `PICKUP`.
-- `PICKUP` sólo puede registrarse si la validación congelada de la tarjeta tiene `scoring_engine = stableford`.
-- Conserva `registrar_score_hoyo(...)` y `disputar_score_hoyo(...)` como wrappers compatibles con Stroke Play.
-- `confirmar_score_hoyo(...)` confirma tanto `SCORE` como `PICKUP`.
-- Crea `disputar_resultado_hoyo(...)` para reclamar un SCORE o PICKUP.
-- La sesión queda `captured` cuando no quedan hoyos `PENDING`; PU cuenta como hoyo resuelto.
-- Paneles y detalle de captura reconocen SCORE/PICKUP y los eventos nuevos registran tipos de resultado.
-- No modifica todavía tarjeta física, conciliación ni cálculo de puntos Stableford.
-
-### Migración 186 Fase 1E — Físico, conciliación y resolución SCORE/PICKUP
-
-- Crea `guardar_resultado_fisico_hoyo(...)` para capturar `SCORE` o `PICKUP` desde tarjeta física.
-- `PICKUP` físico sólo se admite en rondas Stableford; `guardar_score_fisico_hoyo(...)` se conserva como wrapper SCORE.
-- La conciliación compara `result_type + gross`: `SCORE 5 ↔ SCORE 5` y `PICKUP ↔ PICKUP` coinciden; `SCORE ↔ PICKUP` requiere revisión.
-- Crea `resolver_hoyo_conciliacion_resultado(...)` para resolver discrepancias a `SCORE` o `PICKUP`.
-- `resolver_hoyo_conciliacion_score(...)` permanece como wrapper histórico.
-- Los eventos físicos y de conciliación nuevos conservan tipos de resultado.
-- La finalización de conciliación detecta falta física por ausencia de fila, no por Gross nulo, evitando confundir PICKUP con hoyo faltante.
-- Las lecturas físicas y de resolución exponen los tipos de resultado.
-- No calcula todavía puntos Stableford ni modifica resultados/leaderboard.
-
-### Migración 186 Fase 1F — Corrección de inmutabilidad del freeze
-
-- Corrige una incompatibilidad detectada en el wrapper creado en 186 Fase 1A: `tournament_condition_freezes` es inmutable y no puede recibir un `UPDATE` después de ser creado.
-- Mantiene `tournament_category_classification_snapshots` como autoridad histórica estructurada de las clasificaciones Gross/Net congeladas.
-- El wrapper de `congelar_condiciones_y_handicaps_torneo(uuid)` ya no modifica la fila principal del freeze después del core.
-- Conserva la validación que revierte el congelamiento si el snapshot de clasificaciones queda incompleto.
-- Agrega inmutabilidad a `tournament_category_classification_snapshots` mediante `impedir_mutacion_snapshot_torneo()`.
-- No altera freezes históricos ni modifica scoring, tarjetas, conciliación o leaderboard.
-
-### Migración 186 Fase 1G — Reglas especiales Stableford
-
-- Crea `tournament_stableford_special_rules` para reglas especiales configurables por torneo.
-- La primera regla soportada es `HOLE_IN_ONE_OVERRIDE`.
-- La regla es opcional; si existe y está habilitada, sus puntos sustituyen el cálculo Stableford normal del hoyo.
-- El valor de puntos es configurable por torneo; por ejemplo, el torneo puede declarar Hole in One = 5 puntos.
-- Crea `tournament_stableford_special_rule_snapshots` y congela las reglas dentro de la misma transacción del freeze.
-- Las reglas vivas quedan protegidas después del freeze y los snapshots son inmutables.
-- No calcula todavía puntos Stableford; el motor consumirá exclusivamente el snapshot en la siguiente fase.
-
-### Migración 186 Fase 1H — Motor Stableford Gross/Net por hoyo
-
-- Crea `tournament_stableford_engine_snapshots` para congelar la versión `stableford_individual_v1`, la tabla `R21.1_STANDARD_V1`, target `PAR`, mínimo 0, máximo 6 y Pickup 0.
-- Crea `calcular_puntos_stableford_estandar(score, target)` como función pura y topa la escala estándar en 6 puntos.
-- Crea `obtener_resultado_oficial_universal_tarjeta(uuid)` como autoridad común de resultado oficial por hoyo: `SCORE` con Gross o `PICKUP` sin Gross.
-- Stableford deja de depender de la RPC Stroke Play `obtener_score_oficial_tarjeta()`, que sigue intacta.
-- Crea `obtener_resultado_stableford_oficial_tarjeta(uuid)` para calcular simultáneamente puntos Gross y Net por hoyo.
-- En Net, primero distribuye el Playing Handicap congelado con `calcular_golpes_handicap_hoyo()` y después calcula los puntos.
-- `PICKUP` siempre produce 0 puntos Gross y Net.
-- Si el snapshot contiene `HOLE_IN_ONE_OVERRIDE`, un Gross oficial de 1 sustituye los puntos normales por el valor configurado, tanto Gross como Net.
-- La respuesta incluye clasificaciones Gross/Net configuradas para la categoría, totales de puntos, detalle por hoyo y trazabilidad de la regla especial.
-- No modifica todavía leaderboard, desempates, acumulación multirronda ni estados excepcionales DQ/WD/NS/DNF/NO CARD.
-
-### Migración 186 Fase 1I — Resultados y leaderboard Stableford de ronda
-
-- Crea `obtener_resultados_stableford_oficiales_ronda(uuid)` y reutiliza el motor oficial por tarjeta de 1H.
-- Crea `obtener_leaderboard_stableford_ronda(uuid)` separado del leaderboard Stroke Play.
-- Gross y Net se ordenan por puntos descendentes: más puntos = mejor posición.
-- Cada categoría sólo participa en las clasificaciones Gross/Net congeladas que tenga habilitadas.
-- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` se conservan como outcomes terminales y no reciben ranking.
-- Los empates se detectan y se marcan `READY_FOR_TIEBREAK`; esta fase no inventa ni aplica aún un criterio de desempate.
-- No modifica las RPC históricas de resultados ni leaderboard Stroke Play.
-- La acumulación multirronda y el desempate Stableford quedan para fases posteriores.
-
-### Migración 186 Fase 1J — Desempates automáticos Stableford
-
-- Reutiliza `tournament_tiebreak_rules`, `tiebreak_methods`, alcance y tipo de resultado; no crea un catálogo paralelo.
-- Crea `calcular_clave_metodo_desempate_stableford(...)`, que trabaja con `grossPoints` o `netPoints`.
-- En Stableford más puntos es mejor; las claves se normalizan para mantener comparación lexicográfica determinista.
-- Para countback usa los hoyos del campo 10–18, 13–18, 16–18 y 18. Esto es consistente entre Tee Times y Shotgun y evita usar los últimos hoyos jugados por cada salida.
-- `TARJETA_18` se conserva por compatibilidad de configuración, aunque normalmente no rompe un empate del total.
-- `HOYO_POR_HOYO_HANDICAP` se conserva como método local configurable y compara puntos hoyo por hoyo según Stroke Index.
-- `MUERTE_SUBITA` y `SORTEO` continúan siendo pasos manuales.
-- Crea `evaluar_secuencia_desempate_stableford(...)` y `obtener_desempates_stableford_ronda(uuid)`.
-- Sólo evalúa Gross/Net cuando esa clasificación está habilitada para la categoría.
-- No modifica el motor de desempate Stroke Play.
-- La persistencia de resoluciones manuales Stableford y su aplicación final al leaderboard quedan para la siguiente fase.
-
-### Migración 186 Fase 1K — Resoluciones manuales y leaderboard final Stableford
-
-- Crea `resolver_desempate_manual_stableford_ronda(...)`, validado contra `obtener_desempates_stableford_ronda()`.
-- Reutiliza `tournament_tiebreak_resolutions`, `tournament_tiebreak_resolution_players` y `tournament_tiebreak_resolution_events`; no crea otra infraestructura de auditoría.
-- Conserva los modos `CONFIGURED_MANUAL_METHOD` y `COMMITTEE_OVERRIDE`.
-- La bitácora identifica la resolución como `scoringEngine = stableford` dentro del payload del evento.
-- `anular_resolucion_desempate_manual(...)` y `obtener_resoluciones_desempate_ronda(...)` siguen siendo comunes para ambas modalidades.
-- `obtener_leaderboard_stableford_ronda(...)` integra los desempates automáticos de 1J y las resoluciones manuales activas.
-- Para cada clasificación devuelve `baseRank`, `finalRank`, estado del desempate, método aplicado y `resolutionId` cuando la resolución es manual.
-- Un empate sin resolución mantiene el leaderboard en `READY_FOR_TIEBREAK`; sólo pasa a `READY_FOR_PUBLICATION` cuando no quedan jugadores pendientes ni empates pendientes.
-- El resolver manual y el leaderboard Stroke Play permanecen intactos.
-- La acumulación de varias rondas Stableford queda para una fase posterior.
-
-### Migración 186 Fase 1L — Acumulación multirronda Stableford
-
-- Crea `obtener_resultados_stableford_torneo(uuid)` y acumula por `tournament_registration_id`, que es la identidad estable entre rondas.
-- Considera únicamente rondas congeladas con `scoring_engine = stableford` y `participation_type = individual`.
-- Gross/Net se suman sólo cuando la inscripción tiene resultado oficial en todas las rondas Stableford requeridas.
-- Los resultados parciales se conservan para diagnóstico, pero no generan un total oficial mientras falte una ronda.
-- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` permanecen como excepciones de la ronda; esta fase no les asigna automáticamente un efecto global de torneo.
-- Crea `obtener_leaderboard_stableford_torneo(uuid)` con ranking por categoría y puntos descendentes.
-- Detecta empates acumulados y deja el estado `READY_FOR_TIEBREAK`; no inventa todavía un criterio de desempate multirronda.
-- Las RPC Stableford por ronda permanecen intactas.
-
-### Migración 186 Fase 1M — Desempate automático multirronda Stableford
-
-- Agrega `ULTIMA_RONDA` al catálogo común `tiebreak_methods`; no crea un catálogo paralelo.
-- Crea `calcular_clave_metodo_desempate_stableford_multirronda(...)`.
-- Para `ULTIMA_RONDA`, Gross compara puntos Gross de la última ronda y Net compara puntos Net de la última ronda; más puntos es mejor.
-- Si la secuencia continúa con `TARJETA_ULTIMOS_9`, `TARJETA_ULTIMOS_6`, `TARJETA_ULTIMOS_3` o `TARJETA_ULTIMO_HOYO`, esos métodos se evalúan sobre los hoyos de la última ronda.
-- Crea `evaluar_secuencia_desempate_stableford_multirronda(...)` y `obtener_desempates_stableford_torneo(uuid)`.
-- Reutiliza `tournament_tiebreak_rules`, incluyendo precedencia por categoría/alcance y Gross/Net.
-- `obtener_leaderboard_stableford_torneo(uuid)` aplica los desempates automáticos acumulados y devuelve `baseRank/finalRank`.
-- Si la secuencia llega a un método manual o no rompe el empate, el leaderboard permanece `READY_FOR_TIEBREAK`.
-- No implementa todavía persistencia de resolución manual multirronda.
-- Los motores Stableford por ronda y Stroke Play permanecen intactos.
-
-### Migración 186 Fase 1N — Resolución manual multirronda Stableford
-
-- No reutiliza de forma forzada `tournament_tiebreak_resolutions`, porque esa infraestructura exige `tournament_round_id` y participantes por `score_card_id`.
-- Crea infraestructura genérica de desempate acumulado de torneo: `tournament_aggregate_tiebreak_resolutions`, `tournament_aggregate_tiebreak_resolution_players` y `tournament_aggregate_tiebreak_resolution_events`.
-- La identidad de participantes es `tournament_registration_id`, consistente con la acumulación multirronda de 1L.
-- Las tablas nuevas tienen RLS; `anon` y `authenticated` no reciben acceso directo. La operación se realiza mediante RPC `SECURITY DEFINER`.
-- La bitácora acumulada es append-only/inmutable.
-- Crea `resolver_desempate_manual_stableford_torneo(...)`, validado contra `obtener_desempates_stableford_torneo(uuid)`.
-- Conserva los modos `CONFIGURED_MANUAL_METHOD` y `COMMITTEE_OVERRIDE`.
-- Crea `anular_resolucion_desempate_acumulado(...)` y `obtener_resoluciones_desempate_torneo(...)`.
-- `obtener_leaderboard_stableford_torneo(uuid)` integra desempates automáticos de 1M y resoluciones manuales acumuladas activas, y devuelve `baseRank`, `finalRank`, método y `resolutionId`.
-- El leaderboard sólo queda `READY_FOR_PUBLICATION` cuando no existen jugadores pendientes ni desempates acumulados pendientes.
-- Las resoluciones manuales por ronda Stableford y toda la infraestructura Stroke Play permanecen intactas.
-- La infraestructura acumulada es genérica mediante `scoring_engine`, por lo que puede reutilizarse posteriormente en otras modalidades multirronda.
-
-### Migración 186 Fase 1O — Cierre competitivo de ronda agnóstico
-
-- Corrige una dependencia circular potencial: `obtener_desempates_stableford_ronda()` ya no llama al leaderboard Stableford; el leaderboard puede consumir el motor de desempates sin recursión.
-- `validar_cierre_resultados_ronda(uuid)` detecta `scoring_engine` y `participation_type` desde `tournament_round_condition_snapshots`.
-- Para Stroke Play conserva `obtener_resultados_oficiales_ronda(uuid)`; para Stableford Individual usa `obtener_resultados_stableford_oficiales_ronda(uuid)`.
-- `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` siguen resolviendo competitivamente una tarjeta para permitir el cierre de la ronda, sin alterar todavía su efecto global multirronda.
-- `obtener_estado_cierre_competitivo_ronda(uuid)` selecciona también el motor de desempates correcto según scoring engine.
-- La capa común normaliza `tiedTotal` de Stroke Play y `tiedPoints` de Stableford para reutilizar la misma infraestructura de cierre y resoluciones manuales.
-- `cerrar_ronda_competitiva(uuid,text)` no se duplica: continúa consumiendo el estado competitivo común y sólo permite cerrar cuando tarjetas y desempates están resueltos.
-- La finalización global del torneo todavía no cambia en esta fase; se abordará después de verificar 1O.
-
-### Migración 186 Fase 1P — Finalización global Stableford
-
-- Amplía `previsualizar_finalizacion_torneo(uuid)` a `schemaVersion = 2`.
-- Conserva el requisito histórico de que todas las rondas activas estén cerradas competitivamente.
-- Si todas las rondas activas congeladas son Stableford Individual, exige además que `obtener_leaderboard_stableford_torneo(uuid)` esté en `READY_FOR_PUBLICATION`.
-- El preview incorpora `aggregateCompetition`, incluyendo el leaderboard acumulado que justificará la finalización; ese preview queda posteriormente dentro de `tournament_competitive_finalizations.finalization_snapshot`.
-- `finalizar_torneo(uuid,text)` no se duplica ni reescribe: ya consume `readyToFinalize` del preview.
-- Para torneos sin Stableford se conserva el comportamiento histórico: la finalización depende de los cierres competitivos de ronda.
-- Si en el futuro existe una composición que mezcle Stableford con otro scoring engine o una participación Stableford no individual, el preview devuelve `UNSUPPORTED_TOURNAMENT_COMPOSITION` y no permite finalizar hasta diseñar explícitamente esa clasificación global.
-- Los outcomes excepcionales de ronda todavía no reciben una política global automática. Si provocan que el acumulado sea provisional, Stableford no podrá finalizar hasta resolver esa política en una fase posterior.
-
-### Migración 186 Fase 1Q — Política global de outcomes Stableford
-
-- Formaliza la política `ALL_ROUNDS_REQUIRED_V1`: todas las rondas Stableford activas del torneo cuentan para la clasificación acumulada.
-- Para ser elegible al ranking, una inscripción debe tener resultado oficial en todas las rondas y no presentar outcomes terminales.
-- `DQ`, `WD`, `DNF`, `DNS` y `NO_CARD` son terminales para el acumulado: el jugador deja de ser elegible al ranking, pero su participación queda competitivamente resuelta y ya no bloquea la finalización del torneo.
-- No se asignan cero puntos ni scores ficticios a una ronda con outcome terminal.
-- `obtener_resultados_stableford_torneo(uuid)` separa `competitionResolved` de `eligibleForRanking`, conserva `terminalOutcomes` con ronda/motivo y mantiene `ready` como compatibilidad para “elegible al ranking”.
-- `obtener_leaderboard_stableford_torneo(uuid)` sólo rankea jugadores elegibles, muestra terminales con `NOT_ELIGIBLE` y calcula `pendingPlayers` únicamente sobre participaciones realmente no resueltas.
-- `previsualizar_finalizacion_torneo(uuid)` de 1P hereda automáticamente esta semántica: un jugador terminal ya no impide que el leaderboard llegue a `READY_FOR_PUBLICATION`.
-- Esta política corresponde al modelo actual donde todas las rondas cuentan. Un futuro formato “mejores N de M rondas” deberá tener otra política/versionado, ya que una DQ de una ronda podría no eliminar al jugador del resultado global cuando esa ronda no sea necesaria para determinar el ganador.
 
 ## Cómo agregar una migración nueva
 
