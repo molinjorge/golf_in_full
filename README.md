@@ -2043,6 +2043,21 @@ y no dejó cambios aplicados.
 - Tras esta corrección, la UI 10A puede consumir las RPC exclusivamente mediante sesión autenticada.
 
 
+
+| 190 Fase 1 | `190_FASE1_ASISTENTE_MODALIDAD_CONFIGURADA.sql` | Asistente Operativo v4: agrega `configuredCompetition` para mostrar la modalidad actualmente configurada antes del freeze, derivada por ronda con fallback al formato del torneo. Mantiene `tournamentCompetition` y la finalización basados exclusivamente en snapshots congelados. |
+
+### Migración 190 Fase 1 — Asistente: modalidad configurada antes del freeze
+
+- Eleva `obtener_asistente_operativo_torneo(uuid)` a `schemaVersion: 4`.
+- Preserva íntegramente la implementación v3 como core interno y agrega únicamente un bloque informativo `configuredCompetition`.
+- `configuredCompetition` deriva el formato efectivo de cada ronda activa mediante `COALESCE(tournament_rounds.tournament_format_id, tournaments.tournament_format_id)`.
+- Permite distinguir `STABLEFORD_INDIVIDUAL`, `LEGACY_OR_NON_STABLEFORD`, `MIXED_OR_UNSUPPORTED`, `UNCONFIGURED` y `NO_ACTIVE_ROUNDS` usando la configuración editable actual.
+- Expone `formatName`, `scoringEngine`, `participationType`, conteos de rondas y `source = CURRENT_CONFIGURATION`.
+- Marca explícitamente `authoritativeForFinalization = false`: este bloque es sólo informativo para el operador.
+- No modifica `previsualizar_finalizacion_torneo(uuid)`, snapshots, freeze, cálculo Stableford, leaderboard, desempates, cierres ni finalización.
+- `tournamentCompetition` continúa siendo la fuente competitiva autoritativa basada en snapshots congelados.
+- El core v3 renombrado queda sin `EXECUTE` para `authenticated`; la RPC pública mantiene acceso para `authenticated/service_role` y continúa negada a `anon`.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
