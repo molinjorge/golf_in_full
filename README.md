@@ -1973,6 +1973,29 @@ y no dejó cambios aplicados.
 - Fase siguiente recomendada: hook + tarjeta flotante consumiendo exclusivamente esta RPC, sin consultas paralelas de validación en frontend.
 
 
+
+| 187 Fase 1A-1 | `187_FASE1A1_AJUSTE_SEMANTICO_ASISTENTE_OPERATIVO.sql` | Corrige el contrato del Asistente tras prueba real: distingue una ronda competitivamente resuelta de una ronda formalmente cerrada mediante `obtener_cierre_formal_ronda(uuid)`, no recomienda finalizar el torneo hasta que todas las rondas tengan cierre formal y agrega stages `SCORING`/`RESULTS` para reflejar captura y resultados después de emitir tarjetas. Actualiza `schemaVersion` a 2. |
+
+### Migración 187 Fase 1A-1 — Ajuste semántico del Asistente Operativo
+
+- Surge de la primera prueba real de `obtener_asistente_operativo_torneo(uuid)` con `POLLA AGOSTO VERSION 2`.
+- La RPC original produjo correctamente el siguiente paso (`Revisar captura`), pero reveló dos ambigüedades de UX:
+  - mostraba `ROUND_PREPARATION` aun cuando ya existían tarjetas emitidas y captura física iniciada;
+  - trataba `competitivelyClosed=true` del motor de cierre como si equivaliera al cierre formal persistido de la ronda.
+- Se incorpora `obtener_cierre_formal_ronda(uuid)` como fuente específica para saber si existe el sello histórico creado por `cerrar_ronda_competitiva(uuid,text)`.
+- El contrato distingue:
+  - `competitivelyResolved`: resultados y desempates ya permiten cierre;
+  - `formallyClosed`: el comité ya ejecutó el cierre formal y existe su registro inmutable.
+- Una ronda competitivamente resuelta pero aún no cerrada aparece `PENDING` con recomendación explícita de **Cerrar ronda**.
+- La finalización del torneo sólo se recomienda cuando todas las rondas activas tienen `formallyClosed=true`, alineándose con `finalizar_torneo(uuid,text)`.
+- Se agregan stages operativos:
+  - `SCORING`: hay tarjetas emitidas y captura/conciliación pendiente;
+  - `RESULTS`: existen tarjetas emitidas y la captura ya no está pendiente, pero aún faltan resultados/cierre;
+  - se conservan `CONFIGURATION`, `REGISTRATIONS`, `PRE_FREEZE`, `ROUND_PREPARATION` y `FINALIZED`.
+- `schemaVersion` sube de 1 a 2 por el cambio semántico del contrato.
+- No se modifican motores Stroke Play, Stableford, Shotgun, Tee Times, captura, conciliación, desempates ni cierres.
+- No se escriben datos.
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
