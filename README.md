@@ -2013,6 +2013,24 @@ y no dejó cambios aplicados.
 - No duplica reglas deportivas: sólo orquesta el preview formal existente.
 
 
+
+| 189 Fase 1 | `189_FASE1_RPC_CONFIGURACION_HIO_STABLEFORD.sql` | Agrega RPCs administrativas seguras para leer y configurar `HOLE_IN_ONE_OVERRIDE` antes del freeze. Mantiene la tabla Stableford cerrada por RLS, restringe escritura a Organizador/Superadmin, expone `frozen/editable` y no escribe snapshots ni modifica el motor de puntos. |
+
+### Migración 189 Fase 1 — RPCs de configuración HIO Stableford
+
+- Agrega `obtener_reglas_especiales_stableford_torneo(uuid)` como lectura administrativa de la configuración especial Stableford del torneo.
+- La respuesta expone `stablefordApplicable`, `frozen`, `editable` y el bloque `holeInOneOverride` con `configured`, `enabled`, `points`, `behavior` y los límites reales (`minimumPoints = 0`, sin máximo definido por base de datos).
+- Agrega `configurar_regla_hole_in_one_torneo(uuid,boolean,integer)` para Organizador asignado o Superadmin.
+- La escritura sólo se permite en torneos que usan Stableford y antes de existir un `tournament_condition_freezes` para el torneo.
+- Al habilitar una regla nueva, los puntos son obligatorios; el valor debe cumplir `points >= 0`.
+- Al deshabilitar una regla existente puede conservarse su valor de puntos; deshabilitar sin una fila previa es un no-op seguro.
+- No agrega políticas RLS a `tournament_stableford_special_rules`: el frontend accede exclusivamente por RPC controlada.
+- Conserva `trg_proteger_stableford_special_rules_congelado` como defensa adicional de inmutabilidad.
+- No escribe `tournament_stableford_special_rule_snapshots`; éstos continúan generándose únicamente durante `congelar_condiciones_y_handicaps_torneo(uuid)`.
+- No modifica captura, conciliación, cálculo Stableford, leaderboard, desempates, cierre, finalización ni Asistente Operativo.
+- Esta migración desbloquea la implementación frontend de Stableford UI Fase 10A.
+
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
