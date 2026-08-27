@@ -1953,6 +1953,26 @@ y no dejó cambios aplicados.
 - Esta migración no modifica categorías, cupos, rondas, reglas de desempate, inscripciones, congelamiento, salidas, tarjetas ni resultados.
 
 
+| 187 Fase 1A | `187_FASE1A_ASISTENTE_OPERATIVO_TORNEO.sql` | Inicia el Asistente Operativo del Torneo con `obtener_asistente_operativo_torneo(uuid)`, RPC común de solo lectura que orquesta validaciones y estados existentes y los traduce a pasos `COMPLETE/PENDING/WARNING/BLOCKED`, progreso, bloqueantes y `nextAction` accionable. No duplica reglas deportivas ni modifica Stroke, Stableford, Shotgun o Tee Times. |
+
+### Migración 187 Fase 1A — Asistente Operativo del Torneo
+
+- Agrega `obtener_asistente_operativo_torneo(uuid)` como contrato consolidado para una futura tarjeta flotante de ayuda operativa.
+- El objetivo funcional es que cualquier operador autorizado pueda saber dónde se encuentra el torneo, qué pasos están completos, qué información falta, qué bloquea y cuál es la siguiente acción recomendada.
+- La RPC es de **solo lectura** (`STABLE`) y no crea nuevas tablas ni modifica datos.
+- Reutiliza `validar_configuracion_minima_torneo`, estado real de inscripciones, freeze, validación común de salidas, emisión de tarjetas, conciliación/NRQ y cierre competitivo común.
+- Normaliza los pasos a `COMPLETE`, `PENDING`, `WARNING` y `BLOCKED`.
+- El contrato incluye `schemaVersion`, `stage`, estado general, actor/permisos, progreso, bloqueantes, advertencias, `nextAction`, pasos y resumen de rondas.
+- Los pasos por ronda incluyen salidas, emisión de tarjetas, captura/conciliación y cierre competitivo.
+- Es agnóstica a Stroke/Stableford porque consume `obtener_estado_cierre_competitivo_ronda(uuid)`, que ya despacha entre motores.
+- Es agnóstica a Shotgun/Tee Times porque consume estados comunes de validación/emisión y no replica reglas A/B ni secuencias Tee Times.
+- `action.target` usa destinos semánticos; la base de datos no conoce rutas React.
+- El Asistente no sustituye guards: las RPC y triggers existentes continúan siendo la autoridad final.
+- `authenticated` puede ejecutar sujeto a permiso del torneo; `anon` y `PUBLIC` no.
+- Esta fase no implementa todavía la tarjeta flotante React, drag/drop, persistencia de posición, ocultar completados ni apertura automática ante acciones bloqueadas.
+- Fase siguiente recomendada: hook + tarjeta flotante consumiendo exclusivamente esta RPC, sin consultas paralelas de validación en frontend.
+
+
 ## Cómo agregar una migración nueva
 
 1. Diseñar el cambio (esquema, RLS, triggers).
