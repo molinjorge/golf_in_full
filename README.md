@@ -2126,3 +2126,32 @@ y no dejó cambios aplicados.
 Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **schemaVersion 5** sin alterar los estados de negocio existentes. Añade `availability.actionable/state/waitingFor` por paso, elimina CTAs de etapas futuras cuyos prerequisitos aún no se cumplen y recalcula `nextAction` y `blockers` usando únicamente pasos actualmente accionables. Así, por ejemplo, con inscripciones pendientes no se recomienda revisar salidas, tarjetas, captura o finalización. Las dependencias posteriores al freeze se mantienen por ronda para no forzar una secuencia artificial entre rondas distintas.
 
 **Verificación:** `VERIFICAR_191_FASE1_ASISTENTE_DEPENDENCIAS_OPERATIVAS.sql`.
+
+| 192 Fase 1 | `192_FASE1_LEADERBOARD_OPERATIVO_AGNOSTICO.sql` | Agrega `obtener_leaderboard_operativo_ronda(uuid)`, contrato común de lectura para resultados preliminares por categoría. Hace dispatch al leaderboard oficial ya existente según `scoring_engine`/participación, normaliza métricas y estados de categoría y no exige cierre de ronda. No calcula resultados en frontend ni crea un motor paralelo. |
+
+### Migración 192 Fase 1 — Leaderboard operativo agnóstico por ronda
+
+- Agrega `obtener_leaderboard_operativo_ronda(uuid)` como única puerta de lectura para el futuro preview operativo de resultados por categoría.
+- La RPC consulta el `scoring_engine` y `participation_type` congelados de la ronda y despacha exclusivamente a motores de leaderboard ya existentes.
+- Soporte inicial real:
+  - Stroke Play individual (`stroke` / compatibilidad `stroke_play`) → `obtener_leaderboard_ronda(uuid)`;
+  - Stableford individual → `obtener_leaderboard_stableford_ronda(uuid)`.
+- Normaliza el contrato para que el frontend no tenga que conocer si la métrica son golpes o puntos:
+  - `metrics.gross/net.value`;
+  - `unit = STROKES | POINTS`;
+  - `rank`;
+  - `tieSize`;
+  - `tiebreakPending`.
+- Cada categoría obtiene su propio estado operativo:
+  - `PROVISIONAL` mientras existan participantes sin resolver;
+  - `READY_FOR_TIEBREAK` cuando todos están resueltos pero existen desempates pendientes;
+  - `READY_FOR_PUBLICATION` cuando todos están resueltos y no quedan desempates pendientes.
+- Los outcomes terminales `WD`, `DNF`, `DQ`, `DNS` y `NO_CARD` cuentan como participantes resueltos, pero no como elegibles para ranking.
+- El preview no exige que toda la ronda esté terminada: una categoría puede aparecer completa mientras otras siguen en captura.
+- No mezcla tarjetas parcialmente capturadas dentro del ranking; sólo expone la elegibilidad/posición que ya determina el backend oficial.
+- No recalcula puntos, golpes, hándicap ni desempates y no modifica captura, conciliación, outcomes, freeze, snapshots, cierres o finalización.
+- Las modalidades cuyo motor de resultados/leaderboard todavía no existe (por ejemplo motores de equipo aún no construidos) responden `supported=false` + `LEADERBOARD_ENGINE_NOT_IMPLEMENTED`; el contrato queda preparado para incorporarlas mediante un nuevo branch de dispatch cuando exista su motor oficial, sin cambiar la UI común.
+- Acceso: `authenticated` y `service_role`; `anon`/`PUBLIC` sin `EXECUTE`.
+
+**Verificación:** `VERIFICAR_192_FASE1_LEADERBOARD_OPERATIVO_AGNOSTICO.sql`.
+
