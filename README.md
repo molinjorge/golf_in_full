@@ -2170,3 +2170,16 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_192_FASE1A_CORRECCION_ALIAS_STROKE_CIERRE_RESULTADOS.sql`.
 
+| 192 Fase 1B | `192_FASE1B_CORRECCION_ALIAS_STROKE_ESTADO_CIERRE_COMPETITIVO.sql` | Corrige `obtener_estado_cierre_competitivo_ronda(uuid)` para aceptar `scoring_engine = stroke` y `stroke_play` como equivalentes en Stroke Play individual. |
+
+### Migración 192 Fase 1B — Corrección de alias Stroke en estado de cierre competitivo
+
+- Corrige la misma inconsistencia detectada en 192 Fase 1A, ahora en `obtener_estado_cierre_competitivo_ronda(uuid)`.
+- Stroke Play individual acepta `stroke` y `stroke_play`.
+- Stroke sigue utilizando `obtener_desempates_ronda(uuid)`.
+- Stableford individual sigue utilizando `obtener_desempates_stableford_ronda(uuid)`.
+- Las resoluciones manuales existentes se conservan.
+- No modifica resultados, rankings, reglas de desempate, snapshots ni datos históricos.
+
+**Verificación:** `VERIFICAR_192_FASE1B_CORRECCION_ALIAS_STROKE_ESTADO_CIERRE_COMPETITIVO.sql`.
+
