@@ -2278,3 +2278,26 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - La verificación de 198 Fase 1A trata los freezes históricos faltantes como diagnóstico informativo y no como error de esta corrección.
 
 **Verificación:** `VERIFICAR_198_FASE1A_CORRECCION_PRIVILEGIOS_RPC_CLASIFICACION.sql`.
+
+| 198 Fase 2 | `198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql` | Hace que Stroke Play consuma la clasificación competitiva congelada por categoría; Stableford ya lo hacía. Leaderboard, desempates, cierre y publicación quedan alineados con Gross/Neto/Ambos. |
+
+### Migración 198 Fase 2 — Consumo de clasificación competitiva congelada
+
+- Corrige Stroke Play para que `gross` y `neto` dejen de ser dos clasificaciones competitivas implícitas.
+- La fuente autoritativa es `tournament_category_classification_snapshots`, congelada junto con las condiciones del torneo.
+- El score Gross/Neto puede seguir existiendo como **dato informativo**, pero sólo los tipos configurados generan:
+  - posición competitiva;
+  - tamaño de empate;
+  - necesidad de desempate;
+  - resolución manual;
+  - bloqueo de cierre por categoría.
+- `obtener_leaderboard_ronda(uuid)` conserva la implementación anterior como base interna y aplica el filtro competitivo al contrato público.
+- `obtener_desempates_ronda(uuid)` conserva la implementación anterior como base interna y elimina grupos correspondientes a tipos no competitivos.
+- `resolver_desempate_manual_ronda(...)` rechaza explícitamente cualquier intento de resolver un empate de un tipo que no sea competitivo para esa categoría.
+- `obtener_leaderboard_operativo_ronda(uuid)` hereda el leaderboard corregido; por ello `obtener_estado_competitivo_categorias_ronda(uuid)` sólo considera desempates competitivos reales.
+- `cerrar_categoria_competitiva_ronda(...)` congela el estado/leaderboard común ya filtrado; `publicar_resultados_categoria_ronda(...)` publica ese cierre sin recalcular.
+- Stableford no se modifica en esta fase porque `obtener_resultado_stableford_oficial_tarjeta`, `obtener_desempates_stableford_ronda` y `obtener_leaderboard_stableford_ronda` ya trabajan con `grossEnabled` / `netEnabled` derivados del snapshot de clasificación.
+- Compatibilidad histórica: si un freeze antiguo no tiene snapshots de clasificación se usa `LEGACY_BOTH` para conservar el comportamiento previo y no romper torneos históricos de prueba. Los freezes nuevos quedan obligados por 198 Fase 1 a tener al menos una clasificación configurada por categoría.
+- No modifica torneos existentes, resultados, tarjetas, clasificaciones live ni snapshots históricos.
+
+**Verificación:** `VERIFICAR_198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql`.
