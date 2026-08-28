@@ -2264,3 +2264,17 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Esta fase sólo corrige la **configuración y su contrato backend**. Leaderboard, desempates, cierre y publicación todavía deben consumir la clasificación congelada en la fase siguiente.
 
 **Verificación:** `VERIFICAR_198_FASE1_CONFIGURACION_CLASIFICACION_COMPETITIVA_CATEGORIA.sql`.
+
+| 198 Fase 1A | `198_FASE1A_CORRECCION_PRIVILEGIOS_RPC_CLASIFICACION.sql` | Corrige los grants directos a `anon` que permanecieron sobre las RPCs de clasificación competitiva de 198 Fase 1; no modifica datos ni snapshots. |
+
+### Migración 198 Fase 1A — Corrección de privilegios RPC de clasificación competitiva
+
+- Revoca explícitamente `EXECUTE` al rol `anon` sobre `obtener_clasificaciones_categorias_torneo(uuid)` y `configurar_clasificacion_categoria_torneo(uuid, text)`.
+- Mantiene `EXECUTE` para `authenticated` y `service_role`.
+- Mantiene revocado el acceso por `PUBLIC`.
+- No modifica categorías, clasificaciones competitivas, torneos, freezes ni snapshots.
+- El diagnóstico de 198 Fase 1 detectó freezes históricos sin `tournament_category_classification_snapshots`; corresponden a torneos congelados antes de que esa infraestructura estuviera presente y no son un efecto de 198 Fase 1.
+- `POLLA AGOSTO VERSION 2`, usado para las pruebas actuales, sí conserva snapshot de clasificación en todas sus categorías.
+- La verificación de 198 Fase 1A trata los freezes históricos faltantes como diagnóstico informativo y no como error de esta corrección.
+
+**Verificación:** `VERIFICAR_198_FASE1A_CORRECCION_PRIVILEGIOS_RPC_CLASIFICACION.sql`.
