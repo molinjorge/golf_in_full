@@ -2301,3 +2301,21 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - No modifica torneos existentes, resultados, tarjetas, clasificaciones live ni snapshots históricos.
 
 **Verificación:** `VERIFICAR_198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql`.
+
+| 198 Fase 2A | `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql` | Blinda las funciones internas base de Stroke para que sólo puedan ejecutarse a través de los wrappers públicos que aplican la clasificación competitiva; evita bypass directo por usuarios autenticados. |
+
+### Migración 198 Fase 2A — Blindaje de funciones internas base Stroke
+
+- **Objetivo:** impedir que un usuario autenticado invoque directamente las funciones internas preservadas en 198 Fase 2 y pueda saltarse los filtros de clasificación competitiva Gross/Neto.
+- Revoca `EXECUTE` a `PUBLIC`, `anon` y `authenticated` sobre:
+  - `_obtener_leaderboard_ronda_base_198_f2(uuid)`;
+  - `_obtener_desempates_ronda_base_198_f2(uuid)`;
+  - `_resolver_desempate_manual_ronda_base_198_f2(...)`.
+- Mantiene `EXECUTE` para `service_role`.
+- Los wrappers públicos continúan siendo la vía normal para `authenticated` y conservan la lógica de clasificación competitiva introducida en 198 Fase 2.
+- No modifica datos, resultados, snapshots ni lógica de Stroke Play o Stableford.
+
+**Migración:** `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql`.
+
+**Verificación:** `VERIFICAR_198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql`.
+
