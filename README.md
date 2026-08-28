@@ -2224,3 +2224,24 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_194_FASE1_CIERRE_FORMAL_POR_CATEGORIA.sql`.
 
+| 195 Fase 1 | `195_FASE1_PUBLICACION_Y_REPORTE_POR_CATEGORIA.sql` | Agrega publicación formal e idempotente de categorías cerradas y contrato JSON de reporte `CIERRE POR CATEGORÍA`. |
+
+### Migración 195 Fase 1 — Publicación y reporte por categoría
+
+- Agrega `tournament_round_category_publications`.
+- Una categoría sólo puede publicarse si ya existe su cierre formal 194 en estado `FINAL`.
+- Agrega `publicar_resultados_categoria_ronda(uuid, uuid, text)`.
+- La publicación es idempotente y no recalcula resultados: congela el `closure_snapshot` del cierre formal.
+- Agrega `obtener_reporte_cierre_categoria_ronda(uuid, uuid)`:
+  - disponible administrativamente desde que existe el cierre, aun antes de publicar;
+  - entrega contrato `reportType = CATEGORY_CLOSURE`;
+  - incluye encabezado `CIERRE POR CATEGORÍA`, datos de ronda, estado de categoría y leaderboard congelado.
+- Agrega `obtener_resultados_publicados_categoria_ronda(uuid, uuid)` para UI de jugadores/usuarios autenticados.
+- Si la categoría aún no ha sido publicada, la RPC pública devuelve `published=false` y no entrega resultados.
+- En esta fase la lectura publicada requiere usuario autenticado; `anon` permanece sin acceso.
+- La tabla tiene RLS y no concede acceso directo a `authenticated`; el acceso es mediante RPCs `SECURITY DEFINER`.
+- Esta fase entrega un contrato JSON listo para impresión/descarga. La generación visual de PDF/Excel corresponde al frontend y no se implementa dentro de PostgreSQL.
+- La publicación es irreversible en esta fase; cualquier futura retractación/republicación debe diseñarse como proceso administrativo auditado, no como borrado.
+
+**Verificación:** `VERIFICAR_195_FASE1_PUBLICACION_Y_REPORTE_POR_CATEGORIA.sql`.
+
