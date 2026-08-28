@@ -2202,3 +2202,25 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_193_FASE1_ESTADO_COMPETITIVO_POR_CATEGORIA.sql`.
 
+| 194 Fase 1 | `194_FASE1_CIERRE_FORMAL_POR_CATEGORIA.sql` | Implementa cierre competitivo formal e inmutable por categoría y ronda, reutilizando el estado 193 y el leaderboard operativo 192. |
+
+### Migración 194 Fase 1 — Cierre formal por categoría
+
+- Agrega `tournament_round_category_competitive_closures`, con un único cierre por `(tournament_round_id, tournament_category_id)`.
+- Agrega `cerrar_categoria_competitiva_ronda(uuid, uuid, text)`.
+- Una categoría sólo puede cerrarse cuando 193 la reporta `READY_TO_CLOSE`.
+- El torneo debe estar `EN CURSO`.
+- Sólo el organizador asignado o Superadmin puede realizar el cierre.
+- El cierre es idempotente: si ya existe, devuelve el cierre existente.
+- El snapshot del cierre congela:
+  - `categoryState`, proveniente de `obtener_estado_competitivo_categorias_ronda(uuid)`;
+  - `leaderboardCategory`, proveniente de `obtener_leaderboard_operativo_ronda(uuid)`.
+- Agrega `obtener_cierre_formal_categoria_ronda(uuid, uuid)` para consultar el cierre.
+- Agrega `_categoria_ronda_esta_cerrada_competitivamente(uuid, uuid)` y `_resolver_categoria_fila_competitiva(jsonb)`.
+- Amplía `proteger_datos_ronda_competitiva_cerrada()` para que los datos competitivos de una categoría cerrada queden inmutables, sin bloquear las demás categorías de la ronda.
+- El bloqueo global de una ronda ya cerrada permanece intacto.
+- La tabla tiene RLS y no concede acceso directo a `authenticated`; se consume mediante RPCs `SECURITY DEFINER`.
+- Esta fase **no publica** resultados. La publicación y el reporte por categoría corresponden a la fase siguiente.
+
+**Verificación:** `VERIFICAR_194_FASE1_CIERRE_FORMAL_POR_CATEGORIA.sql`.
+
