@@ -2183,3 +2183,22 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_192_FASE1B_CORRECCION_ALIAS_STROKE_ESTADO_CIERRE_COMPETITIVO.sql`.
 
+| 193 Fase 1 | `193_FASE1_ESTADO_COMPETITIVO_POR_CATEGORIA.sql` | Agrega `obtener_estado_competitivo_categorias_ronda(uuid)`, estado competitivo por categoría independiente del resto de la ronda y agnóstico de modalidad. |
+
+### Migración 193 Fase 1 — Estado competitivo por categoría
+
+- Agrega `obtener_estado_competitivo_categorias_ronda(uuid)`.
+- La RPC no calcula resultados ni desempates: reutiliza `obtener_leaderboard_operativo_ronda(uuid)` y `obtener_estado_cierre_competitivo_ronda(uuid)`.
+- Cada categoría puede avanzar de manera independiente aunque otras categorías de la misma ronda sigan en captura.
+- Estados:
+  - `PROVISIONAL`: todavía existen participantes sin resolver.
+  - `TIEBREAKS_PENDING`: todos los participantes están resueltos, pero existen grupos de desempate pendientes.
+  - `READY_TO_CLOSE`: todos los participantes están resueltos y no quedan desempates pendientes.
+- `readyToClose=true` significa únicamente que la categoría está competitivamente lista para un futuro cierre formal; esta migración todavía no crea el cierre ni publica resultados.
+- Los outcomes terminales ya resueltos por la infraestructura común forman parte de `resolvedParticipants` y no bloquean por sí mismos el cierre.
+- Se informan por categoría `totalParticipants`, `rankedParticipants`, `resolvedParticipants`, `unresolvedParticipants`, `terminalExceptions`, `pendingTieGroups` y `resolvedTieGroups`.
+- Modalidades sin motor operativo soportado se mantienen `supported=false`, sin fallbacks.
+- Acceso: `authenticated` y `service_role`; `anon`/`PUBLIC` sin `EXECUTE`.
+
+**Verificación:** `VERIFICAR_193_FASE1_ESTADO_COMPETITIVO_POR_CATEGORIA.sql`.
+
