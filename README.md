@@ -2245,3 +2245,22 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 
 **Verificación:** `VERIFICAR_195_FASE1_PUBLICACION_Y_REPORTE_POR_CATEGORIA.sql`.
 
+
+| 198 Fase 1 | `198_FASE1_CONFIGURACION_CLASIFICACION_COMPETITIVA_CATEGORIA.sql` | Sustituye la creación automática Gross+Neto por configuración explícita GROSS, NETO o AMBOS por categoría antes del congelamiento. |
+
+### Migración 198 Fase 1 — Configuración explícita de clasificación competitiva por categoría
+
+- Retira `trg_inicializar_clasificaciones_categoria_torneo` y `inicializar_clasificaciones_categoria_torneo()`, que anteriormente creaban automáticamente `gross` + `neto` para toda categoría agregada al torneo.
+- La clasificación competitiva pasa a ser una decisión explícita de configuración por categoría:
+  - `GROSS` → sólo clasificación Gross;
+  - `NET` → sólo clasificación Neto;
+  - `BOTH` → Gross y Neto.
+- Agrega `obtener_clasificaciones_categorias_torneo(uuid)` para que la UI consulte la configuración competitiva de todas las categorías del torneo y sepa si el torneo ya está congelado.
+- Agrega `configurar_clasificacion_categoria_torneo(uuid, text)` para configurar una categoría mediante una operación controlada e idempotente sobre `tournament_category_classifications`.
+- La configuración sólo puede modificarse antes del congelamiento; se conserva el trigger existente `trg_proteger_category_classifications_congelado` y la nueva RPC realiza además una validación explícita de `tournament_condition_freezes`.
+- `previsualizar_congelamiento_torneo(uuid)` sigue exigiendo al menos una clasificación por categoría, pero el mensaje ahora aclara que puede ser Gross, Neto o ambas; ya no implica que Gross+Neto sean obligatorias simultáneamente.
+- `congelar_condiciones_y_handicaps_torneo(uuid)` continúa congelando exactamente las clasificaciones configuradas en `tournament_category_classification_snapshots`.
+- No se modifica ningún torneo existente, ninguna clasificación existente ni ningún snapshot histórico. Los torneos ya congelados permanecen íntegros.
+- Esta fase sólo corrige la **configuración y su contrato backend**. Leaderboard, desempates, cierre y publicación todavía deben consumir la clasificación congelada en la fase siguiente.
+
+**Verificación:** `VERIFICAR_198_FASE1_CONFIGURACION_CLASIFICACION_COMPETITIVA_CATEGORIA.sql`.
