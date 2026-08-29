@@ -171,7 +171,6 @@ Las migraciones **deben correrse en este orden exacto** — cada una depende de 
 - Las posiciones Shotgun son `A` / `B`; la salida doble depende de la configuración del hoyo, no del PAR.
 - Se validan las relaciones entre ronda, turno, categoría, configuración, hoyo y grupo.
 - `tournament_group_players` continúa representando unidades individuales y `tournament_group_teams` permite equipos completos.
-- Verificador asociado: `SUPABASE-VERIFICAR-REGLAS-GRUPOS-SHOTGUN.sql`.
 
 ### Migración 133 — Optimización RLS de hoyos Shotgun
 
@@ -2125,7 +2124,6 @@ y no dejó cambios aplicados.
 
 Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **schemaVersion 5** sin alterar los estados de negocio existentes. Añade `availability.actionable/state/waitingFor` por paso, elimina CTAs de etapas futuras cuyos prerequisitos aún no se cumplen y recalcula `nextAction` y `blockers` usando únicamente pasos actualmente accionables. Así, por ejemplo, con inscripciones pendientes no se recomienda revisar salidas, tarjetas, captura o finalización. Las dependencias posteriores al freeze se mantienen por ronda para no forzar una secuencia artificial entre rondas distintas.
 
-**Verificación:** `VERIFICAR_191_FASE1_ASISTENTE_DEPENDENCIAS_OPERATIVAS.sql`.
 
 | 192 Fase 1 | `192_FASE1_LEADERBOARD_OPERATIVO_AGNOSTICO.sql` | Agrega `obtener_leaderboard_operativo_ronda(uuid)`, contrato común de lectura para resultados preliminares por categoría. Hace dispatch al leaderboard oficial ya existente según `scoring_engine`/participación, normaliza métricas y estados de categoría y no exige cierre de ronda. No calcula resultados en frontend ni crea un motor paralelo. |
 
@@ -2153,7 +2151,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Las modalidades cuyo motor de resultados/leaderboard todavía no existe (por ejemplo motores de equipo aún no construidos) responden `supported=false` + `LEADERBOARD_ENGINE_NOT_IMPLEMENTED`; el contrato queda preparado para incorporarlas mediante un nuevo branch de dispatch cuando exista su motor oficial, sin cambiar la UI común.
 - Acceso: `authenticated` y `service_role`; `anon`/`PUBLIC` sin `EXECUTE`.
 
-**Verificación:** `VERIFICAR_192_FASE1_LEADERBOARD_OPERATIVO_AGNOSTICO.sql`.
 
 | 192 Fase 1A | `192_FASE1A_CORRECCION_ALIAS_STROKE_CIERRE_RESULTADOS.sql` | Corrige `validar_cierre_resultados_ronda(uuid)` para aceptar `scoring_engine = stroke` y `stroke_play` como equivalentes en Stroke Play individual. No cambia Stableford ni la lógica competitiva. |
 
@@ -2168,7 +2165,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Motores/modalidades sin soporte siguen fallando explícitamente; no se agregan fallbacks.
 - No modifica snapshots existentes ni ningún dato histórico.
 
-**Verificación:** `VERIFICAR_192_FASE1A_CORRECCION_ALIAS_STROKE_CIERRE_RESULTADOS.sql`.
 
 | 192 Fase 1B | `192_FASE1B_CORRECCION_ALIAS_STROKE_ESTADO_CIERRE_COMPETITIVO.sql` | Corrige `obtener_estado_cierre_competitivo_ronda(uuid)` para aceptar `scoring_engine = stroke` y `stroke_play` como equivalentes en Stroke Play individual. |
 
@@ -2181,7 +2177,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Las resoluciones manuales existentes se conservan.
 - No modifica resultados, rankings, reglas de desempate, snapshots ni datos históricos.
 
-**Verificación:** `VERIFICAR_192_FASE1B_CORRECCION_ALIAS_STROKE_ESTADO_CIERRE_COMPETITIVO.sql`.
 
 | 193 Fase 1 | `193_FASE1_ESTADO_COMPETITIVO_POR_CATEGORIA.sql` | Agrega `obtener_estado_competitivo_categorias_ronda(uuid)`, estado competitivo por categoría independiente del resto de la ronda y agnóstico de modalidad. |
 
@@ -2200,7 +2195,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Modalidades sin motor operativo soportado se mantienen `supported=false`, sin fallbacks.
 - Acceso: `authenticated` y `service_role`; `anon`/`PUBLIC` sin `EXECUTE`.
 
-**Verificación:** `VERIFICAR_193_FASE1_ESTADO_COMPETITIVO_POR_CATEGORIA.sql`.
 
 | 194 Fase 1 | `194_FASE1_CIERRE_FORMAL_POR_CATEGORIA.sql` | Implementa cierre competitivo formal e inmutable por categoría y ronda, reutilizando el estado 193 y el leaderboard operativo 192. |
 
@@ -2222,7 +2216,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - La tabla tiene RLS y no concede acceso directo a `authenticated`; se consume mediante RPCs `SECURITY DEFINER`.
 - Esta fase **no publica** resultados. La publicación y el reporte por categoría corresponden a la fase siguiente.
 
-**Verificación:** `VERIFICAR_194_FASE1_CIERRE_FORMAL_POR_CATEGORIA.sql`.
 
 | 195 Fase 1 | `195_FASE1_PUBLICACION_Y_REPORTE_POR_CATEGORIA.sql` | Agrega publicación formal e idempotente de categorías cerradas y contrato JSON de reporte `CIERRE POR CATEGORÍA`. |
 
@@ -2243,7 +2236,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - Esta fase entrega un contrato JSON listo para impresión/descarga. La generación visual de PDF/Excel corresponde al frontend y no se implementa dentro de PostgreSQL.
 - La publicación es irreversible en esta fase; cualquier futura retractación/republicación debe diseñarse como proceso administrativo auditado, no como borrado.
 
-**Verificación:** `VERIFICAR_195_FASE1_PUBLICACION_Y_REPORTE_POR_CATEGORIA.sql`.
 
 
 | 198 Fase 1 | `198_FASE1_CONFIGURACION_CLASIFICACION_COMPETITIVA_CATEGORIA.sql` | Sustituye la creación automática Gross+Neto por configuración explícita GROSS, NETO o AMBOS por categoría antes del congelamiento. |
@@ -2263,7 +2255,6 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - No se modifica ningún torneo existente, ninguna clasificación existente ni ningún snapshot histórico. Los torneos ya congelados permanecen íntegros.
 - Esta fase sólo corrige la **configuración y su contrato backend**. Leaderboard, desempates, cierre y publicación todavía deben consumir la clasificación congelada en la fase siguiente.
 
-**Verificación:** `VERIFICAR_198_FASE1_CONFIGURACION_CLASIFICACION_COMPETITIVA_CATEGORIA.sql`.
 
 | 198 Fase 1A | `198_FASE1A_CORRECCION_PRIVILEGIOS_RPC_CLASIFICACION.sql` | Corrige los grants directos a `anon` que permanecieron sobre las RPCs de clasificación competitiva de 198 Fase 1; no modifica datos ni snapshots. |
 
@@ -2277,45 +2268,21 @@ Ajusta el contrato público de `obtener_asistente_operativo_torneo(uuid)` a **sc
 - `POLLA AGOSTO VERSION 2`, usado para las pruebas actuales, sí conserva snapshot de clasificación en todas sus categorías.
 - La verificación de 198 Fase 1A trata los freezes históricos faltantes como diagnóstico informativo y no como error de esta corrección.
 
-**Verificación:** `VERIFICAR_198_FASE1A_CORRECCION_PRIVILEGIOS_RPC_CLASIFICACION.sql`.
+| 198 Fase 2 | `198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql` | Hace que Stroke Play respete la clasificación competitiva configurada por categoría: GROSS, NETO o BOTH. |
+| 198 Fase 2A | `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql` | Impide el acceso directo a las funciones internas Stroke para evitar saltarse el control de clasificación competitiva. |
 
-| 198 Fase 2 | `198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql` | Hace que Stroke Play consuma la clasificación competitiva congelada por categoría; Stableford ya lo hacía. Leaderboard, desempates, cierre y publicación quedan alineados con Gross/Neto/Ambos. |
+### Migración 198 Fase 2 — Consumo de clasificación competitiva Stroke
 
-### Migración 198 Fase 2 — Consumo de clasificación competitiva congelada
+**Archivo:** `198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql`
 
-- Corrige Stroke Play para que `gross` y `neto` dejen de ser dos clasificaciones competitivas implícitas.
-- La fuente autoritativa es `tournament_category_classification_snapshots`, congelada junto con las condiciones del torneo.
-- El score Gross/Neto puede seguir existiendo como **dato informativo**, pero sólo los tipos configurados generan:
-  - posición competitiva;
-  - tamaño de empate;
-  - necesidad de desempate;
-  - resolución manual;
-  - bloqueo de cierre por categoría.
-- `obtener_leaderboard_ronda(uuid)` conserva la implementación anterior como base interna y aplica el filtro competitivo al contrato público.
-- `obtener_desempates_ronda(uuid)` conserva la implementación anterior como base interna y elimina grupos correspondientes a tipos no competitivos.
-- `resolver_desempate_manual_ronda(...)` rechaza explícitamente cualquier intento de resolver un empate de un tipo que no sea competitivo para esa categoría.
-- `obtener_leaderboard_operativo_ronda(uuid)` hereda el leaderboard corregido; por ello `obtener_estado_competitivo_categorias_ronda(uuid)` sólo considera desempates competitivos reales.
-- `cerrar_categoria_competitiva_ronda(...)` congela el estado/leaderboard común ya filtrado; `publicar_resultados_categoria_ronda(...)` publica ese cierre sin recalcular.
-- Stableford no se modifica en esta fase porque `obtener_resultado_stableford_oficial_tarjeta`, `obtener_desempates_stableford_ronda` y `obtener_leaderboard_stableford_ronda` ya trabajan con `grossEnabled` / `netEnabled` derivados del snapshot de clasificación.
-- Compatibilidad histórica: si un freeze antiguo no tiene snapshots de clasificación se usa `LEGACY_BOTH` para conservar el comportamiento previo y no romper torneos históricos de prueba. Los freezes nuevos quedan obligados por 198 Fase 1 a tener al menos una clasificación configurada por categoría.
-- No modifica torneos existentes, resultados, tarjetas, clasificaciones live ni snapshots históricos.
+**Objetivo:** Hacer que Stroke Play respete la clasificación competitiva configurada por categoría: `GROSS`, `NETO` o `BOTH`.
 
-**Verificación:** `VERIFICAR_198_FASE2_CONSUMO_CLASIFICACION_COMPETITIVA_STROKE.sql`.
+**Qué hace:** Ajusta leaderboard y desempates para que sólo las clasificaciones competitivas generen posiciones, empates y bloqueos de cierre. Gross/Neto no competitivos pueden mantenerse como información, pero no afectan la competencia.
 
-| 198 Fase 2A | `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql` | Blinda las funciones internas base de Stroke para que sólo puedan ejecutarse a través de los wrappers públicos que aplican la clasificación competitiva; evita bypass directo por usuarios autenticados. |
+### Migración 198 Fase 2A — Blindaje de funciones internas Stroke
 
-### Migración 198 Fase 2A — Blindaje de funciones internas base Stroke
+**Archivo:** `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql`
 
-- **Objetivo:** impedir que un usuario autenticado invoque directamente las funciones internas preservadas en 198 Fase 2 y pueda saltarse los filtros de clasificación competitiva Gross/Neto.
-- Revoca `EXECUTE` a `PUBLIC`, `anon` y `authenticated` sobre:
-  - `_obtener_leaderboard_ronda_base_198_f2(uuid)`;
-  - `_obtener_desempates_ronda_base_198_f2(uuid)`;
-  - `_resolver_desempate_manual_ronda_base_198_f2(...)`.
-- Mantiene `EXECUTE` para `service_role`.
-- Los wrappers públicos continúan siendo la vía normal para `authenticated` y conservan la lógica de clasificación competitiva introducida en 198 Fase 2.
-- No modifica datos, resultados, snapshots ni lógica de Stroke Play o Stableford.
+**Objetivo:** Evitar que las funciones internas de Stroke puedan ejecutarse directamente y se salten el control de clasificación competitiva.
 
-**Migración:** `198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql`.
-
-**Verificación:** `VERIFICAR_198_FASE2A_BLINDAJE_FUNCIONES_INTERNAS_STROKE.sql`.
-
+**Qué hace:** Revoca acceso directo a las funciones internas base para `PUBLIC`, `anon` y `authenticated`, dejando su ejecución únicamente a `service_role`. El frontend accede mediante las RPC públicas protegidas.
