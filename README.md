@@ -213,13 +213,12 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 198 Fase 2 | Integra clasificación competitiva en Stroke Play respetando Gross/Neto configurados. |
 | 198 Fase 2A | Blinda funciones internas de Stroke Play relacionadas con clasificación competitiva. |
 | 199 Fase 1B | Agrega capitán explícito y roster provisional por nombre/correo para A-Go-Go, con confirmación personal y bloqueo de duplicidades antes de reservar plaza. |
+| 200 Fase 1C | Implementa pago de equipo completo A-Go-Go mediante una cobertura económica única: el capitán paga una sola vez, los integrantes confirmados se convierten a inscripción y los pendientes quedan cubiertos hasta confirmar personalmente. |
 
 ## Pendientes
 
 ### A-Go-Go / Scramble
-- **Fase 1C:** pago de equipo completo con `tarifa_equipo_completo` y `concepto='inscripcion_equipo'`, separando identidad de cobertura económica.
-- Revalidar atómicamente el roster completo antes de autorizar/procesar el pago del equipo.
-- Mantener opción de pago individual cuando la configuración del torneo lo permita.
+- Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
 - **Fase 2:** flexibilidad controlada después del congelado, sin relajar globalmente el freeze.
 - **Fase 3:** hándicap competitivo de equipo separado de snapshots individuales; recalculable, versionado y auditable.
 - **Fase 4:** salidas por equipo y reacomodos cercanos al inicio con actualización localizada.
