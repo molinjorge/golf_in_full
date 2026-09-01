@@ -229,6 +229,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 213 Fase 10 | Integra A-Go-Go al cierre competitivo, publicación y finalización comunes: extiende los gates de resultados y desempates para TEAM/team_stroke, preserva Stroke/Stableford y reutiliza sin tablas paralelas los cierres por categoría/ronda, publicaciones y sello final del torneo. |
 | 214 Fase 11A | Completa la experiencia digital A-Go-Go para integrantes TEAM: visibilidad de tarjeta, apertura por QR, detalle/panel/mis rondas, confirmación/disputa por cualquier integrante y cambio administrativo de marker entre equipos, preservando el flujo individual existente. |
 | 215 Fase 11B1 | Permite reasignaciones y sustituciones de integrantes después de emitir tarjetas A-Go-Go conservando el mismo score_card_id y folio: revalida salidas, recalcula HCP TEAM, actualiza el snapshot vigente con historial de revisiones y refresca markers afectados; además corrige los assignment_source TEAM. |
+| 216 Fase 11B2 | Permite reacomodar un TEAM entre grupos/hoyos Shotgun después de emitir tarjetas, sólo antes del primer score en los grupos afectados: conserva score_card_id y emisión, crea nueva validación, sincroniza sesión de captura, recalcula la secuencia de la tarjeta movida y reconstruye únicamente los markers de origen/destino. |
 
 ## Pendientes
 
