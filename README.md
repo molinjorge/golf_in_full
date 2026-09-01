@@ -221,6 +221,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 205 Fase 4A | Habilita formalmente salidas Shotgun A-Go-Go por equipo: registra el motor team_stroke, construye contrato común v2 con unitType=team, valida asignación única/categoría y exige HCP competitivo CURRENT; la emisión de tarjeta se mantiene deshabilitada hasta Fase 5. |
 | 206 Fase 4B | Permite reacomodar un equipo A-Go-Go Shotgun después de validar salidas sin editar el snapshot histórico: el movimiento es localizado y atómico, la validación anterior queda histórica y se crea una nueva versión formal; se bloquea si ya existen tarjetas emitidas. |
 | 207 Fase 4C | Permite reasignaciones y sustituciones de integrantes A-Go-Go después de validar salidas: reutiliza los flujos 201/202, recalcula HCP de equipos afectados y genera nuevas versiones formales de las rondas validadas de forma atómica; bloquea cambios si ya hay tarjetas emitidas. |
+| 208 Fase 5 | Habilita tarjeta oficial A-Go-Go por equipo sobre tournament_score_cards: preview y emisión TEAM, snapshot imprimible con integrantes y versión exacta de HCP validado, firmas requeridas y consulta rápida de todas las tarjetas del mismo grupo; la captura por hoyo queda para Fase 6. |
 
 ## Pendientes
 
