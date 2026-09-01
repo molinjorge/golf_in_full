@@ -217,6 +217,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 201 Fase 2A | Permite reasignar de forma controlada y auditada una inscripción A-Go-Go existente entre equipos después del freeze, sin relajar el congelamiento general ni modificar salidas ya validadas. |
 | 202 Fase 2B | Implementa sustitución post-freeze de integrantes A-Go-Go sin cambiar identidades históricas: el saliente conserva su inscripción, el reemplazo confirma personalmente y recibe una nueva inscripción sin cobro adicional, con cobertura de equipo cuando aplica. |
 | 203 Fase 3A | Crea el hándicap competitivo de equipo A-Go-Go separado de snapshots individuales, con configuración Gross-only/promedio porcentual/tabla por suma/WHS Scramble, versiones por ronda y evidencia auditable de cada integrante. |
+| 204 Fase 3B | Añade vigencia automática al HCP competitivo de equipo: cambios de composición, Handicap Index, tee o configuración marcan la versión activa como obsoleta; expone estado MISSING/STALE/CURRENT y permite recálculo masivo por ronda. |
 
 ## Pendientes
 
