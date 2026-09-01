@@ -215,12 +215,12 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 199 Fase 1B | Agrega capitán explícito y roster provisional por nombre/correo para A-Go-Go, con confirmación personal y bloqueo de duplicidades antes de reservar plaza. |
 | 200 Fase 1C | Implementa pago de equipo completo A-Go-Go mediante una cobertura económica única: el capitán paga una sola vez, los integrantes confirmados se convierten a inscripción y los pendientes quedan cubiertos hasta confirmar personalmente. |
 | 201 Fase 2A | Permite reasignar de forma controlada y auditada una inscripción A-Go-Go existente entre equipos después del freeze, sin relajar el congelamiento general ni modificar salidas ya validadas. |
+| 202 Fase 2B | Implementa sustitución post-freeze de integrantes A-Go-Go sin cambiar identidades históricas: el saliente conserva su inscripción, el reemplazo confirma personalmente y recibe una nueva inscripción sin cobro adicional, con cobertura de equipo cuando aplica. |
 
 ## Pendientes
 
 ### A-Go-Go / Scramble
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
-- **Fase 2B:** sustitución controlada de un integrante por otro después del freeze, preservando identidad, pago y trazabilidad.
 - **Fase 3:** hándicap competitivo de equipo separado de snapshots individuales; recalculable, versionado y auditable.
 - **Fase 4:** salidas por equipo y reacomodos cercanos al inicio con actualización localizada.
 - **Fase 5:** tarjeta oficial por equipo y refresco rápido de tarjetas del grupo de salida.
