@@ -231,19 +231,13 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 215 Fase 11B1 | Permite reasignaciones y sustituciones de integrantes después de emitir tarjetas A-Go-Go conservando el mismo score_card_id y folio: revalida salidas, recalcula HCP TEAM, actualiza el snapshot vigente con historial de revisiones y refresca markers afectados; además corrige los assignment_source TEAM. |
 | 216 Fase 11B2 | Permite reacomodar un TEAM entre grupos/hoyos Shotgun después de emitir tarjetas, sólo antes del primer score en los grupos afectados: conserva score_card_id y emisión, crea nueva validación, sincroniza sesión de captura, recalcula la secuencia de la tarjeta movida y reconstruye únicamente los markers de origen/destino. |
 
+| 217 L2 A-Go-Go | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
+- **Fase L2 frontend:** conectar la lectura `obtener_configuracion_handicap_equipo_a_gogo` y el reemplazo atómico de rangos; cerrar persistencia real al reabrir.
+- **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
-- **Fase 3:** hándicap competitivo de equipo separado de snapshots individuales; recalculable, versionado y auditable.
-- **Fase 4:** salidas por equipo y reacomodos cercanos al inicio con actualización localizada.
-- **Fase 5:** tarjeta oficial por equipo y refresco rápido de tarjetas del grupo de salida.
-- **Fase 6:** captura digital/física y conciliación reutilizando infraestructura común; A-Go-Go no permite PICKUP.
-- **Fase 7:** resultado oficial de equipo Gross/Neto.
-- **Fase 8:** leaderboard y outcomes por equipo.
-- **Fase 9:** desempates por equipo.
-- **Fase 10:** cierre, publicación y finalización.
-- **Fase 11:** prueba E2E operativa integral.
 - Best Ball y Shamble permanecen como motores separados.
 
 ### Generales
