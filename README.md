@@ -233,10 +233,11 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 
 | 217 L2 A-Go-Go | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
 | 218 | Adapta el congelamiento común a A-Go-Go/team_stroke: Handicap Allowance individual deja de ser requisito, el snapshot de ronda admite “no aplica” y no se fabrican Playing Handicaps individuales; Stroke Play y Stableford conservan su contrato. |
+| 219 | Corrige las operaciones A-Go-Go post-freeze para localizar el congelamiento vigente por `frozen_at` en lugar de la columna inexistente `created_at`, sin cambiar contratos ni reglas funcionales. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
-- **Fase L4C1B:** integrar y probar sustitución controlada de integrante A-Go-Go después del freeze, reutilizando los contratos backend existentes.
+- **Fase L4C1B:** completar prueba real de sustitución controlada post-freeze y su confirmación por el jugador entrante.
 - **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
 - Best Ball y Shamble permanecen como motores separados.
