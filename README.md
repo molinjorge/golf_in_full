@@ -224,6 +224,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 208 Fase 5 | Habilita tarjeta oficial A-Go-Go por equipo sobre tournament_score_cards: preview y emisión TEAM, snapshot imprimible con integrantes y versión exacta de HCP validado, firmas requeridas y consulta rápida de todas las tarjetas del mismo grupo; la captura por hoyo queda para Fase 6. |
 | 209 Fase 6 | Habilita captura A-Go-Go sobre la infraestructura común: inicializa sesiones y un score por equipo/hoyo, asigna marcador de otro equipo, permite confirmar/disputar a integrantes del equipo, reutiliza captura física y conciliación y blinda que team_stroke nunca admita PICKUP. |
 | 210 Fase 7 | Construye el resultado oficial A-Go-Go por equipo reutilizando la evidencia universal de física/conciliación: exige todos los hoyos SCORE y ambas firmas, toma el HCP congelado en la tarjeta, calcula Gross y Net y consume los snapshots comunes de clasificación Gross/Neto. |
+| 211 Fase 8 | Construye el leaderboard A-Go-Go de ronda por equipos: consume resultados oficiales, ordena Gross/Neto ascendente según clasificación congelada, integra outcomes terminales, detecta empates pendientes y extiende el dispatcher operativo común declarando TEAM como unidad competitiva. |
 
 ## Pendientes
 
