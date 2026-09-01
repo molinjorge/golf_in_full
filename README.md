@@ -227,6 +227,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 211 Fase 8 | Construye el leaderboard A-Go-Go de ronda por equipos: consume resultados oficiales, ordena Gross/Neto ascendente según clasificación congelada, integra outcomes terminales, detecta empates pendientes y extiende el dispatcher operativo común declarando TEAM como unidad competitiva. |
 | 212 Fase 9 | Implementa desempates A-Go-Go por equipo reutilizando reglas, métodos, evaluador y tablas comunes: soporta secuencias distintas para Gross/Neto, distribuye el Team Playing Handicap por Stroke Index para countback Neto, permite resolución manual por score_card_id y aplica finalRank al leaderboard. |
 | 213 Fase 10 | Integra A-Go-Go al cierre competitivo, publicación y finalización comunes: extiende los gates de resultados y desempates para TEAM/team_stroke, preserva Stroke/Stableford y reutiliza sin tablas paralelas los cierres por categoría/ronda, publicaciones y sello final del torneo. |
+| 214 Fase 11A | Completa la experiencia digital A-Go-Go para integrantes TEAM: visibilidad de tarjeta, apertura por QR, detalle/panel/mis rondas, confirmación/disputa por cualquier integrante y cambio administrativo de marker entre equipos, preservando el flujo individual existente. |
 
 ## Pendientes
 
