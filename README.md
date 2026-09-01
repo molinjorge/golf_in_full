@@ -232,10 +232,11 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 216 Fase 11B2 | Permite reacomodar un TEAM entre grupos/hoyos Shotgun después de emitir tarjetas, sólo antes del primer score en los grupos afectados: conserva score_card_id y emisión, crea nueva validación, sincroniza sesión de captura, recalcula la secuencia de la tarjeta movida y reconstruye únicamente los markers de origen/destino. |
 
 | 217 L2 A-Go-Go | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
+| 218 | Adapta el congelamiento común a A-Go-Go/team_stroke: Handicap Allowance individual deja de ser requisito, el snapshot de ronda admite “no aplica” y no se fabrican Playing Handicaps individuales; Stroke Play y Stableford conservan su contrato. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
-- **Fase L2 frontend:** conectar la lectura `obtener_configuracion_handicap_equipo_a_gogo` y el reemplazo atómico de rangos; cerrar persistencia real al reabrir.
+- **Fase L4C1B:** integrar y probar sustitución controlada de integrante A-Go-Go después del freeze, reutilizando los contratos backend existentes.
 - **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
 - Best Ball y Shamble permanecen como motores separados.
