@@ -242,8 +242,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 226 | Crea de forma atómica un equipo nuevo de inscripción grupal sin capitán obligatorio y su plaza inicial “TÚ” como miembro confirmado, sin crear todavía inscripción ni pago. |
 | 227 | Permite al iniciador de una inscripción grupal agregar plazas provisionales de terceros sin capitán obligatorio, enlazando jugadores existentes cuando corresponde y dejando personas nuevas pendientes de confirmación, sin crear inscripción ni pago. |
 
-| 228 | Retira ejecución `anon` de los RPC de preparar, procesar y consultar pagos grupales parciales, preservando acceso para `authenticated` y `service_role` sin cambiar lógica ni contratos. |
-
+| 228 | Retira el permiso de ejecución del rol `anon` sobre los tres RPC de pago grupal, preservando `authenticated` y `service_role`, sin modificar lógica, firmas, tablas ni datos. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
