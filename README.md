@@ -234,6 +234,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 217 L2 A-Go-Go | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
 | 218 | Adapta el congelamiento común a A-Go-Go/team_stroke: Handicap Allowance individual deja de ser requisito, el snapshot de ronda admite “no aplica” y no se fabrican Playing Handicaps individuales; Stroke Play y Stableford conservan su contrato. |
 | 219 | Corrige las operaciones A-Go-Go post-freeze para localizar el congelamiento vigente por `frozen_at` en lugar de la columna inexistente `created_at`, sin cambiar contratos ni reglas funcionales. |
+| 220 | Corrige la clasificación competitiva por categoría para registrar `created_by` con `admin_users.id` en lugar de `auth.uid()`, eliminando la violación de FK al guardar Gross/Neto/Both. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
