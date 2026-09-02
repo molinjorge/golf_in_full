@@ -240,12 +240,13 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 224 | Encapsula los helpers internos SECURITY DEFINER del pago grupal parcial, retirando ejecución directa a `anon` y `authenticated` sin cambiar la lógica ni los RPC públicos de la Migración 223. |
 | 225 | Permite invitar a un jugador ya inscrito y pagado que aún está sin equipo; al aceptar, reutiliza su misma inscripción y la incorpora al equipo sin segundo cobro ni inscripción duplicada. |
 | 226 | Crea de forma atómica un equipo nuevo de inscripción grupal sin capitán obligatorio y su plaza inicial “TÚ” como miembro confirmado, sin crear todavía inscripción ni pago. |
+| 227 | Permite al iniciador de una inscripción grupal agregar plazas provisionales de terceros sin capitán obligatorio, enlazando jugadores existentes cuando corresponde y dejando personas nuevas pendientes de confirmación, sin crear inscripción ni pago. |
 
 ## Pendientes
 
 ### A-Go-Go / Scramble
 - **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
-- Integrar en frontend la creación del equipo grupal y plaza inicial mediante el contrato transaccional de la Migración 226; después conectar plazas de terceros y el pago parcial 1–N de las Migraciones 223/224.
+- Integrar en frontend la creación del equipo grupal y plaza inicial mediante la Migración 226 y las plazas provisionales de terceros mediante la Migración 227; después conectar el pago parcial 1–N de las Migraciones 223/224.
 - Integrar en frontend el flujo de invitación/aceptación de jugadores ya inscritos y pagados sin equipo, usando el contrato de la Migración 225.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
 - Best Ball y Shamble permanecen como motores separados.
