@@ -236,12 +236,14 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 220 | Corrige la clasificación competitiva por categoría para registrar `created_by` con `admin_users.id` en lugar de `auth.uid()`, eliminando la violación de FK al guardar Gross/Neto/Both. |
 | 221 | Corrige el trigger común de PICKUP para separar las ramas digital y física por tabla, evitando referencias a columnas inexistentes sin relajar el bloqueo de PICKUP en A-Go-Go. |
 | 222 | Hace opcional `tournament_team_roster_slots.invited_by_player_id` para permitir sustituciones administrativas A-Go-Go en equipos sin capitán, preservando la autoría administrativa existente. |
+| 223 | Agrega pago grupal parcial de 1–N plazas en torneos por equipos reutilizando roster y coberturas económicas, permite múltiples coberturas parciales por equipo y conserva intactos el pago individual y el pago de equipo completo. |
 
 ## Pendientes
 
 ### A-Go-Go / Scramble
-- **Fase L4C1B:** completar prueba real de sustitución controlada post-freeze y su confirmación por el jugador entrante.
 - **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
+- Integrar en frontend/checkout el nuevo contrato de pago grupal parcial de 1–N plazas después de validar la Migración 223.
+- Resolver en una fase posterior la incorporación a equipo de jugadores ya inscritos/pagados que aún tengan `tournament_team_id = NULL`, sin segundo cobro.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
 - Best Ball y Shamble permanecen como motores separados.
 
