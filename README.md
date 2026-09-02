@@ -235,6 +235,7 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 218 | Adapta el congelamiento común a A-Go-Go/team_stroke: Handicap Allowance individual deja de ser requisito, el snapshot de ronda admite “no aplica” y no se fabrican Playing Handicaps individuales; Stroke Play y Stableford conservan su contrato. |
 | 219 | Corrige las operaciones A-Go-Go post-freeze para localizar el congelamiento vigente por `frozen_at` en lugar de la columna inexistente `created_at`, sin cambiar contratos ni reglas funcionales. |
 | 220 | Corrige la clasificación competitiva por categoría para registrar `created_by` con `admin_users.id` en lugar de `auth.uid()`, eliminando la violación de FK al guardar Gross/Neto/Both. |
+| 221 | Corrige el trigger común de PICKUP para separar las ramas digital y física por tabla, evitando referencias a columnas inexistentes sin relajar el bloqueo de PICKUP en A-Go-Go. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
