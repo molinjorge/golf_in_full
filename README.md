@@ -230,12 +230,13 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 214 Fase 11A | Completa la experiencia digital A-Go-Go para integrantes TEAM: visibilidad de tarjeta, apertura por QR, detalle/panel/mis rondas, confirmación/disputa por cualquier integrante y cambio administrativo de marker entre equipos, preservando el flujo individual existente. |
 | 215 Fase 11B1 | Permite reasignaciones y sustituciones de integrantes después de emitir tarjetas A-Go-Go conservando el mismo score_card_id y folio: revalida salidas, recalcula HCP TEAM, actualiza el snapshot vigente con historial de revisiones y refresca markers afectados; además corrige los assignment_source TEAM. |
 | 216 Fase 11B2 | Permite reacomodar un TEAM entre grupos/hoyos Shotgun después de emitir tarjetas, sólo antes del primer score en los grupos afectados: conserva score_card_id y emisión, crea nueva validación, sincroniza sesión de captura, recalcula la secuencia de la tarjeta movida y reconstruye únicamente los markers de origen/destino. |
-
-| 217 L2 A-Go-Go | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
+| 217 Fase L2 | Completa el contrato de configuración HCP TEAM para frontend: lectura segura de método/porcentaje/rangos, reemplazo atómico de rangos y limpieza de rangos al abandonar el método por tabla, sin abrir SELECT directo a las tablas. |
 | 218 | Adapta el congelamiento común a A-Go-Go/team_stroke: Handicap Allowance individual deja de ser requisito, el snapshot de ronda admite “no aplica” y no se fabrican Playing Handicaps individuales; Stroke Play y Stableford conservan su contrato. |
 | 219 | Corrige las operaciones A-Go-Go post-freeze para localizar el congelamiento vigente por `frozen_at` en lugar de la columna inexistente `created_at`, sin cambiar contratos ni reglas funcionales. |
 | 220 | Corrige la clasificación competitiva por categoría para registrar `created_by` con `admin_users.id` en lugar de `auth.uid()`, eliminando la violación de FK al guardar Gross/Neto/Both. |
 | 221 | Corrige el trigger común de PICKUP para separar las ramas digital y física por tabla, evitando referencias a columnas inexistentes sin relajar el bloqueo de PICKUP en A-Go-Go. |
+| 222 | Hace opcional `tournament_team_roster_slots.invited_by_player_id` para permitir sustituciones administrativas A-Go-Go en equipos sin capitán, preservando la autoría administrativa existente. |
+
 ## Pendientes
 
 ### A-Go-Go / Scramble
