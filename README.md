@@ -244,6 +244,13 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 228 | Retira el permiso de ejecución del rol `anon` sobre los tres RPC de pago grupal, preservando `authenticated` y `service_role`, sin modificar lógica, firmas, tablas ni datos. |
 | 229 | Corrige la resolución automática de categoría única al crear equipos, eliminando el uso incompatible de `min(uuid)` sin cambiar las reglas para torneos sin categoría, con categoría única o multicategoría. |
 | 230 | Permite configurar desempates Gross y Neto simultáneamente para el mismo torneo/categoría/alcance, aislando el reemplazo por tipo de resultado y cerrando la ejecución anónima de la RPC de configuración. |
+| 231 | Impide congelar A-Go-Go/team_stroke con clasificación Neto sin una configuración HCP TEAM válida; rechaza GROSS_ONLY para Neto y exige rangos cuando se usa ASSIGNED_TABLE_SUM_HI, preservando Gross-only y los motores Stroke/Stableford. |
+| 232 | Agrega una reparación excepcional, atómica y auditable para freezes históricos A-Go-Go/team_stroke con Neto creados sin HCP TEAM antes de la 231; sólo opera si no existe ninguna evidencia competitiva y recalcula las versiones TEAM sin modificar el freeze ni sus snapshots. |
+| 233 | Convierte `estatus=cancelado` en estado operativo de sólo lectura: refuerza guards comunes y bloquea mutaciones de configuración, inscripción, equipos, salidas, tarjetas y captura competitiva sin alterar `activo`, `estado_servicio`, pagos, freezes, snapshots ni históricos. |
+| 234 | Refuerza el congelamiento A-Go-Go con Neto exigiendo HCP TEAM CURRENT para cada equipo activo en cada ronda `team_stroke`; bloquea `MISSING`/`STALE` antes del freeze sin impedir recálculos ni versionado posteriores. |
+| 235 | Incorpora `ROUND_GROUPS` al Asistente Operativo para rondas Shotgun, distinguiendo PLAYER/TEAM y exigiendo conformación completa antes de habilitar Salidas; preserva sin cambios el flujo no-Shotgun. |
+| 236 | Corrige el helper `ROUND_GROUPS` para tratar `formato_salida = NULL` como no-Shotgun mediante comparación NULL-safe, evitando falsos bloqueos en rondas históricas Stableford sin alterar el flujo Shotgun. |
+| 237 | Corrige la capacidad Shotgun por equipos para medir jugadores físicos activos —no cantidad de equipos— y evita que `ROUND_GROUPS` quede COMPLETE cuando existe sobrecupo físico; preserva individual, no-Shotgun y el payload existente. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
