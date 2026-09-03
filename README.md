@@ -241,8 +241,9 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 225 | Permite invitar a un jugador ya inscrito y pagado que aún está sin equipo; al aceptar, reutiliza su misma inscripción y la incorpora al equipo sin segundo cobro ni inscripción duplicada. |
 | 226 | Crea de forma atómica un equipo nuevo de inscripción grupal sin capitán obligatorio y su plaza inicial “TÚ” como miembro confirmado, sin crear todavía inscripción ni pago. |
 | 227 | Permite al iniciador de una inscripción grupal agregar plazas provisionales de terceros sin capitán obligatorio, enlazando jugadores existentes cuando corresponde y dejando personas nuevas pendientes de confirmación, sin crear inscripción ni pago. |
-
 | 228 | Retira el permiso de ejecución del rol `anon` sobre los tres RPC de pago grupal, preservando `authenticated` y `service_role`, sin modificar lógica, firmas, tablas ni datos. |
+| 229 | Corrige la resolución automática de categoría única al crear equipos, eliminando el uso incompatible de `min(uuid)` sin cambiar las reglas para torneos sin categoría, con categoría única o multicategoría. |
+| 230 | Permite configurar desempates Gross y Neto simultáneamente para el mismo torneo/categoría/alcance, aislando el reemplazo por tipo de resultado y cerrando la ejecución anónima de la RPC de configuración. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
