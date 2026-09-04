@@ -254,6 +254,8 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 238 | Enriquece la previsualización de tarjetas A-Go-Go TEAM con contexto congelado de torneo/ronda/campo, integrantes y marcas por jugador, PAR/HCP de hoyo y yardajes por tee, sin inventar una tee o distancia única del equipo ni alterar emisión/scoring. |
 | 239 | Corrige el nombre de la marca en el preview A-Go-Go TEAM usando como fallback el snapshot histórico del mismo freeze/inscripción/jugador/tee cuando el snapshot específico de ronda viene vacío; no usa catálogo vivo ni fabrica color histórico. |
 | 240 | Extiende el payload oficial común de tarjetas con contrato A-Go-Go TEAM basado en la tarjeta/snapshot oficial vigente, integrantes, HCP TEAM, salida y yardajes por tee; preserva PLAYER y excluye QR de la rama TEAM. |
+| 241 | Agrega materialización administrativa de marcas de salida faltantes para torneos de categoría única antes del freeze, reutilizando prioridad Damas→Rojas, Senior→Doradas y franjas por hándicap, sin sobrescribir marcas ya asignadas ni relajar el congelamiento. |
+| 242 | Corrige vigencia de HCP TEAM ante cambios de marca de salida: `marca_salida_id` ahora invalida la versión TEAM y se reparan de forma controlada `tee_id` faltantes en versiones activas ya vinculadas a validaciones TEAM vigentes usando el snapshot congelado, sin recalcular ni alterar versiones superseded. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
