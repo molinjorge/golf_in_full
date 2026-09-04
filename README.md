@@ -251,6 +251,9 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 235 | Incorpora `ROUND_GROUPS` al Asistente Operativo para rondas Shotgun, distinguiendo PLAYER/TEAM y exigiendo conformación completa antes de habilitar Salidas; preserva sin cambios el flujo no-Shotgun. |
 | 236 | Corrige el helper `ROUND_GROUPS` para tratar `formato_salida = NULL` como no-Shotgun mediante comparación NULL-safe, evitando falsos bloqueos en rondas históricas Stableford sin alterar el flujo Shotgun. |
 | 237 | Corrige la capacidad Shotgun por equipos para medir jugadores físicos activos —no cantidad de equipos— y evita que `ROUND_GROUPS` quede COMPLETE cuando existe sobrecupo físico; preserva individual, no-Shotgun y el payload existente. |
+| 238 | Enriquece la previsualización de tarjetas A-Go-Go TEAM con contexto congelado de torneo/ronda/campo, integrantes y marcas por jugador, PAR/HCP de hoyo y yardajes por tee, sin inventar una tee o distancia única del equipo ni alterar emisión/scoring. |
+| 239 | Corrige el nombre de la marca en el preview A-Go-Go TEAM usando como fallback el snapshot histórico del mismo freeze/inscripción/jugador/tee cuando el snapshot específico de ronda viene vacío; no usa catálogo vivo ni fabrica color histórico. |
+| 240 | Extiende el payload oficial común de tarjetas con contrato A-Go-Go TEAM basado en la tarjeta/snapshot oficial vigente, integrantes, HCP TEAM, salida y yardajes por tee; preserva PLAYER y excluye QR de la rama TEAM. |
 ## Pendientes
 
 ### A-Go-Go / Scramble
