@@ -256,10 +256,22 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 240 | Extiende el payload oficial común de tarjetas con contrato A-Go-Go TEAM basado en la tarjeta/snapshot oficial vigente, integrantes, HCP TEAM, salida y yardajes por tee; preserva PLAYER y excluye QR de la rama TEAM. |
 | 241 | Agrega materialización administrativa de marcas de salida faltantes para torneos de categoría única antes del freeze, reutilizando prioridad Damas→Rojas, Senior→Doradas y franjas por hándicap, sin sobrescribir marcas ya asignadas ni relajar el congelamiento. |
 | 242 | Corrige vigencia de HCP TEAM ante cambios de marca de salida: `marca_salida_id` ahora invalida la versión TEAM y se reparan de forma controlada `tee_id` faltantes en versiones activas ya vinculadas a validaciones TEAM vigentes usando el snapshot congelado, sin recalcular ni alterar versiones superseded. |
+| 243 | Permite automarcado A-Go-Go TEAM únicamente cuando un equipo juega solo en su grupo; para grupos con 2+ equipos conserva marcado circular y exige que cualquier marcador administrativo pertenezca al mismo grupo, manteniendo cambios localizados por secuencia y sin afectar PLAYER. |
+| 244 | Alinea el contrato HCP TEAM de A-Go-Go: lo exige también en Gross-only, agrega su estado al Asistente Operativo antes de grupos/salidas y habilita una reparación auditada GROSS_ONLY para freezes históricos sin HCP TEAM que aún no tienen validación ni tarjetas. |
+| 245 | Hace explícita la inicialización de captura A-Go-Go TEAM en el Asistente Operativo: tras emitir tarjetas muestra Iniciar captura, detecta estados parciales/inconsistentes y sólo después permite pasar a revisar captura y conciliación, sin alterar Stroke Play ni Stableford. |
+| 246 | Homologa A-Go-Go con Stroke Play/Stableford haciendo atómica la emisión + inicialización digital, generaliza el diagnóstico de inicialización en el Asistente y bloquea la captura física si la estructura digital de la ronda no está íntegra, preservando NRQ cuando la sesión existe pero no fue usada. |
+| 247 | Enriquece el payload oficial de tarjetas A-Go-Go TEAM con quién marca a cada equipo y qué jugador propio marca al oponente, reutilizando las asignaciones activas sin alterar captura, scoring ni el contrato PLAYER. |
+| 248 | Blinda la revisión digital A-Go-Go TEAM: una disputa activa no puede ser sobrescrita por el marcador y la autocaptura `self_team` no admite confirmación ni disputa contra el propio equipo. |
+| 249 | Ordena el cierre formal A-Go-Go: una ronda sólo queda lista para cierre después de cerrar formalmente todas sus categorías y el Asistente prioriza ese paso. |
+| 250 | Completa el reporte congelado de cierre por categoría exponiendo número y fecha de ronda desde el propio cierre formal, sin recalcular resultados ni consultar leaderboard vivo. |
+| 251 | Agrega reporte operativo A-Go-Go por categoría con todos los scores de tarjeta física por hoyo en una sola fila por equipo, ordenado por ranking Gross/Neto y disponible sin depender del cierre de categoría. |
+| 252 | Corrige el countback por tarjeta para usar los hoyos reglamentarios y reordena el leaderboard A-Go-Go después de aplicar finalRank de desempate. |
+| 253 | Impide sobrepasar jugadores_por_equipo al asignar o reasignar inscripciones a equipos y protege también los UPDATE del armado administrativo. |
+
 ## Pendientes
 
 ### A-Go-Go / Scramble
-- **Fase 11C:** E2E integral A-Go-Go sobre un torneo operativo preparado; crear correcciones posteriores sólo si la prueba real descubre fallas.
+- **Fase 11C:** continuar E2E integral A-Go-Go; validar el bloqueo de cupo de equipos de la Migración 253 y seguir corrigiendo sólo fallas reales encontradas.
 - Integrar en frontend la creación del equipo grupal y plaza inicial mediante la Migración 226 y las plazas provisionales de terceros mediante la Migración 227; después conectar el pago parcial 1–N de las Migraciones 223/224.
 - Integrar en frontend el flujo de invitación/aceptación de jugadores ya inscritos y pagados sin equipo, usando el contrato de la Migración 225.
 - Mantener y terminar de integrar en UI la opción de pago individual cuando la configuración del torneo lo permita.
