@@ -1,9 +1,9 @@
-# TEE CENTRAL / GOLF IN FULL — README HASTA MIGRACIÓN 256
+# TEE CENTRAL / GOLF IN FULL — README HASTA MIGRACIÓN 258
 
 ## Estado
 - Proyecto Supabase: `GOLFING_FULL`.
-- Aplicadas/verificadas antes de esta propuesta: hasta **255**.
-- Migración propuesta actual: **256**.
+- Aplicadas/verificadas antes de esta propuesta: hasta **257**.
+- Migración propuesta actual: **258**.
 - Las migraciones se ejecutan manualmente en Supabase.
 
 ### 252 — Countback y orden de leaderboard A-Go-Go
@@ -72,3 +72,24 @@ Se simplifica la configuración base del torneo para evitar inconsistencias entr
 - Si no hay campo, `club_id` queda `NULL`, preservando `provisionar_torneo()`.
 - `validar_configuracion_minima_torneo()` exige Campo de golf y ya no reclama Club como dato independiente.
 - `tournament_rounds.campo_golf_id` no cambia.
+
+
+### 258 — Bloqueo de congelamiento sin modalidad de salida ni turno
+Corrige un hueco de integridad detectado durante la prueba de BALVANERA 1: el torneo podía congelarse aunque una ronda activa todavía no tuviera definida su modalidad de salida ni ningún turno.
+
+- Preserva íntegramente la previsualización anterior como `_previsualizar_congelamiento_torneo_pre258(uuid)`.
+- Agrega `_validar_salida_antes_congelar_258(uuid)`.
+- Cada ronda activa debe tener `tournament_rounds.formato_salida` definido.
+- Cada ronda activa debe tener al menos un registro activo en `tournament_round_shifts`.
+- Los errores se incorporan a `previsualizar_congelamiento_torneo(uuid)` con códigos explícitos:
+  - `round_start_format_missing_before_freeze`
+  - `round_shift_missing_before_freeze`
+- Como el congelamiento ya depende obligatoriamente de la previsualización, la misma regla queda protegida en backend aunque el RPC se invoque fuera de Lovable.
+- No se modifican datos existentes, congelamientos históricos, HCP TEAM, tarjetas, grupos, Stroke Play, Stableford ni A-Go-Go.
+
+#### Regla operativa después de 258
+Antes de **Congelar condiciones**, cada ronda activa debe tener configurada su salida:
+
+**Ronda creada → Modalidad de salida definida → Turno(s) configurado(s) → HCP/condiciones completos → Congelar condiciones**
+
+La interfaz puede anticipar estos bloqueos, pero la fuente de verdad queda en Supabase.
