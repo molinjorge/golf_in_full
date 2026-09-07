@@ -280,6 +280,8 @@ Este documento conserva un registro breve de cada migración aplicada o preparad
 | 264 | Separa en el Asistente la operación que antes aparecía como “Captura y conciliación” en dos pasos reales: `ROUND_PHYSICAL_CAPTURE` y `ROUND_RECONCILIATION`; distingue tarjetas físicas pendientes, conciliación requerida y casos NRQ, reutilizando la infraestructura común de Stroke Play, Stableford y A-Go-Go. |
 | 265 | Formaliza el cierre competitivo común de ronda en cuatro etapas: Resultados → Cierre de categorías → Publicación de resultados → Cierre de ronda; exige backend que todas las categorías estén cerradas y publicadas antes del cierre final y conserva como válidos los cierres históricos ya formalizados. |
 | 266 | Endurece las dependencias del Asistente Operativo: elimina esperas hacia el paso obsoleto `ROUND_SCORING`, difiere la evaluación competitiva profunda hasta completar conciliación, normaliza `START_TOURNAMENT` cuando sólo espera prerrequisitos normales y evita bloqueos/crashes prematuros sin modificar datos ni reglas competitivas. |
+| 267 | Corrige el validador estructural de Rondas para respetar que A-Go-Go TEAM (`equipo` + `team_stroke`) no utiliza Handicap Allowance individual: permite `NULL` en ese motor, conserva la exigencia 0–100 para Stroke Play/Stableford y alinea el Asistente con el contrato de congelamiento establecido en la Migración 218. |
+| 268 | Corrige la secuencia del Asistente A-Go-Go colocando HCP TEAM antes del congelamiento: HCP TEAM espera inscripciones cerradas y Rondas completas, el congelamiento espera HCP TEAM CURRENT y Armar grupos permanece después del freeze, eliminando la dependencia circular sin cambiar el motor de congelamiento ni el cálculo competitivo. |
 
 ## Pendientes
 
