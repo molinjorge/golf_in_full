@@ -1066,111 +1066,138 @@ Supabase es la fuente de verdad del esquema vivo.
                        reapertura auditada, revalidación y revisión 215 sin
                        debilitar el trigger protector ni alterar snapshots o
                        tarjetas históricas.
+
+  271                  Habilita sustitución administrativa directa de
+                       integrantes A-Go-Go después del freeze y antes de
+                       iniciar el torneo: reutiliza o crea al jugador en
+                       catálogo, genera una nueva inscripción sin cobro
+                       conservando cobertura y cadena histórica, fija la
+                       marca de salida, recalcula HCP TEAM, revalida salidas
+                       y versiona tarjetas emitidas cuando corresponde, sin
+                       depender de capitán ni confirmación del sustituto.
+
+  272                  Corrige la seguridad de las funciones de sustitución
+                       administrativa 271: revoca explícitamente EXECUTE a
+                       anon y conserva acceso únicamente para authenticated
+                       y service_role; no modifica lógica ni datos
+                       competitivos.
+
+  273                  Corrige el guard de marcadores TEAM para
+                       sustituciones post-emisión: mantiene la validación
+                       estricta de pertenencia al snapshot vigente para
+                       asignaciones activas, pero permite cerrar como ended
+                       una asignación histórica del jugador saliente sin
+                       reescribir evidencia previa.
+
+  274                  Agrega un detector de sólo lectura para la
+                       composición A-Go-Go antes del inicio: identifica
+                       equipos activos con un solo integrante, jugadores
+                       sueltos, equipos vacíos e inscripciones activas sin
+                       equipo, fija mínimo competitivo de 2 y expone un
+                       estado agregado sin modificar HCP TEAM, salidas,
+                       tarjetas ni resultados.
+
+  275                  Integra el detector 274 con START_TOURNAMENT: el
+                       estado de inicio expone la composición A-Go-Go y
+                       iniciar_torneo bloquea desde backend cualquier inicio
+                       con equipos incompletos o jugadores activos sin
+                       equipo; no resuelve ni modifica composiciones.
+
+  276                  Habilita la baja administrativa auditada de un
+                       integrante A-Go-Go después del Freeze y antes de
+                       START_TOURNAMENT; inactiva su inscripción, cancela su
+                       slot, deja HCP TEAM obsoleto mediante el trigger
+                       existente y reabre salidas validadas, manteniendo la
+                       composición y tarjetas pendientes de regularización
+                       antes del inicio.
+
+  277                  Corrige la baja administrativa 276 para preservar
+                       intactas las salidas validadas y las tarjetas ya
+                       emitidas mientras el equipo incompleto sigue
+                       pendiente de resolución; la baja sólo actualiza
+                       composición/roster/auditoría y deja START_TOURNAMENT
+                       bloqueado por 274--275 hasta que el organizador
+                       decida la resolución.
+
+  278                  Amplía el detector 274 para controlar globalmente la
+                       composición A-Go-Go: detecta equipos excepción de
+                       tamaño normal +1, permite como máximo uno por torneo,
+                       detecta sobrecupos inválidos y vuelve a marcar la
+                       composición como pendiente si coexisten un equipo
+                       excepción y cualquier jugador suelto.
+                       START_TOURNAMENT hereda el bloqueo mediante
+                       compositionReady. No mueve jugadores, salidas ni
+                       tarjetas.
+
+  279                  Reequilibrio A-Go-Go 3+1 → 2+2 post-Freeze/pre-START:
+                       el administrador elige un integrante del único equipo
+                       excepción de 3 y lo mueve al equipo incompleto de 1.
+                       Conserva ambos equipos y sus salidas físicas,
+                       recalcula HCP TEAM, renueva la validación lógica y
+                       revisa tarjetas/markers si ya fueron emitidos. Sólo
+                       las tarjetas de los dos equipos afectados se
+                       devuelven para reimpresión material. No cambia
+                       categorías y START_TOURNAMENT sigue dependiendo del
+                       detector global 278.
+
+  280                  A-Go-Go: elimina las firmas de jugador/equipo y
+                       marcador como requisito competitivo. Resultado
+                       oficial y leaderboard pasan a depender de tarjeta
+                       física CAPTURED + conciliación COMPLETED + score
+                       válido; las firmas pueden conservarse como datos
+                       históricos/informativos, pero no participan en ningún
+                       STOP competitivo. La primera versión preparada de 280
+                       abortó sin aplicar cambios; se sustituyó por la
+                       versión corregida. Corrige el caso CENIR/2026 sin
+                       alterar sus datos.
+
+  281                  A-Go-Go: permite incorporar, después del Freeze y
+                       antes de START_TOURNAMENT y de la emisión oficial de
+                       tarjetas, al único jugador suelto de un equipo
+                       incompleto dentro de otro equipo normal completo,
+                       creando la única excepción +1 permitida. Conserva
+                       histórico el equipo origen, recalcula HCP TEAM del
+                       destino y renueva la validación lógica de salidas
+                       cuando corresponde.
+
+  282                  Corrige la RPC 281 para permitir de forma controlada
+                       el movimiento que crea la excepción +1 aun cuando el
+                       equipo destino ya está en su cupo normal. Usa
+                       únicamente la válvula oficial del trigger de cupo
+                       durante ese UPDATE y mantiene intacta la protección
+                       global de capacidad.
+
+  283                  Corrige en la RPC 281 la relación usada para
+                       localizar grupos vacíos: enlaza grupo → turno → ronda
+                       → torneo, evitando consultar un tournament_id
+                       inexistente en tournament_round_shifts. No cambia la
+                       regla competitiva de la excepción +1.
+
+  284                  A-Go-Go: incorpora el retiro competitivo auditado de
+                       un equipo que quedó incompleto con exactamente un
+                       integrante activo, después del Freeze, antes de
+                       START_TOURNAMENT y antes de emitir tarjetas
+                       oficiales. Conserva equipo, jugador e HCP como
+                       historia, los retira de la competencia oficial y
+                       actualiza sus asignaciones lógicas de salida.
+
+  285                  Corrige la reapertura de validaciones de salida
+                       dentro del retiro competitivo 284: sustituye la
+                       transición inválida validated → superseded por el
+                       flujo autorizado validated → reopened, registrando
+                       fecha, administrador y motivo, y conserva la
+                       revalidación formal posterior sin debilitar el
+                       trigger de protección.
   --------------------------------------------------------------------------
-
-| 271 \| Habilita sustitución administrativa directa de integrantes
-  A-Go-Go después del freeze y antes de iniciar el torneo: reutiliza o
-  crea al jugador en catálogo, genera una nueva inscripción sin cobro
-  conservando cobertura y cadena histórica, fija la marca de salida,
-  recalcula HCP TEAM, revalida salidas y versiona tarjetas emitidas
-  cuando corresponde, sin depender de capitán ni confirmación del
-  sustituto. \|
-
-| 272 \| Corrige la seguridad de las funciones de sustitución
-  administrativa 271: revoca explícitamente EXECUTE a `anon` y conserva
-  acceso únicamente para `authenticated` y `service_role`; no modifica
-  lógica ni datos competitivos. \|
-
-| 273 \| Corrige el guard de marcadores TEAM para sustituciones
-  post-emisión: mantiene la validación estricta de pertenencia al
-  snapshot vigente para asignaciones activas, pero permite cerrar como
-  `ended` una asignación histórica del jugador saliente sin reescribir
-  evidencia previa. \|
-
-| 274 \| Agrega un detector de sólo lectura para la composición A-Go-Go
-  antes del inicio: identifica equipos activos con un solo integrante,
-  jugadores sueltos, equipos vacíos e inscripciones activas sin equipo,
-  fija mínimo competitivo de 2 y expone un estado agregado sin modificar
-  HCP TEAM, salidas, tarjetas ni resultados. \|
-
-| 275 \| Integra el detector 274 con START_TOURNAMENT: el estado de
-  inicio expone la composición A-Go-Go y `iniciar_torneo` bloquea desde
-  backend cualquier inicio con equipos incompletos o jugadores activos
-  sin equipo; no resuelve ni modifica composiciones. \|
-
-| 276 \| Habilita la baja administrativa auditada de un integrante
-  A-Go-Go después del Freeze y antes de START_TOURNAMENT; inactiva su
-  inscripción, cancela su slot, deja HCP TEAM obsoleto mediante el
-  trigger existente y reabre salidas validadas, manteniendo la
-  composición y tarjetas pendientes de regularización antes del inicio.
-  \|
-
-| 277 \| Corrige la baja administrativa 276 para preservar intactas las
-  salidas validadas y las tarjetas ya emitidas mientras el equipo
-  incompleto sigue pendiente de resolución; la baja sólo actualiza
-  composición/roster/auditoría y deja START_TOURNAMENT bloqueado por
-  274--275 hasta que el organizador decida la resolución. \|
-
-| 278 \| Amplía el detector 274 para controlar globalmente la
-  composición A-Go-Go: detecta equipos excepción de tamaño normal +1,
-  permite como máximo uno por torneo, detecta sobrecupos inválidos y
-  vuelve a marcar la composición como pendiente si coexisten un equipo
-  excepción y cualquier jugador suelto. START_TOURNAMENT hereda el
-  bloqueo mediante compositionReady. No mueve jugadores, salidas ni
-  tarjetas. \|
-
-| 279 \| Reequilibrio A-Go-Go 3+1 → 2+2 post-Freeze/pre-START: el
-  administrador elige un integrante del único equipo excepción de 3 y lo
-  mueve al equipo incompleto de 1. Conserva ambos equipos y sus salidas
-  físicas, recalcula HCP TEAM, renueva la validación lógica y revisa
-  tarjetas/markers si ya fueron emitidos. Sólo las tarjetas de los dos
-  equipos afectados se devuelven para reimpresión material. No cambia
-  categorías y START_TOURNAMENT sigue dependiendo del detector global
-  278. \|
-
-| 280 \| A-Go-Go: elimina las firmas de jugador/equipo y marcador como
-  requisito competitivo. Resultado oficial y leaderboard pasan a
-  depender de tarjeta física CAPTURED + conciliación COMPLETED + score
-  válido; las firmas pueden conservarse como datos
-  históricos/informativos, pero no participan en ningún STOP
-  competitivo. La primera versión preparada de 280 abortó sin aplicar
-  cambios; se sustituyó por la versión corregida. Corrige el caso
-  CENIR/2026 sin alterar sus datos. \|
-| 281 \| A-Go-Go: permite incorporar, después del Freeze y antes de
-  START_TOURNAMENT y de la emisión oficial de tarjetas, al único jugador
-  suelto de un equipo incompleto dentro de otro equipo normal completo,
-  creando la única excepción +1 permitida. Conserva histórico el equipo
-  origen, recalcula HCP TEAM del destino y renueva la validación lógica
-  de salidas cuando corresponde. \|
-| 282 \| Corrige la RPC 281 para permitir de forma controlada el
-  movimiento que crea la excepción +1 aun cuando el equipo destino ya
-  está en su cupo normal. Usa únicamente la válvula oficial del trigger
-  de cupo durante ese UPDATE y mantiene intacta la protección global de
-  capacidad. \|
-| 283 \| Corrige en la RPC 281 la relación usada para localizar grupos
-  vacíos: enlaza grupo → turno → ronda → torneo, evitando consultar un
-  tournament_id inexistente en tournament_round_shifts. No cambia la
-  regla competitiva de la excepción +1. \|
-| 284 \| A-Go-Go: incorpora el retiro competitivo auditado de un equipo
-  que quedó incompleto con exactamente un integrante activo, después del
-  Freeze, antes de START_TOURNAMENT y antes de emitir tarjetas
-  oficiales. Conserva equipo, jugador e HCP como historia, los retira de
-  la competencia oficial y actualiza sus asignaciones lógicas de salida.
-  \|
-| 285 \| Corrige la reapertura de validaciones de salida dentro del
-  retiro competitivo 284: sustituye la transición inválida validated →
-  superseded por el flujo autorizado validated → reopened, registrando
-  fecha, administrador y motivo, y conserva la revalidación formal
-  posterior sin debilitar el trigger de protección. \|
 
 ## Pendientes
 
 ### A-Go-Go / Scramble
 
--   Completar el flujo pre-inicio de equipos incompletos: integrar el
-    detector 274 con START_TOURNAMENT y después habilitar baja
-    administrativa, retiro competitivo, excepción +1 y reagrupación
-    auditada de jugadores sueltos.
+-   Continuar la verificación E2E del flujo pre-inicio de composición
+    A-Go-Go ya implementado: baja administrativa, resolución de equipos
+    incompletos, excepción +1, reequilibrio 3+1 → 2+2 y retiro
+    competitivo.
 -   Continuar el E2E integral A-Go-Go con torneos nuevos creados por el
     flujo real de organizador, siguiendo el Asistente Operativo hasta
     detectar únicamente fallas reales de operación.
