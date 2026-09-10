@@ -1136,6 +1136,32 @@ Supabase es la fuente de verdad del esquema vivo.
   competitivo. La primera versión preparada de 280 abortó sin aplicar
   cambios; se sustituyó por la versión corregida. Corrige el caso
   CENIR/2026 sin alterar sus datos. \|
+| 281 \| A-Go-Go: permite incorporar, después del Freeze y antes de
+  START_TOURNAMENT y de la emisión oficial de tarjetas, al único jugador
+  suelto de un equipo incompleto dentro de otro equipo normal completo,
+  creando la única excepción +1 permitida. Conserva histórico el equipo
+  origen, recalcula HCP TEAM del destino y renueva la validación lógica
+  de salidas cuando corresponde. \|
+| 282 \| Corrige la RPC 281 para permitir de forma controlada el
+  movimiento que crea la excepción +1 aun cuando el equipo destino ya
+  está en su cupo normal. Usa únicamente la válvula oficial del trigger
+  de cupo durante ese UPDATE y mantiene intacta la protección global de
+  capacidad. \|
+| 283 \| Corrige en la RPC 281 la relación usada para localizar grupos
+  vacíos: enlaza grupo → turno → ronda → torneo, evitando consultar un
+  tournament_id inexistente en tournament_round_shifts. No cambia la
+  regla competitiva de la excepción +1. \|
+| 284 \| A-Go-Go: incorpora el retiro competitivo auditado de un equipo
+  que quedó incompleto con exactamente un integrante activo, después del
+  Freeze, antes de START_TOURNAMENT y antes de emitir tarjetas
+  oficiales. Conserva equipo, jugador e HCP como historia, los retira de
+  la competencia oficial y actualiza sus asignaciones lógicas de salida.
+  \|
+| 285 \| Corrige la reapertura de validaciones de salida dentro del
+  retiro competitivo 284: sustituye la transición inválida validated →
+  superseded por el flujo autorizado validated → reopened, registrando
+  fecha, administrador y motivo, y conserva la revalidación formal
+  posterior sin debilitar el trigger de protección. \|
 
 ## Pendientes
 
@@ -1182,48 +1208,3 @@ A partir de la siguiente migración, agregar **una sola entrada breve por
 migración** y actualizar **Pendientes** cuando corresponda. No incluir
 nombres de archivos SQL ni documentación exhaustiva del código en este
 README.
-
-## Migración 281 --- Incorporación de jugador suelto como única excepción +1 A-Go-Go (pre-emisión)
-
-**Objetivo:** resolver el caso en que una baja deja un solo integrante
-activo en un equipo A-Go-Go y el organizador decide incorporarlo a otro
-equipo que ya tiene el tamaño normal configurado, creando la única
-excepción `+1` permitida antes de `START_TOURNAMENT`.
-
-**Qué hace:** agrega
-`incorporar_suelto_como_excepcion_a_gogo_281(uuid, uuid, text)`. Exige
-A-Go-Go TEAM, Freeze, permisos administrativos, mismo torneo/categoría,
-origen con exactamente un jugador activo reconocido como suelto, destino
-con tamaño normal completo, ausencia de otra excepción y máximo absoluto
-de cuatro integrantes. Mueve la inscripción existente sin crear otra,
-deja el equipo origen como histórico/inactivo, conserva la salida física
-del equipo destino, recalcula su HCP TEAM y renueva la validación lógica
-cuando corresponde. Todo queda auditado en
-`tournament_team_composition_changes`.
-
-**Alcance de esta fase:** sólo antes de la emisión oficial de tarjetas.
-Si ya existen tarjetas emitidas, la RPC bloquea la operación para no
-alterar silenciosamente tarjetas ni relaciones de marcador; ese
-escenario se resolverá en una fase posterior específica.
-
-## Migración 282 --- Corrección de excepción +1 frente al control general de cupo
-
-**Objetivo:** corregir la contradicción entre la RPC 281 y el trigger general
-de cupo de la Migración 253, que impedía ejecutar el caso válido
-`2/2 → 3/2` aunque la propia RPC 281 exigía que el equipo destino estuviera
-completo.
-
-**Qué hace:** la RPC
-`incorporar_suelto_como_excepcion_a_gogo_281(uuid, uuid, text)` reutiliza
-la válvula oficial `app.saltar_validacion_cupo_equipo` exclusivamente
-durante el `UPDATE` controlado que mueve al jugador suelto al equipo
-destino. La señal se activa inmediatamente antes del movimiento y se
-restaura inmediatamente después. No modifica el trigger general ni
-relaja las operaciones ordinarias.
-
-**Alcance:** conserva intactas todas las validaciones de la 281: A-Go-Go
-TEAM, Freeze, pre-START_TOURNAMENT, pre-emisión, origen con un único
-jugador suelto, destino con tamaño normal completo, misma categoría,
-máximo absoluto de cuatro jugadores, una sola excepción global,
-recálculo HCP TEAM, auditoría y postcondición `compositionReady=true`.
-
