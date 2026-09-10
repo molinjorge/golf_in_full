@@ -1188,6 +1188,14 @@ Supabase es la fuente de verdad del esquema vivo.
                        fecha, administrador y motivo, y conserva la
                        revalidación formal posterior sin debilitar el
                        trigger de protección.
+  286                  Amplía el CHECK de auditoría
+                       tournament_team_composition_changes.change_type para
+                       admitir team_competitive_withdrawal, requerido por el
+                       retiro competitivo de equipos A-Go-Go de la 284/285.
+                       Conserva sin cambios todos los valores históricos
+                       previamente permitidos y no modifica datos, permisos
+                       ni la lógica de la RPC de retiro.
+
   --------------------------------------------------------------------------
 
 ## Pendientes
