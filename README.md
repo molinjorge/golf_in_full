@@ -1188,7 +1188,6 @@ Supabase es la fuente de verdad del esquema vivo.
                        fecha, administrador y motivo, y conserva la
                        revalidación formal posterior sin debilitar el
                        trigger de protección.
-                       
   286                  Amplía el CHECK de auditoría
                        tournament_team_composition_changes.change_type para
                        admitir team_competitive_withdrawal, requerido por el
@@ -1196,6 +1195,62 @@ Supabase es la fuente de verdad del esquema vivo.
                        Conserva sin cambios todos los valores históricos
                        previamente permitidos y no modifica datos, permisos
                        ni la lógica de la RPC de retiro.
+
+  287                  Crea el catálogo comercial de tarifas de uso de
+                       plataforma, con modalidad por día o por torneo,
+                       importe, moneda, vigencia, estado y una única tarifa
+                       default activa; su mantenimiento queda reservado al
+                       Superadmin.
+
+  288                  Crea asignaciones de tarifa especial por correo de
+                       organizador, con vigencia, estado y protección contra
+                       traslapes activos; su mantenimiento queda reservado al
+                       Superadmin.
+
+  289                  Crea la configuración comercial global de plataforma,
+                       separada de parámetros deportivos, con porcentaje de
+                       IVA configurable y correo administrativo para
+                       notificaciones comerciales.
+
+  290                  Crea la contratación comercial previa al torneo y una
+                       RPC segura que resuelve tarifa especial/default,
+                       calcula días, subtotal, IVA y total en backend y
+                       congela ese snapshot económico antes del pago.
+
+  291                  Crea intentos de pago propios para contrataciones de
+                       plataforma, separados de pagos de jugadores, copiando
+                       monto y moneda del snapshot contractual y permitiendo
+                       múltiples intentos con referencias del proveedor.
+
+  292                  Finaliza en backend una contratación con pago aprobado
+                       de forma atómica e idempotente: confirma el intento,
+                       marca el contrato pagado, crea el torneo activo y
+                       asigna al organizador como administrador del torneo.
+
+  293                  Agrega un simulador temporal de resultado de pago de
+                       plataforma, usable por el organizador sobre sus propias
+                       contrataciones, con escenarios APROBADO y RECHAZADO y
+                       reutilizando la finalización definitiva de la 292.
+
+  294                  Separa la vigencia comercial del torneo de sus fechas
+                       y estados deportivos, registrando el periodo operativo
+                       de cada torneo contratado y exponiendo helpers para
+                       identificar acceso vigente, vencido o legacy.
+
+  295                  Aplica en backend el modo sólo lectura a torneos
+                       contratados cuya vigencia comercial terminó, bloqueando
+                       mutaciones en el mismo perímetro operativo protegido
+                       para torneos cancelados y preservando los torneos legacy.
+
+  296                  Habilita el autorregistro backend de organizadores
+                       después de verificar el correo con Supabase Auth,
+                       creando o vinculando admin_users sin asignar todavía
+                       permisos sobre ningún torneo.
+
+  297                  Crea una cola/auditoría idempotente de notificaciones
+                       comerciales cuando un pago genera un torneo, usando el
+                       correo administrativo configurable sin hacer depender
+                       la creación del torneo del envío externo de email.
 
   --------------------------------------------------------------------------
 
