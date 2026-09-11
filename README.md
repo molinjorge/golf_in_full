@@ -1252,6 +1252,22 @@ Supabase es la fuente de verdad del esquema vivo.
                        correo administrativo configurable sin hacer depender
                        la creación del torneo del envío externo de email.
 
+  298                  Adapta la confirmación y reapertura de configuración a
+                       torneos de autoservicio ya activos, conservando la
+                       confirmación explícita antes de abrir inscripciones y
+                       limitándola al estado deportivo EN PLANIFICACIÓN.
+
+  299                  Elimina la confirmación manual como requisito del flujo
+                       de autoservicio: al abrir inscripciones valida en vivo
+                       configuración y desempates, y ajusta el Asistente
+                       Operativo sin alterar el flujo histórico.
+
+  300                  Retira el flujo comercial histórico de provisionamiento,
+                       confirmación manual de pago y liberación; conserva los
+                       datos históricos y simplifica la protección de estado
+                       de servicio sin alterar el autoservicio ni la operación
+                       deportiva.
+
   --------------------------------------------------------------------------
 
 ## Pendientes
@@ -1278,6 +1294,7 @@ Supabase es la fuente de verdad del esquema vivo.
 
 ### Generales
 
+-   Retirar del frontend administrativo los controles y textos del flujo histórico de provisionamiento/liberación, dejando el autoservicio como flujo normal.
 -   Eliminar la función huérfana `validar_cupo_categoria()` reemplazada
     por `validar_cupo_categoria_cruzado()`.
 -   Agregar ciudades al catálogo conforme se incorporen clubes en nuevas
@@ -1289,6 +1306,9 @@ Supabase es la fuente de verdad del esquema vivo.
 -   Soporte futuro para campos de 27+ hoyos con nueves combinables.
 -   Completar pantallas administrativas/club y licencias que sigan
     pendientes.
+-   Continuar la prueba E2E del autoservicio comercial desde pago hasta
+    apertura de inscripciones y operación completa del torneo, verificando
+    que el Asistente Operativo sea congruente en cada etapa.
 -   Mantener pendientes los ajustes del motor de salidas que todavía
     requieran acomodación manual, balanceo o validación integral antes
     de tarjetas.
