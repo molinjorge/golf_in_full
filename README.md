@@ -1268,9 +1268,83 @@ Supabase es la fuente de verdad del esquema vivo.
                        de servicio sin alterar el autoservicio ni la operación
                        deportiva.
 
+  301                  Crea el catálogo transversal de Premios Especiales del
+                       Torneo con cinco premios estándar protegidos y premios
+                       personalizados por organizador, definiendo tipo de
+                       valor, unidad sugerida y criterio de comparación sin
+                       vincularlo al scoring ni al ciclo competitivo.
+
+  302                  Configura Premios Especiales por torneo, ronda y hoyo,
+                       guardando snapshots del catálogo y reglas operativas
+                       como unidad, referencia, fairway, green y golpe evaluado,
+                       sin integrarlos al scoring, freezes ni ciclo competitivo.
+
+  303                  Crea estaciones operativas de Premios Especiales por
+                       torneo, ronda y hoyo, registra un responsable externo
+                       sin exigir cuenta administrativa y permite que varios
+                       premios compartan la misma estación, manteniendo la
+                       consistencia premio-estación y el aislamiento deportivo.
+
+  304                  Incorpora acceso QR independiente y seguro por estación
+                       de Premios Especiales, con token aleatorio propio,
+                       generación/rotación y desactivación controladas, además
+                       de una consulta pública mínima por bearer token sin
+                       reutilizar QR de jugadores ni tarjetas.
+
+  305                  Incorpora el roster operativo por ronda para Premios
+                       Especiales, prefiriendo la última validación vigente de
+                       salidas y expandiendo equipos a sus jugadores; agrega
+                       captura móvil por QR con valor, testigo, corrección e
+                       invalidación auditadas sin borrar el historial.
+
+  306                  Agrega el **REPORTE PROVISIONAL EN LÍNEA** de Premios
+                       Especiales para organizador/superadmin, agrupado por
+                       ronda y hoyo, con candidatos válidos ordenados según
+                       MENOR_ES_MEJOR, MAYOR_ES_MEJOR o SOLO_REGISTRO,
+                       mostrando inválidos e historial sin adjudicar ganador.
+
+  307                  Incorpora mensajería bidireccional append-only entre el
+                       responsable de una estación de Premios Especiales y el
+                       organizador/superadmin, usando QR para el responsable y
+                       autenticación administrativa para el organizador, con
+                       contexto opcional de premio y sin edición ni borrado.
+
+  308                  Implementa la adjudicación oficial y explícita de
+                       Premios Especiales mediante versiones inmutables por
+                       premio, posiciones asociadas a candidatos válidos,
+                       soporte para empates, snapshots de jugador/valor/unidad
+                       y anulación con motivo sin borrar el histórico.
+
+  309                  Convierte el catálogo global de Premios Especiales en
+                       administrable por Superadmin, permitiendo mantener los
+                       premios estándar sin borrarlos ni desactivarlos e
+                       incorporando defaults operativos de referencia, fairway,
+                       green y golpe evaluado para futuras configuraciones de
+                       torneo.
+
+  310                  Corrige la configuración de Premios Especiales por
+                       torneo para que nombre, tipo de valor y criterio se
+                       capturen del catálogo únicamente al crear la asociación
+                       y permanezcan como snapshots inmutables en ediciones
+                       posteriores. Permite además editar datos operativos
+                       históricos aunque el premio de catálogo haya sido
+                       desactivado después.
+
   --------------------------------------------------------------------------
 
 ## Pendientes
+
+### Premios especiales del torneo
+
+-   Corregir el ranking provisional de la Migración 306 para que valores
+    idénticos compartan realmente la misma posición provisional.
+-   Integrar en frontend el **Catálogo Global de Premios Especiales** para
+    Superadmin y ajustar la pestaña **PREMIOS** del torneo para mostrar sólo
+    premios realmente configurados, además de configuración, estaciones/QR,
+    captura móvil, **REPORTE PROVISIONAL EN LÍNEA**, mensajes y adjudicación
+    oficial, manteniéndola fuera de los bloqueos del Asistente Operacional.
+-   Evaluar posteriormente publicación/consulta para jugadores y mecanismos de
+    notificación, sin mezclar estos premios con leaderboards deportivos.
 
 ### A-Go-Go / Scramble
 
