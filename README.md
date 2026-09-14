@@ -1330,19 +1330,34 @@ Supabase es la fuente de verdad del esquema vivo.
                        históricos aunque el premio de catálogo haya sido
                        desactivado después.
 
+  311                  Agrega una consulta pública controlada por QR para que
+                       el responsable de una estación de Premios Especiales
+                       vea desde cualquier dispositivo todos los registros de
+                       esa estación y su historial, sin abrir acceso directo a
+                       las tablas operativas.
+
+  312                  Corrige el ranking del REPORTE PROVISIONAL EN LÍNEA de
+                       Premios Especiales: los empates se determinan únicamente
+                       por el valor competitivo, por lo que valores idénticos
+                       comparten posición; fecha e identificador quedan sólo
+                       como orden visual determinista y SOLO_REGISTRO no recibe
+                       posición competitiva.
+
+  313                  Corrige la generación/rotación del QR de estaciones de
+                       Premios Especiales calificando explícitamente
+                       extensions.gen_random_bytes(32), ya que pgcrypto está
+                       instalado en el esquema extensions y la RPC 304 conserva
+                       un search_path restringido a public y pg_temp.
+
   --------------------------------------------------------------------------
 
 ## Pendientes
 
 ### Premios especiales del torneo
 
--   Corregir el ranking provisional de la Migración 306 para que valores
-    idénticos compartan realmente la misma posición provisional.
--   Integrar en frontend el **Catálogo Global de Premios Especiales** para
-    Superadmin y ajustar la pestaña **PREMIOS** del torneo para mostrar sólo
-    premios realmente configurados, además de configuración, estaciones/QR,
-    captura móvil, **REPORTE PROVISIONAL EN LÍNEA**, mensajes y adjudicación
-    oficial, manteniéndola fuera de los bloqueos del Asistente Operacional.
+-   Integrar la adjudicación oficial de Premios Especiales en frontend,
+    usando las RPC de la Migración 308, manteniendo selección explícita,
+    empates, versiones históricas y anulación sin borrar adjudicaciones.
 -   Evaluar posteriormente publicación/consulta para jugadores y mecanismos de
     notificación, sin mezclar estos premios con leaderboards deportivos.
 
