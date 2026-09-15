@@ -1349,6 +1349,39 @@ Supabase es la fuente de verdad del esquema vivo.
                        instalado en el esquema extensions y la RPC 304 conserva
                        un search_path restringido a public y pg_temp.
 
+  314                  Formaliza un ciclo operativo obligatorio por ronda
+                       (PENDIENTE -> EN JUEGO -> FINALIZADA), incluso en
+                       torneos de una sola ronda; exige inicio manual antes de
+                       captura competitiva, reutiliza el cierre formal existente
+                       como finalización de ronda, impide iniciar una ronda
+                       posterior mientras la anterior siga abierta, incorpora
+                       el estado al Asistente y permite reprogramar la fecha
+                       sólo mientras la ronda esté pendiente, respetando la
+                       fecha de inicio del torneo y la última ronda finalizada.
+
+  315 Fase Best Ball 1
+                       Reserva Best Ball Shotgun por equipos en el registro
+                       común de motores con contrato propio
+                       best_ball_team_shotgun_v1, reutilizando únicamente la
+                       preparación física TEAM; queda expresamente INACTIVO,
+                       sin validador, emisión ni captura habilitados, para no
+                       enrutar Best Ball hacia la lógica A-Go-Go/team_stroke.
+
+  316 Fase Best Ball 2
+                       Crea la infraestructura aislada de snapshot oficial
+                       Best Ball: una cabecera por tarjeta TEAM y sus integrantes
+                       normalizados, cada uno vinculado al snapshot individual
+                       de hándicap de la ronda; agrega validadores de integridad
+                       y RLS cerrado, sin activar emisión ni captura Best Ball.
+
+  317 Fase Best Ball 3
+                       Activa Best Ball Shotgun TEAM con validador y contrato
+                       propios, exige equipos de 2 a 5 integrantes con HCP
+                       individual congelado y agrega emisión oficial atómica de
+                       tarjeta TEAM + snapshot + integrantes, sin inicializar
+                       todavía captura de scores; los dispatchers comunes
+                       discriminan Best Ball y A-Go-Go por engine explícito.
+
   --------------------------------------------------------------------------
 
 ## Pendientes
@@ -1381,6 +1414,19 @@ Supabase es la fuente de verdad del esquema vivo.
     cuando la configuración del torneo lo permita.
 -   Best Ball y Shamble permanecen como motores separados.
 
+### Best Ball
+
+-   Continuar la implementación por fases manteniendo Best Ball aislado de
+    Stroke Play, Stableford y A-Go-Go. Las Migraciones 315 a 317 ya registran,
+    validan y emiten la tarjeta oficial TEAM Best Ball con snapshot propio e
+    HCP individual congelado, sin reutilizar el HCP TEAM de A-Go-Go.
+-   Implementar la inicialización controlada de captura Best Ball por jugador
+    y hoyo sobre tablas propias, sin utilizar las tablas universales actuales
+    de Stroke/Stableford/A-Go-Go.
+-   Implementar captura digital y física por jugador/hoyo, conciliación propia,
+    cálculo Best Gross/Best Net, resultado oficial TEAM, leaderboard, desempates
+    y cierre mediante ramas explícitas best_ball.
+
 ### Generales
 
 -   Retirar del frontend administrativo los controles y textos del flujo histórico de provisionamiento/liberación, dejando el autoservicio como flujo normal.
@@ -1408,3 +1454,726 @@ A partir de la siguiente migración, agregar **una sola entrada breve por
 migración** y actualizar **Pendientes** cuando corresponda. No incluir
 nombres de archivos SQL ni documentación exhaustiva del código en este
 README.
+
+---
+
+## 318 — BEST BALL F4: CAPTURA DIGITAL AISLADA E INICIALIZACIÓN ATÓMICA
+
+### Objetivo
+Se incorpora la primera capa de captura digital propia del motor `best_ball`, sin reutilizar `tournament_scorecard_hole_scores`.
+
+### Tabla nueva
+`tournament_best_ball_hole_scores`
+
+Identidad competitiva:
+- tarjeta TEAM;
+- integrante congelado Best Ball;
+- jugador;
+- hoyo congelado.
+
+Unicidad principal:
+`score_card_id + best_ball_scorecard_member_id + round_hole_snapshot_id`.
+
+### Inicialización
+Se crea `_inicializar_captura_scores_best_ball_318(...)`.
+
+Reutiliza:
+- `tournament_scorecard_capture_sessions`: una sesión por tarjeta TEAM;
+- `tournament_round_hole_snapshots`;
+- snapshots Best Ball 316.
+
+Genera:
+- una fila `PENDING` por integrante × hoyo;
+- `play_sequence` a partir del hoyo de salida Shotgun de la tarjeta.
+
+No crea marcadores todavía.
+
+### Atomicidad
+Se crea `_emitir_tarjetas_best_ball_ronda_318(...)`.
+
+La emisión oficial Best Ball queda unida a la inicialización:
+1. emitir tarjetas TEAM y snapshots;
+2. crear sesiones;
+3. crear todas las filas PENDING.
+
+Si cualquier paso falla, la transacción completa revierte y no quedan tarjetas Best Ball parcialmente preparadas.
+
+### Dispatchers
+`inicializar_captura_scores_ronda(...)` agrega únicamente:
+- `team + best_ball` → `_inicializar_captura_scores_best_ball_318`;
+- conserva `team + team_stroke` → A-Go-Go;
+- conserva la ruta individual previa.
+
+`emitir_tarjetas_score_ronda(...)` conserva todas las ramas existentes y cambia únicamente Best Ball para usar el wrapper atómico 318.
+
+### Protecciones
+La tabla Best Ball:
+- RLS activo;
+- sin acceso directo para `anon`/`authenticated`;
+- valida pertenencia tarjeta/sesión/snapshot/integrante/hoyo;
+- respeta torneo cancelado;
+- respeta vigencia comercial;
+- respeta cierre competitivo;
+- permite preparación `PENDING` antes de inicio, pero exige torneo iniciado para un futuro `SCORE/PICKUP`.
+
+### Fuera de alcance
+- F5: marcadores Best Ball.
+- F6: captura SCORE/PICKUP, confirmación y disputa.
+- F7: cálculo Best Gross/Best Net.
+- No se modifican tablas de score Stroke/Stableford/A-Go-Go.
+
+---
+
+## 319 — BEST BALL F5: MARCADORES TEAM
+
+### Objetivo
+Best Ball reutiliza `tournament_scorecard_marker_assignments`, manteniendo una asignación activa por tarjeta TEAM.
+
+### Regla de marcadores
+Dentro de cada grupo Shotgun TEAM:
+- con 2 o más equipos se aplica asignación circular entre tarjetas;
+- con un solo equipo se permite `self_team`;
+- el jugador marcador inicial es `member_order = 1` del snapshot congelado de la tarjeta marcadora.
+
+La asignación es por tarjeta/equipo. El marcador seleccionado será quien capture, en F6, los scores individuales de los integrantes del equipo objetivo.
+
+### Generalización del trigger TEAM
+Se conserva el trigger existente `trg_validar_asignacion_marcador_team_243`, pero su función ahora soporta dos motores:
+
+- `team_stroke`: conserva la validación histórica contra `tournament_team_scorecard_snapshots`;
+- `best_ball`: valida al marcador contra `tournament_best_ball_scorecard_snapshots` + `tournament_best_ball_scorecard_members`.
+
+No se cambia la lógica interna A-Go-Go.
+
+### Atomicidad
+Se crea `_emitir_tarjetas_best_ball_ronda_319(...)`.
+
+La emisión oficial Best Ball ahora exige completar en una sola transacción:
+1. tarjetas TEAM;
+2. snapshot e integrantes;
+3. sesiones de captura;
+4. filas PENDING por jugador × hoyo;
+5. marcador activo para cada tarjeta.
+
+Si falta marcador para una sola tarjeta, toda la emisión revierte.
+
+### Fuera de alcance
+F5 no captura scores. Las filas de `tournament_best_ball_hole_scores` continúan:
+- `status = pending`;
+- `result_type = PENDING`;
+- `gross_score = NULL`;
+- `marker_assignment_id = NULL`.
+
+El `marker_assignment_id` se vinculará a la evidencia de captura cuando F6 registre SCORE/PICKUP.
+
+### Siguiente fase
+F6 — captura digital Best Ball por jugador:
+- SCORE / PICKUP;
+- marcador autorizado;
+- confirmación;
+- disputa;
+- sin score TEAM capturado directamente.
+
+---
+
+## 320 — BEST BALL F6: CAPTURA DIGITAL POR JUGADOR, CONFIRMACIÓN Y DISPUTA
+
+### Objetivo
+Se habilita por primera vez la captura competitiva Best Ball sobre `tournament_best_ball_hole_scores`.
+
+La captura continúa siendo individual dentro de una tarjeta TEAM:
+- TEAM = unidad competitiva;
+- PLAYER = unidad de captura;
+- resultado TEAM Best Ball = derivado posterior, nunca capturado directamente.
+
+### Resultado por jugador/hoyo
+Estados admitidos:
+- `SCORE`: requiere gross > 0;
+- `PICKUP`: gross = NULL;
+- `PENDING`: sólo estado técnico previo a captura.
+
+Best Ball permite PICKUP por jugador. Esto no modifica la prohibición de PICKUP de A-Go-Go.
+
+### Quién captura
+Únicamente el `marker_player_id` de la asignación vigente de la tarjeta para la secuencia del hoyo.
+
+El marcador puede corregir un resultado `entered`, pero:
+- no puede modificar uno `confirmed`;
+- no puede sobrescribir uno `disputed`.
+
+### Confirmación y disputa
+Regla normal:
+- cada jugador confirma o disputa su propio resultado individual.
+
+### SELF_TEAM
+Cuando un equipo Best Ball juega solo:
+- existe asignación `self_team`;
+- el marcador designado captura los scores de todos los integrantes;
+- cada integrante distinto del marcador confirma/disputa su propio score;
+- para el score del propio marcador, debe confirmar/disputar OTRO integrante congelado de esa misma tarjeta.
+
+Por lo tanto, una persona nunca captura y confirma su propio score sin una segunda intervención.
+
+### Ciclo de ronda
+Las filas PENDING pueden prepararse antes de iniciar la ronda.
+
+Cualquier registro o modificación competitiva a `SCORE/PICKUP` exige:
+- lifecycle de ronda iniciado;
+- lifecycle no finalizado;
+- por tanto, estado operativo `EN_JUEGO`.
+
+### Auditoría
+Se crea `tournament_best_ball_scorecard_events`, independiente de `tournament_scorecard_events`, porque la tabla histórica común referencia por FK exclusivamente `tournament_scorecard_hole_scores`.
+
+Eventos iniciales:
+- `score_entered`;
+- `score_corrected`;
+- `player_confirmed`;
+- `player_disputed`.
+
+### Sesión de captura
+La sesión TEAM pasa:
+- `ready` → `in_progress` con la primera captura;
+- `in_progress` → `captured` cuando ya no existe ningún PENDING entre todos los integrantes y hoyos de la tarjeta.
+
+`captured` significa captura digital completa, no conciliación ni oficialización.
+
+### Fuera de alcance
+- F7: cálculo derivado Best Gross / Best Net por hoyo y acumulado.
+- F8: payload/tarjeta digital Best Ball.
+- F9+: captura física, conciliación y oficialización.
+
+No se modifican:
+- `tournament_scorecard_hole_scores`;
+- `tournament_scorecard_events`;
+- funciones internas Stroke/Stableford;
+- funciones internas A-Go-Go.
+
+---
+
+## 321 — BEST BALL F7: CÁLCULO DERIVADO EN TIEMPO REAL
+
+### Objetivo
+Se incorpora el cálculo digital provisional de Best Ball sin crear ni almacenar un score TEAM.
+
+La evidencia sigue siendo exclusivamente:
+`jugador + hoyo + SCORE/PICKUP/PENDING`.
+
+El resultado de equipo se deriva al consultar la tarjeta.
+
+### Función
+`obtener_best_ball_digital_tarjeta_321(score_card_id)`
+
+Sólo puede consultarla:
+- un integrante congelado del equipo;
+- el marcador activo de la tarjeta;
+- un administrador autorizado del torneo.
+
+### Best Gross
+Para cada hoyo se toman como candidatos únicamente filas:
+- `result_type = SCORE`;
+- `status = entered` o `confirmed`.
+
+El menor gross es `bestGross`.
+
+Si dos o más integrantes empatan con el menor gross:
+- `grossTie = true`;
+- `grossCountingPlayers` contiene todos los empatados.
+
+No se fuerza artificialmente un único jugador ganador dentro del equipo.
+
+### Best Net
+Cada integrante conserva su propio `playing_handicap` congelado.
+
+Los golpes por hoyo se obtienen mediante la función común existente:
+`calcular_golpes_handicap_hoyo(playing_handicap, stroke_index, 18)`.
+
+Por jugador/hoyo:
+`netScore = grossScore - handicapStrokes`.
+
+El menor net es `bestNet`.
+
+Puede ser aportado por un jugador diferente al Best Gross.
+
+Los hándicaps plus siguen exactamente la lógica ya existente del sistema.
+
+### PICKUP
+Una fila PICKUP:
+- es una evidencia válida y resuelta del jugador;
+- no participa como candidata a Best Gross ni Best Net.
+
+Si todos los integrantes terminan el hoyo como PICKUP:
+- estado del hoyo = `NO_SCORE`;
+- no existe Best Gross ni Best Net.
+
+### PENDING
+Si existe al menos un PENDING:
+- estado del hoyo = `OPEN`.
+
+Aunque ya exista un score válido de otro integrante, el valor mostrado es sólo provisional porque el jugador pendiente todavía podría mejorarlo.
+
+### DISPUTED
+Una fila `disputed`:
+- no participa como candidata de Best Gross/Best Net;
+- hace que el estado del hoyo sea `DISPUTED`.
+
+Si existen otros scores no disputados, la función puede mostrar el mejor de ellos como referencia provisional, pero el hoyo permanece marcado como disputado.
+
+### Estado de hoyo
+Prioridad:
+1. `DISPUTED`: existe al menos una disputa.
+2. `OPEN`: no hay disputa, pero existe PENDING.
+3. `NO_SCORE`: todos están resueltos y ninguno tiene SCORE.
+4. `COMPLETE`: todos están resueltos y existe al menos un SCORE.
+
+### Totales
+La función entrega:
+- `provisionalPartialGrossTotal`;
+- `provisionalPartialNetTotal`;
+- hoyos con score actual;
+- hoyos completos;
+- abiertos;
+- disputados;
+- sin score.
+
+Son acumulados parciales/provisionales, nunca oficiales.
+
+`digitallyResolved = true` únicamente si:
+- existen 18 hoyos;
+- los 18 están `COMPLETE`;
+- no hay OPEN;
+- no hay DISPUTED;
+- no hay NO_SCORE.
+
+### Persistencia
+No se crea tabla de resultados TEAM y no se modifica `tournament_best_ball_hole_scores`.
+
+Principio:
+**el Best Ball se calcula; no se captura.**
+
+### Fuera de alcance
+- F8: payload/tarjeta digital de jugador/equipo.
+- F9: captura física.
+- F10: conciliación individual.
+- F11: resultado oficial Best Ball.
+- F12: leaderboard.
+
+---
+
+## 322 — BEST BALL F8: TARJETA DIGITAL Y PAYLOAD
+
+### Tarjeta digital Best Ball
+Se crea `obtener_tarjeta_digital_best_ball_322(score_card_id)`.
+
+Best Ball no se incorpora al acceso histórico por `qr_token`. La tarjeta se consulta por `score_card_id`, preservando la regla del proyecto de no utilizar QR para estas tarjetas.
+
+Puede abrirla:
+- integrante congelado del equipo;
+- marcador activo;
+- administrador autorizado.
+
+### Contenido
+La tarjeta entrega:
+- equipo e integrantes congelados;
+- Playing Handicap individual y allowance;
+- salida Shotgun;
+- quién marca al equipo (`marker`);
+- qué equipo(s) marca el propio equipo (`weMark`);
+- estado de sesión;
+- scores individuales por jugador/hoyo;
+- permisos efectivos `canCapture`, `canConfirm`, `canDispute`;
+- Best Gross / Best Net provisional;
+- jugadores que aportan cada mejor score;
+- empates internos;
+- OPEN / DISPUTED / COMPLETE / NO_SCORE;
+- acumulados provisionales de F7.
+
+### Permisos
+`canCapture` sólo corresponde al marcador vigente.
+
+`canConfirm` y `canDispute` se calculan por score mediante
+`_puede_confirmar_disputar_best_ball_320`, por lo que el caso `self_team`
+respeta la segunda intervención definida en F6.
+
+### Payload administrativo
+Se crea `_obtener_payload_tarjetas_best_ball_ronda_322`.
+
+`obtener_payload_tarjetas_score_oficiales_ronda` agrega una rama explícita:
+- `best_ball + equipo` → payload Best Ball 322;
+- cualquier otro motor → contrato histórico `_pre314`.
+
+La fecha operativa 314 se aplica a ambas rutas.
+
+### Protección de motores existentes
+No se modifica:
+- `abrir_captura_tarjeta_score(qr_token)`;
+- `_obtener_payload_tarjetas_score_oficiales_ronda_pre314`;
+- rama PLAYER;
+- rama A-Go-Go;
+- tablas compartidas de score.
+
+### Siguiente fase
+F9 — captura física Best Ball por jugador/hoyo.
+
+---
+
+## 323 — BEST BALL F9: CAPTURA FÍSICA POR JUGADOR/HOYO
+
+### Diagnóstico previo
+La tabla común `tournament_scorecard_physical_receptions` sí puede reutilizarse como contenedor de recepción de la tarjeta TEAM.
+
+Sin embargo, `recibir_tarjeta_fisica_score` no puede reutilizarse directamente para Best Ball porque su guardia `_exigir_estructura_captura_inicializada_246` consulta `tournament_scorecard_hole_scores`, tabla que Best Ball deliberadamente no usa.
+
+No se modifica esa guardia común.
+
+### Nuevas tablas
+`tournament_best_ball_physical_hole_scores`
+- una fila por tarjeta × integrante congelado × hoyo;
+- SCORE o PICKUP;
+- conserva identidad del jugador;
+- UNIQUE por integrante/hoyo.
+
+`tournament_best_ball_physical_events`
+- auditoría de alta/corrección del detalle físico Best Ball.
+
+### Contenedor común reutilizado
+Se sigue usando `tournament_scorecard_physical_receptions`:
+- RECEIVED;
+- IN_CAPTURE;
+- CAPTURED;
+- VOIDED.
+
+También se reutilizan los eventos comunes de tarjeta para:
+- physical_card_received;
+- physical_capture_started;
+- physical_capture_completed.
+
+### Funciones Best Ball
+- `_obtener_score_card_best_ball_fisica_323`
+- `recibir_tarjeta_fisica_best_ball_323`
+- `guardar_resultado_fisico_hoyo_best_ball_323`
+- `finalizar_captura_fisica_best_ball_323`
+- `obtener_captura_fisica_best_ball_323`
+
+### Finalización
+La captura física sólo puede finalizar cuando existen exactamente:
+`número de integrantes congelados × 18`
+resultados físicos.
+
+Para pareja: 36.
+Para equipo de 3: 54.
+Para equipo de 4: 72.
+Para equipo de 5: 90.
+
+### Protección
+No se modifica:
+- tabla física compartida por hoyo;
+- funciones físicas Stroke/Stableford;
+- función física A-Go-Go;
+- guardias comunes 246.
+
+### Siguiente fase
+F10 — conciliación Best Ball por jugador/hoyo.
+
+---
+
+## 324 — BEST BALL F10: CONCILIACIÓN POR JUGADOR/HOYO
+
+### Principio
+La conciliación Best Ball se realiza sobre la evidencia individual, nunca sobre el Best Ball TEAM derivado.
+
+Ejemplo: digital Juan 5 / Pedro 4 y físico Juan 4 / Pedro 5 producen Best Ball 4 en ambos lados, pero existen dos diferencias individuales y ambas deben conciliarse.
+
+### Reutilización
+Se reutiliza `tournament_scorecard_reconciliations` como contenedor de conciliación por tarjeta TEAM.
+
+No se reutiliza `tournament_scorecard_hole_resolutions`, porque sólo permite una resolución por tarjeta/hoyo.
+
+### Nuevas tablas
+`tournament_best_ball_hole_resolutions`
+- tarjeta × integrante × hoyo;
+- snapshots digital, reclamo y físico;
+- fuente DIGITAL / PHYSICAL / PLAYER_CLAIM / MANUAL;
+- resultado individual resuelto SCORE/PICKUP.
+
+`tournament_best_ball_reconciliation_events`
+- auditoría de resoluciones individuales y cambios.
+
+### Funciones
+- `iniciar_conciliacion_best_ball_324`
+- `obtener_conciliacion_best_ball_324`
+- `resolver_conciliacion_best_ball_324`
+- `finalizar_conciliacion_best_ball_324`
+
+### Reglas
+Una evidencia requiere revisión cuando:
+- está disputed;
+- sigue PENDING digital;
+- digital y físico difieren en tipo;
+- digital y físico difieren en gross.
+
+Si coincide, no requiere resolución explícita.
+
+La conciliación sólo finaliza cuando:
+- existe evidencia física para cada integrante × hoyo;
+- toda diferencia/disputa individual tiene resolución.
+
+### Resultado TEAM
+F10 todavía NO calcula resultado oficial TEAM. La conciliación produce la evidencia individual oficial necesaria para F11.
+
+### Siguiente fase
+F11 — resultado oficial Best Ball TEAM Gross/Net derivado de la evidencia individual conciliada.
+
+---
+
+## 325 — BEST BALL F11: RESULTADO OFICIAL TEAM GROSS/NET
+
+### Autoridad del resultado
+El resultado oficial Best Ball no se toma del score digital provisional.
+
+Requisitos:
+1. tarjeta física `CAPTURED`;
+2. conciliación F10 `COMPLETED`;
+3. evidencia individual completa;
+4. RHS/Playing Handicap individual congelado válido;
+5. 18 hoyos y Stroke Index 1..18.
+
+### Resultado individual oficial
+Por integrante/hoyo:
+- si existe resolución F10, ésta es autoridad;
+- si no existe resolución, digital y físico deben coincidir;
+- SCORE conserva gross;
+- PICKUP no es candidato a Best Gross/Net.
+
+### Derivación TEAM
+Después de fijar la evidencia individual oficial:
+- se aplica `calcular_golpes_handicap_hoyo` al Playing Handicap individual;
+- Best Gross = menor gross SCORE del equipo en el hoyo;
+- Best Net = menor net SCORE del equipo en el hoyo.
+
+Gross y Net pueden provenir de jugadores distintos.
+
+Si hay empate interno se conservan todos los jugadores que aportan el mínimo.
+
+### Hoyo sin SCORE
+Si todos los integrantes terminan PICKUP en un hoyo, el TEAM no tiene score oficial para ese hoyo y F11 rechaza la construcción del resultado completo.
+
+### Persistencia
+No se crea ni persiste una fila TEAM por hoyo. El resultado oficial se deriva mediante:
+`obtener_resultado_oficial_best_ball_325(score_card_id)`.
+
+### Protección
+No se modifican las funciones oficiales Stroke, Stableford o A-Go-Go ni las tablas compartidas de resoluciones.
+
+### Siguiente fase
+F12 — leaderboard de ronda Best Ball TEAM.
+
+---
+
+## 326 — BEST BALL F12: LEADERBOARD DE RONDA TEAM
+
+### Autoridad
+El leaderboard no recalcula scores. Consume exclusivamente:
+`obtener_resultado_oficial_best_ball_325`.
+
+Sólo entran al ranking las tarjetas con:
+- captura física `CAPTURED`;
+- conciliación `COMPLETED`;
+- resultado oficial F11 construible.
+
+Las demás permanecen como pendientes y no bloquean la consulta del leaderboard.
+
+### Clasificaciones
+Se respetan las clasificaciones congeladas de cada categoría en
+`tournament_category_classification_snapshots`.
+
+Para cada categoría:
+- Gross se ordena por menor total Gross;
+- Neto se ordena por menor total Net;
+- se usa `rank()` para no romper empates artificialmente;
+- se informa `tied` y `tieCount`.
+
+F12 NO resuelve desempates. Esa responsabilidad queda para F13.
+
+### Función
+`obtener_leaderboard_best_ball_ronda_326(tournament_round_id)`.
+
+### Dispatcher común
+`obtener_leaderboard_operativo_ronda` incorpora una rama explícita:
+- best_ball + equipo → F12;
+- team_stroke + equipo → A-Go-Go existente;
+- demás motores → `_obtener_leaderboard_operativo_ronda_pre211`.
+
+### Persistencia
+No se persisten posiciones ni resultados TEAM.
+
+### Siguiente fase
+F13 — desempates Best Ball Gross/Net.
+
+---
+
+## 327 — BEST BALL F13: DESEMPATES GROSS/NET TEAM
+
+### Principio de aislamiento
+F13 agrega un motor específico Best Ball y NO modifica:
+- `obtener_desempates_ronda` (Stroke);
+- `obtener_desempates_a_gogo_ronda`;
+- `resolver_desempate_manual_a_gogo_ronda`;
+- funciones de cierre/publicación.
+
+### Autoridad deportiva
+`obtener_desempates_best_ball_ronda_327` consume:
+- F12 para equipos, categorías, clasificaciones y totales;
+- F11 para evidencia oficial por hoyo.
+
+El adaptador entrega al evaluador común:
+- `officialGrossScore = officialBestGross`;
+- `officialNetScore = officialBestNet`.
+
+El Neto NO se recalcula en F13.
+
+### Infraestructura común reutilizada
+Se reutilizan sin cambio:
+- `tournament_tiebreak_rules`;
+- `tiebreak_methods`;
+- `evaluar_secuencia_desempate_tarjeta`;
+- `calcular_clave_metodo_desempate`;
+- `tournament_tiebreak_resolutions`;
+- `tournament_tiebreak_resolution_players`;
+- `tournament_tiebreak_resolution_events`.
+
+### Estados de grupo
+Se conserva el contrato probado de A-Go-Go:
+- `CONFIG_MISSING`;
+- `RESOLVED_AUTOMATIC`;
+- `MANUAL_PENDING`;
+- `TIE_PERSISTS_AFTER_RULES`.
+
+### Resolución manual
+`resolver_desempate_manual_best_ball_ronda_327` valida que el orden recibido corresponda exactamente al grupo empatado actual y registra una resolución TEAM en la infraestructura común.
+
+### Fuera de F13
+La integración del estado competitivo/cierre Best Ball se reserva para F14. No se altera en esta migración.
+
+---
+
+## 328 — BEST BALL F14: CIERRE Y PUBLICACIÓN
+
+### Objetivo
+Integrar Best Ball al contrato competitivo común de cierre por categoría, publicación y cierre formal de ronda, sin reescribir los motores existentes.
+
+### Aislamiento
+Se conservan intactas las rutas existentes de Stroke, Stableford y A-Go-Go. Los dispatchers previos se preservan como:
+- `_obtener_leaderboard_operativo_ronda_pre328`
+- `_obtener_estado_cierre_competitivo_ronda_pre328`
+
+Las funciones genéricas:
+- `cerrar_categoria_competitiva_ronda`
+- `publicar_resultados_categoria_ronda`
+- `cerrar_ronda_competitiva`
+
+no se modifican.
+
+### Leaderboard operativo Best Ball
+`obtener_leaderboard_best_ball_ronda_328` envuelve F12/326 y agrega el contrato por categoría requerido por la infraestructura común:
+- `totalParticipants`
+- `rankedParticipants`
+- `resolvedParticipants`
+- `unresolvedParticipants`
+- `terminalExceptions`
+- `categoryDisplayOrder`
+
+La unidad participante continúa siendo TEAM.
+
+### Outcomes
+Se reutiliza `tournament_scorecard_round_outcomes` por `score_card_id`.
+Los outcomes terminales reconocidos son:
+- WD
+- DNF
+- DQ
+- DNS
+- NO_CARD
+
+Una tarjeta queda resuelta para cierre si tiene resultado oficial Best Ball o un outcome terminal.
+
+### Validación de cierre
+`validar_cierre_resultados_best_ball_328` determina si todas las tarjetas TEAM están resueltas.
+
+### Desempates
+`_obtener_estado_cierre_best_ball_ronda_328` consume exclusivamente:
+- `validar_cierre_resultados_best_ball_328`
+- `obtener_desempates_best_ball_ronda_327`
+- `obtener_resoluciones_desempate_ronda`
+
+### Formalización
+`_estado_formalizacion_best_ball_ronda_328` reutiliza las tablas comunes de:
+- cierres competitivos por categoría;
+- publicaciones por categoría;
+- cierre competitivo de ronda.
+
+### Dispatcher
+Sólo `best_ball + equipo` entra a la nueva ruta 328. Cualquier otra modalidad se delega íntegramente a la implementación pre328.
+
+---
+
+## 329 — BEST BALL F15: REVISIONES POST-EMISIÓN / PRE-INICIO
+
+### Regla operativa
+Best Ball permite corregir la composición de equipos después de emitir las tarjetas únicamente mientras la ronda permanezca `PENDIENTE`.
+
+Cuando la ronda pasa a `EN_JUEGO`, la composición deportiva queda cerrada. F15 no permite sustituciones ni reasignaciones durante una ronda ya iniciada.
+
+### Motivo
+La cadena Best Ball 318–325 trabaja con evidencia individual congelada por integrante y 18 hoyos. Permitir cambios de integrante durante el juego obligaría a introducir vigencias por secuencia en captura digital, tarjeta, captura física, conciliación y resultado oficial. F15 evita esa complejidad y protege la evidencia deportiva ya iniciada.
+
+### Historial propio
+Se crea:
+- `tournament_best_ball_scorecard_revisions`
+
+No se reutiliza `tournament_team_scorecard_revisions`, porque esa tabla pertenece al modelo A-Go-Go y exige versiones de HCP TEAM.
+
+Cada revisión conserva:
+- tarjeta;
+- equipo;
+- número de revisión;
+- motivo;
+- snapshot anterior;
+- snapshot posterior;
+- administrador;
+- fecha.
+
+### RPC de revisión
+`revisar_tarjetas_best_ball_post_emision_329(round_id, reason)`:
+
+1. exige autorización administrativa;
+2. exige ronda `PENDIENTE`;
+3. exige emisión Best Ball TEAM;
+4. rechaza cualquier score ya capturado;
+5. rechaza evidencia física o conciliación;
+6. exige que cada equipo emitido conserve 2–5 inscripciones activas;
+7. exige RHS individual válido para cada integrante;
+8. conserva el mismo `score_card_id`;
+9. reconstruye miembros del snapshot desde las inscripciones activas actuales;
+10. reconstruye exclusivamente filas digitales `PENDING`;
+11. finaliza los marcadores anteriores;
+12. vuelve a generar marcadores con F5/319;
+13. registra antes/después sólo cuando la composición cambió.
+
+### Límite deliberado
+F15 no crea una tarjeta para un equipo nuevo surgido después de la emisión. Ese caso requiere volver al flujo de validación/emisión de salidas y queda fuera de esta microfase.
+
+### Sin impacto en motores existentes
+No se modifica:
+- Stroke Play;
+- Stableford;
+- A-Go-Go;
+- captura Best Ball 320;
+- cálculo en vivo 321;
+- tarjeta/payload 322;
+- captura física 323;
+- conciliación 324;
+- resultado oficial 325;
+- leaderboard/desempates/cierre 326–328.
+
+No se introduce HCP TEAM en Best Ball.
+
