@@ -1439,6 +1439,65 @@ Supabase es la fuente de verdad del esquema vivo.
                       PENDIENTE; conserva la tarjeta, reconstruye evidencia
                       PENDING y marcadores, y registra auditoría propia sin
                       HCP TEAM.
+
+  330                 Bloquea permanentemente el campo del torneo y el campo
+                      ya definido de sus rondas desde la primera inscripción,
+                      conservando la asignación automática de marcas de salida
+                      y permitiendo que campos distintos entre rondas hayan
+                      sido configurados antes de iniciar inscripciones.
+  331                 Establece el campo del torneo como única fuente de
+                      verdad para todas sus rondas: toda ronda nueva o
+                      reactivada hereda automáticamente `campo_golf_id` del
+                      torneo y el backend impide que una ronda conserve o
+                      reciba un campo distinto, preservando históricos
+                      cancelados y la firma existente del RPC de rondas.
+
+  332                 Incorpora la Fase 1 del workflow operativo materializado
+                      como infraestructura paralela y reconstruible para
+                      torneos y rondas, alineada con el autoservicio vigente:
+                      en torneos pagados la configuración se considera lista
+                      por validación real al abrir inscripciones, sin exigir
+                      el antiguo hito manual de finalizar configuración.
+                      Materializa además inscripciones, Freeze, inicio y
+                      finalización del torneo y, por ronda, configuración,
+                      grupos, salidas, tarjetas, inicialización de captura,
+                      lifecycle, cierre competitivo y corte cuando aplica;
+                      conserva compatibilidad con torneos legacy y auditoría
+                      de transiciones desde la evidencia real existente.
+
+  333                 Alinea el workflow operativo materializado con el
+                      autoservicio vigente: los torneos con contratación
+                      PAGADA ya no dependen del hito histórico
+                      configuracion_finalizada_at. Mientras permanecen en
+                      planificación, CONFIGURATION refleja la validación
+                      mínima real y la configuración de desempates exigidas
+                      por abrir_inscripciones_torneo; si el torneo ya abrió
+                      inscripciones o avanzó, CONFIGURATION se materializa
+                      como COMPLETE. Conserva sin cambios el comportamiento
+                      legacy y el resto de la proyección deportiva de la 332.
+
+  334                 Repara una recursión accidental detectada durante el
+                      diagnóstico del nuevo workflow operativo: el alias
+                      histórico pre-Best Ball del estado de cierre competitivo
+                      regresaba a la función pública y provocaba
+                      stack depth limit exceeded en modalidades no Best Ball.
+                      El alias pre328 vuelve a delegar en la cadena histórica
+                      pre249 → pre213, conservando intacto el tratamiento
+                      específico de Best Ball y sin reconstruir torneos ni
+                      modificar datos deportivos.
+
+  335                 Amplía el workflow operativo materializado sin sustituir
+                      todavía al Asistente público. Incorpora como proyección
+                      explícita las franjas de hándicap, configuración de
+                      desempates, HCP TEAM cuando aplica, captura física,
+                      conciliación, resultados, cierre por categoría y
+                      publicación. Conserva las fuentes de verdad deportivas
+                      existentes y difiere las consultas profundas de
+                      resultados/formalización hasta que la conciliación esté
+                      completa. No realiza reconstrucción masiva: la nueva
+                      proyección se materializa únicamente al reconciliar un
+                      torneo.
+
   -------------------------------------------------------------------------
 
 ## Pendientes
