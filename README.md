@@ -1534,15 +1534,16 @@ Supabase es la fuente de verdad del esquema vivo.
     cuando la configuración del torneo lo permita.
 -   Best Ball queda implementado en backend hasta la Migración 329 como
     motor separado; las Migraciones 343, 344 y 346 completan piezas de
-    previsualización, captura física y sustitución administrativa post-emisión.
-    Queda pendiente completar su integración UI/E2E. Shamble permanece como
-    motor futuro separado.
+    previsualización, captura física y sustitución administrativa
+    post-emisión. Queda pendiente completar su integración UI/E2E.
+    Shamble permanece como motor futuro separado.
 
 ### Best Ball
 
--   Completar en frontend la integración del motor Best Ball implementado
-    en backend desde las Migraciones 315--329 y su previsualización de tarjetas
-    de la Migración 343, reutilizando infraestructura común sólo donde corresponda.
+-   Completar en frontend la integración del motor Best Ball
+    implementado en backend desde las Migraciones 315--329 y su
+    previsualización de tarjetas de la Migración 343, reutilizando
+    infraestructura común sólo donde corresponda.
 -   Ejecutar prueba E2E completa: configuración, equipos, emisión,
     marcadores, tarjeta digital, captura física, conciliación,
     resultados, desempates, cierre/publicación y revisiones post-emisión
@@ -1853,15 +1854,16 @@ verificación en PROD y de repetir la prueba funcional desde la interfaz.
 
 ## Migración 343 --- Previsualización de tarjetas Best Ball
 
-**Objetivo.** Permitir que el organizador revise correctamente las tarjetas
-Best Ball antes de emitirlas, sin tratarlas como tarjetas A-Go-Go.
+**Objetivo.** Permitir que el organizador revise correctamente las
+tarjetas Best Ball antes de emitirlas, sin tratarlas como tarjetas
+A-Go-Go.
 
-**Qué hace.** Incorpora una previsualización propia para Best Ball por equipos,
-mostrando el equipo, sus integrantes, sus hándicaps individuales congelados,
-la salida y los hoyos de la ronda. Best Ball continúa sin HCP TEAM. La emisión
-oficial conserva el flujo atómico ya existente de tarjetas, captura digital y
-marcadores. Stroke Play, Stableford y A-Go-Go mantienen sus previsualizaciones
-actuales.
+**Qué hace.** Incorpora una previsualización propia para Best Ball por
+equipos, mostrando el equipo, sus integrantes, sus hándicaps
+individuales congelados, la salida y los hoyos de la ronda. Best Ball
+continúa sin HCP TEAM. La emisión oficial conserva el flujo atómico ya
+existente de tarjetas, captura digital y marcadores. Stroke Play,
+Stableford y A-Go-Go mantienen sus previsualizaciones actuales.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD.
 
@@ -1869,17 +1871,22 @@ actuales.
 
 ## Migración 344 --- Lectura y progreso de captura física Best Ball
 
-**Objetivo.** Completar la información necesaria para capturar una tarjeta
-física Best Ball sin depender de los resultados de la tarjeta digital.
+**Objetivo.** Completar la información necesaria para capturar una
+tarjeta física Best Ball sin depender de los resultados de la tarjeta
+digital.
 
-**Qué hace.** La captura física Best Ball entrega el equipo, sus integrantes y
-todos los hoyos necesarios para transcribir SCORE o PICKUP por jugador. También
-corrige el progreso administrativo para contar los resultados individuales
-esperados y capturados en Best Ball. Stroke Play, Stableford y A-Go-Go conservan
-su comportamiento actual.
+**Qué hace.** La captura física Best Ball entrega el equipo, sus
+integrantes y todos los hoyos necesarios para transcribir SCORE o PICKUP
+por jugador. También corrige el progreso administrativo para contar los
+resultados individuales esperados y capturados en Best Ball. Stroke
+Play, Stableford y A-Go-Go conservan su comportamiento actual.
 
-**Estado al documentar:** preparada para ejecución manual; pendiente de
-verificación en PROD.
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
 
 ------------------------------------------------------------------------
 
@@ -1887,26 +1894,214 @@ verificación en PROD.
 
 **Objetivo.** Permitir cerrar una ronda sin capturar notas de cierre.
 
-**Qué hace.** Hace opcionales las notas de cierre sin modificar las validaciones ni el proceso competitivo de cierre de ronda.
+**Qué hace.** Hace opcionales las notas de cierre sin modificar las
+validaciones ni el proceso competitivo de cierre de ronda.
 
-**Estado al documentar:** preparada para ejecución manual; pendiente de verificación en PROD.
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
 
 ------------------------------------------------------------------------
 
 ## Migración 346 --- Sustitución administrativa Best Ball post-emisión
 
-**Objetivo.** Permitir sustituir de forma controlada a un integrante Best Ball después del Freeze y antes de iniciar la ronda, incluso cuando las tarjetas ya fueron emitidas.
+**Objetivo.** Permitir sustituir de forma controlada a un integrante
+Best Ball después del Freeze y antes de iniciar la ronda, incluso cuando
+las tarjetas ya fueron emitidas.
 
-**Qué hace.** Realiza la sustitución de forma atómica y auditada, conserva el equipo y las tarjetas existentes, crea la nueva inscripción y los snapshots individuales necesarios del sustituto y, cuando corresponde, revisa las tarjetas Best Ball mediante el mecanismo de la Migración 329. No utiliza HCP TEAM ni modifica o revalida las salidas.
+**Qué hace.** Realiza la sustitución de forma atómica y auditada,
+conserva el equipo y las tarjetas existentes, crea la nueva inscripción
+y los snapshots individuales necesarios del sustituto y, cuando
+corresponde, revisa las tarjetas Best Ball mediante el mecanismo de la
+Migración 329. No utiliza HCP TEAM ni modifica o revalida las salidas.
 
-**Estado al documentar:** preparada para ejecución manual; pendiente de verificación en PROD.
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
 
 ------------------------------------------------------------------------
 
 ## Migración 347 --- Endurecimiento de permisos de sustitución Best Ball
 
-**Objetivo.** Cerrar el acceso anónimo a la sustitución administrativa Best Ball incorporada en la Migración 346.
+**Objetivo.** Cerrar el acceso anónimo a la sustitución administrativa
+Best Ball incorporada en la Migración 346.
 
-**Qué hace.** Retira `EXECUTE` a `anon` sobre la RPC de sustitución Best Ball y conserva el acceso para usuarios autenticados y `service_role`. No modifica la lógica de sustitución, datos, snapshots, tarjetas, salidas ni motores deportivos.
+**Qué hace.** Retira `EXECUTE` a `anon` sobre la RPC de sustitución Best
+Ball y conserva el acceso para usuarios autenticados y `service_role`.
+No modifica la lógica de sustitución, datos, snapshots, tarjetas,
+salidas ni motores deportivos.
 
-**Estado al documentar:** preparada para ejecución manual; pendiente de verificación en PROD.
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
+
+------------------------------------------------------------------------
+
+## Migración 348 --- Porcentaje de hándicap configurable a nivel torneo
+
+**Objetivo.** Recuperar la configuración del porcentaje de hándicap a
+nivel torneo sin perder los defaults definidos por modalidad ni los
+overrides específicos de cada ronda.
+
+**Qué hace.** Agrega al torneo un Handicap Allowance opcional y
+establece la jerarquía efectiva
+`override de ronda → porcentaje del torneo → default de la modalidad`.
+Actualiza la vista y las funciones de configuración/congelamiento que
+resolvían directamente el porcentaje efectivo. Los torneos existentes
+conservan su comportamiento mientras el nuevo valor permanezca vacío; no
+modifica automáticamente datos de torneos existentes.
+
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
+
+------------------------------------------------------------------------
+
+## Migración 349 --- HCP competitivo específico del jugador por torneo
+
+**Objetivo.** Permitir que el organizador establezca, antes del Freeze,
+un HCP competitivo aplicable únicamente al torneo, sin modificar el HCP
+general del perfil del jugador.
+
+**Qué hace.** Guarda el ajuste en la inscripción con motivo,
+administrador y fecha, mantiene auditoría histórica y utiliza el HCP del
+torneo para elegibilidad de categoría y para el snapshot de Handicap
+Index del Freeze. La categoría actual sólo puede conservarse si continúa
+siendo elegible con el HCP ajustado; si deja de serlo, la operación
+exige una categoría elegible y, al cambiarla, sincroniza la marca de
+salida estándar activa del campo. No permite ajustes después del Freeze
+y no modifica el perfil del jugador ni los motores de resultados.
+
+## **Estado al documentar:** ejecutada manualmente y verificada en PROD.
+
+## Migración 350 --- Previsualización de categorías para HCP propuesto
+
+**Objetivo.** Permitir que el organizador conozca, antes de persistir un
+ajuste de HCP torneo, qué categorías son elegibles para el nuevo HCP y
+qué marca de salida estándar activa correspondería a cada una.
+
+**Qué hace.** Centraliza la regla existente de elegibilidad de categoría
+en un helper parametrizado por HCP y agrega una RPC de previsualización
+sin persistencia. La RPC recibe la inscripción y el HCP propuesto,
+conserva las reglas vigentes de categoría natural o superior, género y
+edad, informa si la categoría actual continúa siendo elegible y devuelve
+las categorías válidas junto con la marca estándar activa del campo. No
+modifica la inscripción, el perfil, la categoría ni la marca; el ajuste
+definitivo continúa realizándose de forma atómica mediante la RPC de la
+Migración 349.
+
+**Estado al documentar:** ejecutada manualmente y verificada en PROD; se
+detectó permiso EXECUTE heredado para `anon`, corregido por la Migración
+351.
+
+------------------------------------------------------------------------
+
+## Migración 351 --- Cierre de permiso anon en previsualización HCP
+
+**Objetivo.** Cerrar el permiso formal `EXECUTE` del rol `anon` sobre
+`previsualizar_categorias_hcp_torneo_350(uuid,numeric)`, detectado
+durante la verificación de PROD posterior a la Migración 350.
+
+**Qué hace.** Revoca `EXECUTE` de `PUBLIC` y `anon` y conserva
+explícitamente `EXECUTE` para `authenticated`. No modifica datos, lógica
+de HCP, categorías, marcas de salida ni las funciones implementadas por
+las Migraciones 349 y 350.
+
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `authenticated_execute=true`, `anon_execute=false`,
+`public_execute=false`; las RPC 349 y 350 permanecieron operativas y no
+quedaron overrides incompletos.
+
+------------------------------------------------------------------------
+
+## Migración 352 --- Total a pagar por inscripción y control de cobranza
+
+**Objetivo.** Separar formalmente la obligación económica de una
+inscripción del dinero efectivamente recibido y habilitar una fuente
+única para el control de cobranza de jugadores pendientes de pago, sin
+introducir todavía pagos parciales ni una cuenta corriente completa.
+
+**Qué hace.** Agrega `total_a_pagar` a `tournament_registrations` como
+importe congelado de la inscripción y conserva `monto_pagado`
+exclusivamente como el importe efectivamente recibido. Para las nuevas
+inscripciones individuales con pago el día del evento,
+`inscribir_pago_dia_evento_339` congela la tarifa aplicable al momento
+de inscribirse: Early Bird cuando esté configurado y vigente; en otro
+caso, la tarifa individual. `registrar_pago_inscripcion_339` mantiene el
+flujo de pago único y, cuando existe `total_a_pagar`, exige que el pago
+liquide exactamente ese total; las inscripciones históricas sin total
+conservan el comportamiento legacy.
+
+La migración incorpora además
+`obtener_control_cobranza_pendiente_352(uuid)`, RPC read-only autorizada
+para Superadmin, organizador del torneo y administrador del club.
+Devuelve encabezado del torneo, campo, moneda, tarifas de referencia,
+cantidad de pendientes, total esperado, medios de pago y jugadores
+pendientes ordenables alfabéticamente, como fuente común para pantalla
+online, reporte formal y exportación a hoja de cálculo.
+
+Como backfill operativo controlado, la migración localiza por nombre
+`POLLA SEPTIEMBRE, 24`, exige que exista exactamente una vez y valida
+antes de actualizar que su tarifa individual sea \$1,000.00, sin tarifa
+de equipo ni Early Bird. Sólo entonces asigna `total_a_pagar = 1000.00`
+a sus inscripciones activas con `estado_pago='PENDIENTE'` que aún no
+tengan total. Si la configuración económica no coincide, la transacción
+falla y hace rollback.
+
+**Alcance deliberado.** Esta fase admite un solo pago liquidatorio. No
+crea movimientos, cargos, abonos, pagos parciales ni cálculo de saldo.
+Esa evolución se diseñará posteriormente como cuenta corriente sin
+cambiar el significado establecido aquí para `total_a_pagar` y
+`monto_pagado`.
+
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
+SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
+la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
+con `authenticated_execute=true`, `anon_execute=false` y
+`public_execute=false`.
+
+------------------------------------------------------------------------
+
+## Migración 353 --- Corrección del generador de folio de inscripción
+
+**Objetivo.** Evitar errores de llave duplicada al crear una inscripción
+cuando existen huecos históricos en la numeración de folios de un torneo.
+
+**Diagnóstico que la origina.** Al intentar inscribir a Manuel Romo Garay
+en `POLLA SEPTIEMBRE, 24`, PostgreSQL rechazó la operación por la
+restricción `tournament_registrations_folio_unico`. El torneo tenía 10
+inscripciones pero sus folios llegaban hasta `INS-0011`, porque faltaba
+`INS-0004`. La función `generar_folio_inscripcion()` calculaba el siguiente
+folio mediante `count(*) + 1`; por ello obtuvo 11 e intentó generar de
+nuevo `INS-0011`.
+
+**Qué hace.** Reemplaza únicamente `generar_folio_inscripcion()` para
+conservar el bloqueo `FOR UPDATE` sobre el torneo y calcular el siguiente
+folio como el máximo componente numérico de los folios válidos
+`INS-NNNN` existentes para ese torneo, más uno. De esta manera no reutiliza
+huecos históricos y, para el estado diagnosticado de `POLLA SEPTIEMBRE,
+24`, el siguiente folio corresponde a `INS-0012`.
+
+**Alcance.** No modifica folios existentes, no inserta la inscripción de
+Manuel manualmente, no cambia reglas de inscripción, pagos, categorías,
+HCP ni motores deportivos. La restricción UNIQUE
+`(tournament_id, folio)` permanece como protección final. La generación
+continúa serializada por torneo para evitar colisiones entre inscripciones
+concurrentes.
+
+**Estado al documentar:** preparada para ejecución manual; pendiente de
+verificación en PROD.
+
