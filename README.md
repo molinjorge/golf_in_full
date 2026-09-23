@@ -1882,10 +1882,10 @@ resultados individuales esperados y capturados en Best Ball. Stroke
 Play, Stableford y A-Go-Go conservan su comportamiento actual.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -1898,10 +1898,10 @@ con `authenticated_execute=true`, `anon_execute=false` y
 validaciones ni el proceso competitivo de cierre de ronda.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -1919,10 +1919,10 @@ corresponde, revisa las tarjetas Best Ball mediante el mecanismo de la
 Migración 329. No utiliza HCP TEAM ni modifica o revalida las salidas.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -1938,10 +1938,10 @@ No modifica la lógica de sustitución, datos, snapshots, tarjetas,
 salidas ni motores deportivos.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -1961,10 +1961,10 @@ conservan su comportamiento mientras el nuevo valor permanezca vacío; no
 modifica automáticamente datos de torneos existentes.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -2067,10 +2067,10 @@ cambiar el significado establecido aquí para `total_a_pagar` y
 `monto_pagado`.
 
 **Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de `POLLA
-SEPTIEMBRE, 24`, todas por $1,000.00, con total esperado de $10,000.00;
-la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó presente y
-con `authenticated_execute=true`, `anon_execute=false` y
+confirmó `total_a_pagar` en las 10 inscripciones pendientes de
+`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
+\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
+presente y con `authenticated_execute=true`, `anon_execute=false` y
 `public_execute=false`.
 
 ------------------------------------------------------------------------
@@ -2078,30 +2078,611 @@ con `authenticated_execute=true`, `anon_execute=false` y
 ## Migración 353 --- Corrección del generador de folio de inscripción
 
 **Objetivo.** Evitar errores de llave duplicada al crear una inscripción
-cuando existen huecos históricos en la numeración de folios de un torneo.
+cuando existen huecos históricos en la numeración de folios de un
+torneo.
 
-**Diagnóstico que la origina.** Al intentar inscribir a Manuel Romo Garay
-en `POLLA SEPTIEMBRE, 24`, PostgreSQL rechazó la operación por la
+**Diagnóstico que la origina.** Al intentar inscribir a Manuel Romo
+Garay en `POLLA SEPTIEMBRE, 24`, PostgreSQL rechazó la operación por la
 restricción `tournament_registrations_folio_unico`. El torneo tenía 10
 inscripciones pero sus folios llegaban hasta `INS-0011`, porque faltaba
-`INS-0004`. La función `generar_folio_inscripcion()` calculaba el siguiente
-folio mediante `count(*) + 1`; por ello obtuvo 11 e intentó generar de
-nuevo `INS-0011`.
+`INS-0004`. La función `generar_folio_inscripcion()` calculaba el
+siguiente folio mediante `count(*) + 1`; por ello obtuvo 11 e intentó
+generar de nuevo `INS-0011`.
 
 **Qué hace.** Reemplaza únicamente `generar_folio_inscripcion()` para
-conservar el bloqueo `FOR UPDATE` sobre el torneo y calcular el siguiente
-folio como el máximo componente numérico de los folios válidos
-`INS-NNNN` existentes para ese torneo, más uno. De esta manera no reutiliza
-huecos históricos y, para el estado diagnosticado de `POLLA SEPTIEMBRE,
-24`, el siguiente folio corresponde a `INS-0012`.
+conservar el bloqueo `FOR UPDATE` sobre el torneo y calcular el
+siguiente folio como el máximo componente numérico de los folios válidos
+`INS-NNNN` existentes para ese torneo, más uno. De esta manera no
+reutiliza huecos históricos y, para el estado diagnosticado de
+`POLLA SEPTIEMBRE, 24`, el siguiente folio corresponde a `INS-0012`.
 
 **Alcance.** No modifica folios existentes, no inserta la inscripción de
 Manuel manualmente, no cambia reglas de inscripción, pagos, categorías,
 HCP ni motores deportivos. La restricción UNIQUE
 `(tournament_id, folio)` permanece como protección final. La generación
-continúa serializada por torneo para evitar colisiones entre inscripciones
-concurrentes.
+continúa serializada por torneo para evitar colisiones entre
+inscripciones concurrentes.
 
-**Estado al documentar:** preparada para ejecución manual; pendiente de
-verificación en PROD.
+**Estado al documentar:** ejecutada manualmente y verificada en PROD. La
+función quedó usando el máximo folio numérico válido más uno,
+conservando el bloqueo por torneo y la restricción UNIQUE como
+protección final.
 
+------------------------------------------------------------------------
+
+## Migración 354 --- Historial administrativo y anulación controlada de pagos
+
+**Objetivo.** Permitir corregir errores humanos en la captura
+administrativa de pagos sin perder trazabilidad. Una inscripción pagada
+puede volver a `PENDIENTE` mediante una anulación autorizada y
+posteriormente recibir un nuevo pago normal. La evidencia del pago
+original y de cada anulación queda conservada de forma inmutable.
+
+**Qué hace.** Crea `tournament_registration_payment_history`, bitácora
+específica para eventos `PAGO_REGISTRADO` y `PAGO_ANULADO`. Cada evento
+conserva inscripción, torneo, jugador, monto, medio de pago, referencia,
+fecha del pago original, fecha del evento y, para operaciones nuevas,
+administrador y `auth.uid()` responsables. La tabla tiene RLS de lectura
+administrativa y un trigger que bloquea `UPDATE` y `DELETE`; no existen
+políticas de escritura directa.
+
+La migración reemplaza `registrar_pago_inscripcion_339` conservando las
+reglas vigentes de la migración 352 ---autenticación, autorización,
+inscripción activa, estado `PENDIENTE`, pago liquidatorio exacto cuando
+existe `total_a_pagar`, medio y referencia obligatorios--- y agrega en
+la misma transacción un evento `PAGO_REGISTRADO`. También exige que el
+usuario autenticado tenga un `admin_users` activo para atribuir
+correctamente las nuevas operaciones.
+
+Agrega `anular_pago_inscripcion_354(uuid,text,text)`. La RPC sólo admite
+Superadmin, organizador del torneo o administrador del club, bloquea la
+inscripción con `FOR UPDATE`, exige un pago vigente íntegro, registra
+primero el evento `PAGO_ANULADO` y después devuelve la inscripción a
+`PENDIENTE`, limpiando `monto_pagado`, `fecha_pago`, `medio_pago` y
+`referencia_pago`. `total_a_pagar` no se modifica, por lo que la misma
+inscripción queda lista para una nueva captura correcta mediante la RPC
+normal.
+
+**Motivos estructurados de anulación.** Los códigos permitidos son
+`JUGADOR_EQUIVOCADO`, `MONTO_INCORRECTO`, `MEDIO_PAGO_INCORRECTO`,
+`REFERENCIA_INCORRECTA`, `PAGO_DUPLICADO`,
+`PAGO_NO_RECIBIDO_NO_CONFIRMADO` y `OTRO`. Además del motivo
+estructurado, la explicación es obligatoria y se valida en backend
+mediante `_validar_explicacion_anulacion_pago_354`: entre 15 y 500
+caracteres, al menos tres palabras y al menos dos palabras de tres o más
+caracteres, con rechazo de textos triviales conocidos. Esta validación
+reduce comentarios sin contenido como `abc`, `asdf`, `xxx` o `prueba`,
+aunque no pretende sustituir el juicio humano ni afirmar semánticamente
+que todo texto aceptado sea verdadero o suficiente.
+
+**Consulta de historia.** Agrega
+`obtener_historial_pago_inscripcion_354(uuid)`, RPC read-only
+administrativa que devuelve cronológicamente los eventos, incluyendo
+etiqueta legible del motivo, explicación, datos económicos y nombre del
+administrador cuando existe. Los pagos existentes antes de la 354 se
+incorporan mediante un backfill `BACKFILL_354`; no se inventa el
+operador histórico: si no existe evidencia específica, los campos de
+autor quedan `NULL`.
+
+**Permisos.** Las RPC administrativas de anulación, historia y captura
+de pago quedan ejecutables por `authenticated` y con permisos retirados
+a `anon` y `PUBLIC`. Las tres funciones mantienen además validación
+interna de alcance administrativo. La historia no se expone al jugador
+mediante RLS ni mediante las RPC nuevas.
+
+**Alcance deliberado.** Esta migración no introduce pagos parciales,
+saldo a favor, cuenta corriente ni edición de movimientos históricos. No
+modifica `payment_attempts`, pagos de equipo, pagos de plataforma,
+prerreservas, simuladores ni otros flujos económicos. Tampoco realiza
+cambios de frontend; los botones `ANULAR PAGO` y `VER HISTORIA` se
+integrarán en una microfase posterior de Lovable, después de ejecutar y
+verificar esta migración.
+
+**Estado al documentar:** ejecutada manualmente y verificada
+directamente en PROD. Se confirmó la tabla de historia, RLS,
+inmutabilidad, backfill y las RPC de pago, anulación e historia. El
+único endurecimiento pendiente detectado fue retirar `EXECUTE` heredado
+para `anon`/`PUBLIC` del helper interno; se atiende en la migración 355.
+
+------------------------------------------------------------------------
+
+## Migración 355 --- Cierre de permisos del helper de anulación de pago
+
+**Objetivo.** Eliminar una superficie de ejecución innecesaria detectada
+durante la verificación directa en PROD de la migración 354.
+
+La función interna `_validar_explicacion_anulacion_pago_354(text)`
+valida únicamente la calidad mínima del comentario de una anulación. No
+modifica datos ni permite por sí misma registrar o anular pagos; sin
+embargo, conservaba por privilegios predeterminados permiso `EXECUTE`
+heredado para `anon` y `PUBLIC`.
+
+La migración 355 no cambia lógica, datos, historial ni motivos.
+Únicamente revoca `EXECUTE` a `PUBLIC` y `anon` y conserva `EXECUTE`
+para `authenticated`.
+
+**Resultado esperado:** `authenticated_execute = true`,
+`anon_execute = false`, `public_execute = false`.
+
+**Estado al documentar:** ejecutada manualmente y verificada
+directamente en PROD. Se confirmó que el helper conserva ejecución para
+`authenticated` y no para `anon` ni `PUBLIC`, sin cambios en lógica,
+datos ni historial.
+
+------------------------------------------------------------------------
+
+## Migración 356 --- Catálogo reutilizable de puntos de acceso del organizador
+
+**Objetivo.** Crear la base independiente de **ACCESO AL CAMPO**
+mediante un catálogo permanente y reutilizable de puntos de acceso
+propiedad de cada organizador, sin vincular todavía los puntos con
+torneos, credenciales QR, apertura de puertas ni registros de ingreso.
+
+**Qué hace.** - Crea `public.tournament_access_points`. - Cada punto
+pertenece a un `admin_user` organizador mediante
+`organizer_admin_user_id`. - Permite definir nombre, descripción
+opcional y estado activo/inactivo. - Impide nombres duplicados para un
+mismo organizador ignorando mayúsculas/minúsculas y espacios
+exteriores. - Conserva `created_at` y `updated_at`; un trigger mantiene
+`updated_at`. - Activa RLS. - El organizador autenticado sólo puede
+consultar, crear y modificar sus propios puntos. - El Superadmin puede
+consultar, crear y modificar cualquier punto. - No concede `DELETE`: los
+puntos se desactivan para conservar un catálogo reutilizable y
+estable. - Revoca acceso de `anon`. - No modifica `tournaments`,
+`tournament_registrations`, motores deportivos, premios especiales ni
+rutas/UI.
+
+**Estado.** Ejecutada manualmente en PROD y verificada directamente. Se
+confirmó la existencia de `public.tournament_access_points`, RLS
+habilitado, `anon` sin `SELECT`, y `authenticated` con `SELECT`,
+`INSERT` y `UPDATE`, sin `DELETE`.
+
+------------------------------------------------------------------------
+
+## Migración 357 --- Control de acceso QR configurable por torneo
+
+**Objetivo.** Permitir que cada torneo decida si utilizará el módulo de
+control de acceso mediante QR de Tee Central. Esto permite que los
+clubes que cuentan con controles propios de ingreso utilicen la
+inscripción de Tee Central sin tener que entregar el QR de acceso de Tee
+Central a sus jugadores.
+
+**Qué hace.** - Agrega
+`tournaments.usar_control_acceso_qr boolean NOT NULL`. - Los torneos
+existentes quedan en `true` para preservar el comportamiento actual. -
+No realiza `UPDATE` sobre los torneos existentes: la columna se agrega
+con `DEFAULT true`, evitando conflictos con torneos cancelados de sólo
+lectura. - Después del alta de la columna, el `DEFAULT` cambia a
+`false`, por lo que los torneos nuevos nacen con el módulo QR
+desactivado y el organizador decide si lo activa. - Permite cambiar la
+decisión antes del congelamiento. - Bloquea el cambio después de que
+existe `tournament_condition_freezes`. - Crea
+`_proteger_control_acceso_qr_post_freeze_357()` y
+`trg_proteger_control_acceso_qr_post_freeze_357`. - El helper del
+trigger no concede ejecución directa a `PUBLIC`, `anon` ni
+`authenticated`.
+
+**Alcance deliberado.** No modifica `tournament_registrations.qr_token`,
+no regenera QR, no modifica inscripciones, pagos ni correos. La
+integración de frontend/servidor de correo se hará después de verificar
+esta migración. Cuando se integre, la confirmación de inscripción y su
+reenvío mostrarán QR solamente si `usar_control_acceso_qr = true`. El
+correo independiente **Pago recibido** seguirá sin QR en todos los
+casos.
+
+**Estado.** Ejecutada manualmente y verificada en PROD.
+
+------------------------------------------------------------------------
+
+## Migración 358 --- Asignación de puntos de acceso a torneos
+
+**Objetivo.** Vincular los puntos reutilizables del catálogo creado en
+la Migración 356 con los torneos que hayan habilitado el Control de
+Acceso QR de Tee Central mediante la Migración 357, sin crear todavía
+credenciales QR de puerta, apertura general ni registros de ingreso.
+
+**Qué hace.** - Crea `public.tournament_access_point_assignments`. -
+Relaciona un torneo con un punto del catálogo e impide duplicar el mismo
+punto dentro del mismo torneo. - Permite `responsable_nombre` opcional;
+esa persona no requiere cuenta de Tee Central. - Incorpora `habilitado`
+para bloquear o rehabilitar individualmente una puerta sin eliminar la
+asignación. - Sólo permite asignaciones cuando
+`tournaments.usar_control_acceso_qr = true`. - Exige que el punto esté
+activo. - Para un organizador normal exige que el punto pertenezca al
+mismo `admin_user` que administra el torneo; Superadmin conserva alcance
+global. - Una asignación existente no puede cambiar de torneo ni de
+punto. - Activa RLS y no concede `DELETE`. - El helper interno del
+trigger no concede ejecución directa a `PUBLIC`, `anon` ni
+`authenticated`.
+
+**Alcance deliberado.** No genera URL o QR de puerta, no abre ni
+programa el acceso general, no valida el QR del jugador y no registra
+ingresos. No modifica `tournament_registrations.qr_token`, pagos,
+correos, motores deportivos, Premios Especiales ni workflow competitivo.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 359 --- Apertura general del acceso al campo
+
+**Objetivo.** Incorporar el control general de cuándo puede comenzar a
+registrarse el acceso de jugadores al campo, de forma independiente del
+ciclo competitivo del torneo. El organizador puede abrir el acceso
+inmediatamente o programar una fecha y hora de apertura.
+
+**Qué hace.** - Crea `public.tournament_access_control_settings`, con
+una configuración única por torneo. - Permite dos modalidades mutuamente
+excluyentes: `apertura_manual_at` para **ABRIR AHORA** y
+`apertura_programada_at` para **PROGRAMAR APERTURA**. - La apertura
+programada se evalúa contra `now()` del servidor; no requiere cron, job
+ni proceso programado que cambie un estado. - Crea
+`abrir_acceso_campo_ahora_359(uuid)` para sustituir cualquier
+programación previa por apertura manual inmediata. - Crea
+`programar_apertura_acceso_campo_359(uuid,timestamptz)` para establecer
+o sustituir la fecha/hora programada. - Crea
+`acceso_campo_abierto_359(uuid)` como evaluación central del estado
+operativo del acceso. - La evaluación exige
+`usar_control_acceso_qr=true`. - Los estados `finalizado` y `cancelado`
+son bloqueo absoluto aunque la apertura manual o programada ya se
+hubiera alcanzado. - No se vincula la apertura a `inscripcion_cerrada`
+ni a `en_curso`. - Sólo Superadmin o el organizador del torneo pueden
+administrar la configuración. - Activa RLS; no concede `DELETE`. - Los
+RPC administrativos se conceden sólo a `authenticated`; el helper de
+trigger no tiene ejecución directa.
+
+**Alcance deliberado.** Esta migración no crea todavía las credenciales
+URL/QR de las puertas, no valida el QR del jugador y no registra eventos
+de ingreso. El bloqueo individual de cada puerta continúa siendo el
+campo `habilitado` incorporado por la Migración 358.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 360 --- Credencial segura URL/QR por puerta asignada
+
+**Objetivo.** Dar a cada asignación Torneo + Punto de acceso una
+credencial segura e independiente para abrir su página operativa
+exclusiva desde un teléfono o tableta, reutilizando el patrón probado de
+tokens rotables sin acoplar el módulo a Premios Especiales.
+
+**Qué hace.** - Crea `public.tournament_access_point_credentials`, con
+una sola credencial vigente por asignación de la Migración 358. - Genera
+tokens aleatorios de 256 bits representados por 64 caracteres
+hexadecimales. - Crea
+`generar_o_rotar_credencial_punto_acceso_360(uuid)`: genera la primera
+credencial o rota una existente; al rotar, el token anterior deja de
+funcionar inmediatamente. - Crea
+`revocar_credencial_punto_acceso_360(uuid)`: desactiva la credencial sin
+eliminar la puerta ni su asignación. - La generación exige que el torneo
+use Control de Acceso QR, que no esté finalizado/cancelado, que el punto
+esté activo y que la asignación no esté bloqueada. - Crea
+`obtener_punto_acceso_por_token_360(text)`, RPC pública limitada que
+resuelve exclusivamente los datos operativos mínimos de la puerta y
+torneo. - La página puede abrirse antes del inicio operativo y devolver
+`PREPARADA`; devuelve `ABIERTA` cuando la Migración 359 determina que el
+acceso general ya está abierto y `BLOQUEADA` si la puerta fue
+temporalmente deshabilitada. - Torneo finalizado/cancelado, módulo QR
+apagado, punto inactivo o credencial revocada hacen que el token deje de
+ser válido. - La tabla de credenciales no tiene acceso directo desde
+`anon` ni `authenticated`; las operaciones pasan exclusivamente por RPC
+controladas.
+
+**Alcance deliberado.** La migración no construye todavía la
+ruta/frontend que representará el token como URL o código QR. Tampoco
+valida el QR de un jugador ni registra ingresos. La URL/QR
+administrativa será simplemente una representación de esta credencial
+segura cuando se implemente la interfaz.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 361 --- Validación del QR existente del jugador
+
+**Objetivo.** Permitir que una puerta operativa valide el QR que ya
+posee la inscripción del jugador, sin generar un segundo QR y sin
+registrar todavía el ingreso.
+
+**Qué hace.** - Crea `validar_qr_jugador_acceso_361(text,text)`. -
+Recibe el token seguro de la puerta de la Migración 360 y el `qr_token`
+existente en `tournament_registrations`. - Valida el formato real de
+ambos tokens: 64 caracteres hexadecimales para la credencial de puerta y
+32 para el QR histórico de inscripción. - Exige que la credencial esté
+activa, la puerta esté habilitada, el punto esté activo, el torneo use
+Control de Acceso QR y el acceso general de la Migración 359 ya esté
+abierto. - `finalizado` y `cancelado` continúan siendo bloqueo
+absoluto. - El QR del jugador sólo se acepta si pertenece a una
+inscripción activa del mismo torneo asociado a la puerta. - Devuelve
+únicamente la identidad mínima necesaria para la comprobación humana:
+nombres, apellidos, identificador de jugador, inscripción y folio, junto
+con los datos operativos mínimos de la puerta. - Devuelve instrucción
+explícita de solicitar identificación física antes de registrar el
+ingreso. - No expone correo, teléfono ni otros datos personales
+innecesarios. - La RPC puede ejecutarse desde la página pública de
+puerta por `anon` o desde una sesión `authenticated`, pero las tablas
+subyacentes no adquieren nuevos permisos.
+
+**Alcance deliberado.** Validar un QR no registra entrada, no marca al
+jugador como ingresado, no impide usos posteriores del mismo QR y no
+modifica la inscripción. La historia de accesos, número de uso y
+advertencia por QR reutilizado se incorporarán en la siguiente fase.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 362 --- Registro de ingresos y reutilización del QR
+
+**Objetivo.** Registrar cada ingreso real al campo como un evento
+independiente y distinguir el uso normal del QR en distintos días de un
+reingreso durante el mismo día, manteniendo obligatoria la verificación
+humana de identidad.
+
+**Qué hace.** - Crea `public.tournament_access_entries` como historial
+inmutable de ingresos. - Cada evento conserva torneo, puerta/asignación,
+inscripción, jugador, fecha local del campo, timestamp exacto, número
+acumulado de uso del QR y si el jugador viene acompañado. - Exige
+`identidad_confirmada=true` para todo ingreso. - Numera cada uso del QR
+mediante `qr_uso_numero`. - Un ingreso posterior en otro día queda
+marcado como QR reutilizado, pero no genera por sí mismo una alarma
+fuerte. - Si ya existe un ingreso en la misma fecha local, la validación
+361 devuelve advertencia `STRONG` y el mensaje **QR UTILIZADO
+ANTERIORMENTE HOY --- IDENTIFIQUE A LA PERSONA BAJO SU
+RESPONSABILIDAD**. - El registro de un reingreso del mismo día exige
+confirmación expresa de esa advertencia; nunca bloquea automáticamente
+un reingreso legítimo. - La validación informa número de ingresos
+previos totales y del día, además del último ingreso y la última puerta
+utilizada. - `registrar_ingreso_acceso_362(...)` vuelve a validar en
+servidor la puerta, el torneo, la apertura y la inscripción antes de
+insertar; no confía sólo en una validación previa del navegador. -
+Bloquea la fila de inscripción durante el registro para serializar
+intentos concurrentes del mismo QR y mantener correcto el número de
+uso. - La página pública registra exclusivamente mediante RPC; no tiene
+permisos directos sobre la tabla. - Organizadores y Superadmin pueden
+consultar el historial mediante RLS, pero no modificarlo ni eliminarlo.
+
+**Alcance deliberado.** Esta migración registra únicamente si el jugador
+viene acompañado (`SÍ/NO`). No almacena cantidad de acompañantes.
+Tampoco incorpora todavía fotografía del vehículo ni placa; esa
+evidencia corresponde a la siguiente fase.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 363 --- Evidencia de vehículo
+
+**Objetivo.** Incorporar evidencia opcional del vehículo asociada a un
+ingreso ya registrado, manteniendo las fotografías fuera de
+almacenamiento público y sin almacenar imágenes de identificaciones
+oficiales.
+
+**Qué hace.** - Crea el bucket privado `acceso-campo-vehiculos`,
+limitado a imágenes JPEG, PNG y WebP y a 10 MB por archivo. - Añade a
+`tournament_access_entries` la ruta privada de fotografía y una placa
+capturada manualmente de forma opcional. - No incorpora OCR ni
+reconocimiento automático de placas. -
+`preparar_foto_vehiculo_acceso_363(...)` valida el token de la puerta y
+que el ingreso pertenezca exactamente a esa puerta y torneo; después
+genera una ruta única bajo `torneo/ingreso/archivo`. -
+`confirmar_evidencia_vehiculo_acceso_363(...)` comprueba que la
+fotografía realmente exista en el bucket privado antes de asociarla al
+evento. - La página pública puede cargar la imagen pero no leer el
+bucket. - La lectura de fotografías queda limitada mediante Storage RLS
+al organizador del torneo y al Superadmin. - No se permite sustituir
+silenciosamente una fotografía ya vinculada a un ingreso. - La placa se
+normaliza a mayúsculas y queda limitada a 30 caracteres.
+
+**Alcance deliberado.** No se almacenan fotografías de INE, pasaporte,
+licencia ni de ninguna otra identificación oficial. La identificación
+del jugador continúa siendo una comprobación visual realizada por el
+responsable de la puerta. La foto de vehículo y la placa son evidencia
+operativa, no un mecanismo biométrico ni de identificación automática.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 364 --- Retención de 15 días del Control de Acceso
+
+**Objetivo.** Establecer que la información operativa del módulo Control
+de Acceso tenga una vida limitada y se elimine 15 días después de que el
+torneo pase realmente a `finalizado` o `cancelado`.
+
+**Qué hace.** - Crea `tournament_access_retention`, que registra el
+momento exacto en que el torneo entra a un estado terminal y fija
+`purge_after = terminal_at + 15 días`. - Un trigger sobre
+`tournaments.estatus` inicia automáticamente el plazo cuando el torneo
+cambia a `finalizado` o `cancelado`. - Para torneos terminales
+preexistentes que ya tengan eventos de acceso, hace un backfill
+defensivo usando `tournaments.updated_at`, porque el esquema histórico
+no conserva un timestamp específico de cancelación/finalización. -
+`purgar_datos_acceso_vencidos_364()` elimina los objetos del bucket
+privado `acceso-campo-vehiculos` y después todos los eventos de
+`tournament_access_entries` del torneo vencido. - La purga no elimina
+jugadores, inscripciones, resultados, tarjetas ni ningún dato
+competitivo del torneo. - La función de purga es interna: `anon` y
+`authenticated` no pueden ejecutarla. -
+`obtener_retencion_acceso_torneo_364(...)` permite al
+organizador/Superadmin consultar cuándo comenzó el plazo, la fecha
+prevista de eliminación y si la purga ya ocurrió. - PROD no tiene
+actualmente `pg_cron`; por ello esta migración establece la regla y la
+operación idempotente de purga, pero la invocación periódica debe
+conectarse posteriormente a un scheduler o mecanismo de aplicación. No
+se presenta como automática mientras ese disparador periódico no exista.
+
+**Regla funcional.** Torneo `FINALIZADO` o `CANCELADO` → comienza plazo
+de 15 días → se eliminan definitivamente los registros de Control de
+Acceso y sus fotografías privadas de vehículo.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 365 --- Purga automática del Control de Acceso
+
+**Objetivo.** Convertir en automática la política de retención creada en
+la migración 364, evitando que la eliminación de datos dependa de una
+acción manual.
+
+**Qué hace.** - Habilita `pg_cron`, motor utilizado por Supabase Cron
+para trabajos programados. - Registra un único job llamado
+`tee-central-purge-access-data-365`. - El job se ejecuta diariamente a
+las 06:15 UTC e invoca `purgar_datos_acceso_vencidos_364()`. - La
+función 364 continúa siendo la autoridad para decidir qué torneos ya
+cumplieron los 15 días; el cron no adelanta ni modifica esa fecha. - Si
+no hay información vencida, la ejecución es inocua e idempotente. - La
+función de purga continúa sin permiso de ejecución para `anon` y
+`authenticated`. - La migración elimina previamente un job del mismo
+nombre si existiera, para evitar duplicados al reintentar la
+instalación. - `cron.job_run_details` permite revisar posteriormente las
+ejecuciones y sus resultados.
+
+**Regla operativa resultante.** Cuando un torneo pasa a `FINALIZADO` o
+`CANCELADO`, la migración 364 fija su vencimiento exactamente 15 días
+después. El job diario de esta migración detecta los vencidos y elimina
+los registros de Control de Acceso y las fotografías privadas de
+vehículos. Al ser un proceso diario, la eliminación física puede ocurrir
+en la primera ejecución posterior al cumplimiento exacto de los 15 días.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 366 --- Reportes y alertas del Control de Acceso
+
+**Objetivo.** Exponer al organizador y al Superadmin la información
+operativa del Control de Acceso necesaria para la futura pantalla
+administrativa, sin dar acceso público a los registros ni introducir
+reglas competitivas.
+
+**Qué hace.** - Crea `obtener_reporte_acceso_torneo_366(...)`,
+restringida al organizador del torneo o Superadmin. - El reporte trabaja
+por fecha local del campo y, si no se especifica fecha, utiliza la fecha
+actual calculada con `campos_golf.timezone_id`. - Devuelve totales de
+ingresos, jugadores únicos, reutilizaciones del QR el mismo día,
+ingresos con acompañante, fotografías de vehículo y placas capturadas. -
+Devuelve el detalle de cada ingreso con jugador, hora, punto de acceso,
+responsable actual de la asignación, número de uso del QR, confirmación
+de identidad, acompañante y evidencia de vehículo. - Crea
+`obtener_alertas_acceso_torneo_366(...)` para concentrar los casos de QR
+reutilizado el mismo día. - Las alertas se etiquetan como `REVIEW`:
+indican que el registro debe revisarse y expresamente no concluyen
+fraude, suplantación ni que dos personas hayan utilizado el QR. - Las
+RPC son sólo para usuarios autenticados autorizados; `anon` no tiene
+permiso de ejecución. - No crea ni modifica datos deportivos,
+inscripciones, tarjetas, resultados ni motores competitivos. - Los
+reportes quedan sujetos a la retención de 15 días de las migraciones
+364/365: cuando los eventos son purgados, dejan de aparecer en estos
+reportes.
+
+**Nota histórica.** El nombre del responsable se obtiene actualmente de
+la asignación vigente del punto de acceso; no existe todavía snapshot
+histórico del responsable dentro de cada evento.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 367 --- Endurecimiento de carga de fotografías de vehículos
+
+**Objetivo.** Cerrar la autorización de carga anónima de fotografías de
+vehículos para que una página pública de acceso sólo pueda subir el
+archivo a la ruta exacta, temporal y previamente emitida para un ingreso
+válido.
+
+**Qué hace.** - Crea `tournament_access_vehicle_upload_authorizations`,
+tabla privada de autorizaciones temporales de carga. -
+`preparar_foto_vehiculo_acceso_363(...)` continúa validando el token de
+la puerta, pero ahora registra una ruta aleatoria exacta con vigencia de
+10 minutos e invalida autorizaciones pendientes anteriores del mismo
+ingreso. - Crea `_storage_upload_vehiculo_autorizado_367(...)`, helper
+mínimo utilizado por la política de Storage. - Sustituye la política
+INSERT de la migración 363 por una política que exige que el nombre
+exacto del objeto tenga una autorización vigente y corresponda a un
+ingreso, asignación, torneo y punto de acceso todavía válidos. -
+`confirmar_evidencia_vehiculo_acceso_363(...)` exige que la ruta
+recibida corresponda a la autorización exacta y la consume al confirmar
+la evidencia. - La tabla de autorizaciones no queda expuesta
+directamente a `anon` ni a `authenticated`. - No modifica los motores
+deportivos ni la lógica de inscripciones.
+
+**Importante.** Esta migración endurece la **subida** de fotografías. La
+eliminación física a los 15 días se resolverá por separado mediante la
+API oficial de Supabase Storage; la documentación vigente de Supabase
+indica que los objetos no deben eliminarse mediante `DELETE` SQL sobre
+`storage.objects`.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
+Pendiente de verificación posterior a la ejecución.
+
+------------------------------------------------------------------------
+
+## Migración 368 --- Purga física segura mediante Storage API
+
+**Objetivo.** Corregir el mecanismo de retención de Control de Acceso
+para que las fotografías de vehículos se eliminen físicamente mediante
+la API oficial de Supabase Storage antes de borrar los eventos de
+acceso.
+
+**Qué hace.** - Crea `tournament_access_storage_purge_queue`, cola
+privada de torneos cuya retención de 15 días ya venció. - Sustituye
+internamente `purgar_datos_acceso_vencidos_364()` para que el Cron
+existente de la migración 365 sólo encole trabajo; deja de ejecutar
+`DELETE FROM storage.objects`. - Crea RPC privadas para `service_role`
+que permiten a una función de servidor tomar lotes, confirmar una purga
+terminada y registrar errores. - Los eventos y la marca `purged_at` sólo
+se eliminan/actualizan después de que la función de servidor confirme
+que Storage API eliminó las fotografías. - Mantiene la regla:
+finalizado/cancelado + 15 días. - No modifica motores deportivos,
+inscripciones ni operación de las puertas.
+
+**Componente complementario.** La migración incluye un archivo separado
+de Edge Function `purge-access-storage-368`, que deberá desplegarse y
+programarse después de verificar el SQL. La Edge Function utiliza la
+Storage API oficial con credenciales exclusivas de servidor. Ninguna
+clave privilegiada se expone en Lovable ni en la página pública de
+acceso.
+
+**Estado al documentar:** SQL preparado para ejecución manual en PROD.
+Edge Function preparada, pendiente de despliegue y programación
+posterior a la verificación de esta migración.
+
+------------------------------------------------------------------------
+
+## Migración 369 --- Automatización de purga física de Control de Acceso
+
+**Objetivo.** Completar la ejecución automática de la retención de 15
+días, conectando el Cron existente con la Edge Function que elimina
+físicamente las fotografías mediante la Storage API oficial.
+
+**Qué hace.** - Habilita `pg_net`, requerido para llamadas HTTP
+asíncronas desde PostgreSQL. - Conserva el job
+`tee-central-purge-access-data-365` y su horario diario `15 6 * * *`. -
+El job primero ejecuta `purgar_datos_acceso_vencidos_364()` para encolar
+torneos vencidos y después invoca `purge-access-storage-368`. - La URL
+del proyecto y la secret key se leen desde Supabase Vault; ninguna
+credencial privilegiada se incorpora al SQL versionado. - La Edge
+Function desplegada en PROD usa autenticación servidor-a-servidor con
+secret key y realiza el borrado físico mediante Storage API antes de
+confirmar la eliminación de los eventos. - No modifica motores
+deportivos, inscripciones ni operación de los puntos de acceso.
+
+**Configuración posterior requerida.** Después de ejecutar la migración,
+deben crearse en Vault `tee_central_project_url_369` y
+`tee_central_purge_secret_key_369`. Se entrega un archivo separado de
+configuración segura para realizarlo sin incluir la secret key en la
+migración ni en el README.
+
+**Estado al documentar:** preparada para ejecución manual en PROD.
