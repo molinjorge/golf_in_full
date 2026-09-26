@@ -998,2193 +998,320 @@ Supabase es la fuente de verdad del esquema vivo.
 
   262               Agrega compatibilidad temporal para torneos cuya
                     configuración ya había sido confirmada antes del
-                    nuevo contrato de desempates: el Asistente considera
-                    cumplido ese paso por antecedente de
-                    `configuracion_finalizada_at`, sin relajar la
-                    validación estricta para torneos nuevos ni reescribir
-                    históricos.
-
-  263               Incorpora `ROUND_CONFIGURATION` como paso explícito
-                    del Asistente antes de congelar: valida número de
-                    rondas, fecha, campo, formato competitivo efectivo,
-                    Handicap Allowance, modalidad de salida, turno activo
-                    y existencia de un motor de salida soportado; los
-                    torneos ya congelados quedan reconocidos como
-                    históricos válidos.
-
-  264               Separa en el Asistente la operación que antes
-                    aparecía como "Captura y conciliación" en dos pasos
-                    reales: `ROUND_PHYSICAL_CAPTURE` y
-                    `ROUND_RECONCILIATION`; distingue tarjetas físicas
-                    pendientes, conciliación requerida y casos NRQ,
-                    reutilizando la infraestructura común de Stroke Play,
-                    Stableford y A-Go-Go.
-
-  265               Formaliza el cierre competitivo común de ronda en
-                    cuatro etapas: Resultados → Cierre de categorías →
-                    Publicación de resultados → Cierre de ronda; exige
-                    backend que todas las categorías estén cerradas y
-                    publicadas antes del cierre final y conserva como
-                    válidos los cierres históricos ya formalizados.
-
-  266               Endurece las dependencias del Asistente Operativo:
-                    elimina esperas hacia el paso obsoleto
-                    `ROUND_SCORING`, difiere la evaluación competitiva
-                    profunda hasta completar conciliación, normaliza
-                    `START_TOURNAMENT` cuando sólo espera prerrequisitos
-                    normales y evita bloqueos/crashes prematuros sin
-                    modificar datos ni reglas competitivas.
-
-  267               Corrige el validador estructural de Rondas para
-                    respetar que A-Go-Go TEAM (`equipo` + `team_stroke`)
-                    no utiliza Handicap Allowance individual: permite
-                    `NULL` en ese motor, conserva la exigencia 0--100
-                    para Stroke Play/Stableford y alinea el Asistente con
-                    el contrato de congelamiento establecido en la
-                    Migración 218.
-
-  268               Corrige la secuencia del Asistente A-Go-Go colocando
-                    HCP TEAM antes del congelamiento: HCP TEAM espera
-                    inscripciones cerradas y Rondas completas, el
-                    congelamiento espera HCP TEAM CURRENT y Armar grupos
-                    permanece después del freeze, eliminando la
-                    dependencia circular sin cambiar el motor de
-                    congelamiento ni el cálculo competitivo.
-
-  269               Habilita la corrección controlada de HCP declarado en
-                    A-Go-Go TEAM después del congelamiento y antes de
-                    iniciar el torneo: conserva los snapshots históricos,
-                    invalida/recalcula HCP TEAM, revalida salidas cuando
-                    corresponde, versiona tarjetas ya emitidas sin
-                    cambiar su `score_card_id` y devuelve las tarjetas
-                    afectadas para reimpresión.
-
-  270               Corrige el flujo HCP post-emisión de la 269
-                    activando, sólo cuando ya existen tarjetas oficiales,
-                    el guard transaccional
-                    `app.revisar_tarjeta_team_post_emision`; permite la
-                    reapertura auditada, revalidación y revisión 215 sin
-                    debilitar el trigger protector ni alterar snapshots o
-                    tarjetas históricas.
-
-  271               Habilita sustitución administrativa directa de
-                    integrantes A-Go-Go después del freeze y antes de
-                    iniciar el torneo: reutiliza o crea al jugador en
-                    catálogo, genera una nueva inscripción sin cobro
-                    conservando cobertura y cadena histórica, fija la
-                    marca de salida, recalcula HCP TEAM, revalida salidas
-                    y versiona tarjetas emitidas cuando corresponde, sin
-                    depender de capitán ni confirmación del sustituto.
-
-  272               Corrige la seguridad de las funciones de sustitución
-                    administrativa 271: revoca explícitamente EXECUTE a
-                    anon y conserva acceso únicamente para authenticated
-                    y service_role; no modifica lógica ni datos
-                    competitivos.
-
-  273               Corrige el guard de marcadores TEAM para
-                    sustituciones post-emisión: mantiene la validación
-                    estricta de pertenencia al snapshot vigente para
-                    asignaciones activas, pero permite cerrar como ended
-                    una asignación histórica del jugador saliente sin
-                    reescribir evidencia previa.
-
-  274               Agrega un detector de sólo lectura para la
-                    composición A-Go-Go antes del inicio: identifica
-                    equipos activos con un solo integrante, jugadores
-                    sueltos, equipos vacíos e inscripciones activas sin
-                    equipo, fija mínimo competitivo de 2 y expone un
-                    estado agregado sin modificar HCP TEAM, salidas,
-                    tarjetas ni resultados.
-
-  275               Integra el detector 274 con START_TOURNAMENT: el
-                    estado de inicio expone la composición A-Go-Go y
-                    iniciar_torneo bloquea desde backend cualquier inicio
-                    con equipos incompletos o jugadores activos sin
-                    equipo; no resuelve ni modifica composiciones.
-
-  276               Habilita la baja administrativa auditada de un
-                    integrante A-Go-Go después del Freeze y antes de
-                    START_TOURNAMENT; inactiva su inscripción, cancela su
-                    slot, deja HCP TEAM obsoleto mediante el trigger
-                    existente y reabre salidas validadas, manteniendo la
-                    composición y tarjetas pendientes de regularización
-                    antes del inicio.
-
-  277               Corrige la baja administrativa 276 para preservar
-                    intactas las salidas validadas y las tarjetas ya
-                    emitidas mientras el equipo incompleto sigue
-                    pendiente de resolución; la baja sólo actualiza
-                    composición/roster/auditoría y deja START_TOURNAMENT
-                    bloqueado por 274--275 hasta que el organizador
-                    decida la resolución.
-
-  278               Amplía el detector 274 para controlar globalmente la
-                    composición A-Go-Go: detecta equipos excepción de
-                    tamaño normal +1, permite como máximo uno por torneo,
-                    detecta sobrecupos inválidos y vuelve a marcar la
-                    composición como pendiente si coexisten un equipo
-                    excepción y cualquier jugador suelto.
-                    START_TOURNAMENT hereda el bloqueo mediante
-                    compositionReady. No mueve jugadores, salidas ni
-                    tarjetas.
-
-  279               Reequilibrio A-Go-Go 3+1 → 2+2 post-Freeze/pre-START:
-                    el administrador elige un integrante del único equipo
-                    excepción de 3 y lo mueve al equipo incompleto de 1.
-                    Conserva ambos equipos y sus salidas físicas,
-                    recalcula HCP TEAM, renueva la validación lógica y
-                    revisa tarjetas/markers si ya fueron emitidos. Sólo
-                    las tarjetas de los dos equipos afectados se
-                    devuelven para reimpresión material. No cambia
-                    categorías y START_TOURNAMENT sigue dependiendo del
-                    detector global 278.
-
-  280               A-Go-Go: elimina las firmas de jugador/equipo y
-                    marcador como requisito competitivo. Resultado
-                    oficial y leaderboard pasan a depender de tarjeta
-                    física CAPTURED + conciliación COMPLETED + score
-                    válido; las firmas pueden conservarse como datos
-                    históricos/informativos, pero no participan en ningún
-                    STOP competitivo. La primera versión preparada de 280
-                    abortó sin aplicar cambios; se sustituyó por la
-                    versión corregida. Corrige el caso CENIR/2026 sin
-                    alterar sus datos.
-
-  281               A-Go-Go: permite incorporar, después del Freeze y
-                    antes de START_TOURNAMENT y de la emisión oficial de
-                    tarjetas, al único jugador suelto de un equipo
-                    incompleto dentro de otro equipo normal completo,
-                    creando la única excepción +1 permitida. Conserva
-                    histórico el equipo origen, recalcula HCP TEAM del
-                    destino y renueva la validación lógica de salidas
-                    cuando corresponde.
-
-  282               Corrige la RPC 281 para permitir de forma controlada
-                    el movimiento que crea la excepción +1 aun cuando el
-                    equipo destino ya está en su cupo normal. Usa
-                    únicamente la válvula oficial del trigger de cupo
-                    durante ese UPDATE y mantiene intacta la protección
-                    global de capacidad.
-
-  283               Corrige en la RPC 281 la relación usada para
-                    localizar grupos vacíos: enlaza grupo → turno → ronda
-                    → torneo, evitando consultar un tournament_id
-                    inexistente en tournament_round_shifts. No cambia la
-                    regla competitiva de la excepción +1.
-
-  284               A-Go-Go: incorpora el retiro competitivo auditado de
-                    un equipo que quedó incompleto con exactamente un
-                    integrante activo, después del Freeze, antes de
-                    START_TOURNAMENT y antes de emitir tarjetas
-                    oficiales. Conserva equipo, jugador e HCP como
-                    historia, los retira de la competencia oficial y
-                    actualiza sus asignaciones lógicas de salida.
-
-  285               Corrige la reapertura de validaciones de salida
-                    dentro del retiro competitivo 284: sustituye la
-                    transición inválida validated → superseded por el
-                    flujo autorizado validated → reopened, registrando
-                    fecha, administrador y motivo, y conserva la
-                    revalidación formal posterior sin debilitar el
-                    trigger de protección. Amplía el CHECK de auditoría
-                    tournament_team_composition_changes.change_type para
-                    admitir team_competitive_withdrawal, requerido por el
-                    retiro competitivo de equipos A-Go-Go de la 284/285.
-                    Conserva sin cambios todos los valores históricos
-                    previamente permitidos y no modifica datos, permisos
-                    ni la lógica de la RPC de retiro.
-
-  287               Crea el catálogo comercial de tarifas de uso de
-                    plataforma, con modalidad por día o por torneo,
-                    importe, moneda, vigencia, estado y una única tarifa
-                    default activa; su mantenimiento queda reservado al
-                    Superadmin.
-
-  288               Crea asignaciones de tarifa especial por correo de
-                    organizador, con vigencia, estado y protección contra
-                    traslapes activos; su mantenimiento queda reservado
-                    al Superadmin.
-
-  289               Crea la configuración comercial global de plataforma,
-                    separada de parámetros deportivos, con porcentaje de
-                    IVA configurable y correo administrativo para
-                    notificaciones comerciales.
-
-  290               Crea la contratación comercial previa al torneo y una
-                    RPC segura que resuelve tarifa especial/default,
-                    calcula días, subtotal, IVA y total en backend y
-                    congela ese snapshot económico antes del pago.
-
-  291               Crea intentos de pago propios para contrataciones de
-                    plataforma, separados de pagos de jugadores, copiando
-                    monto y moneda del snapshot contractual y permitiendo
-                    múltiples intentos con referencias del proveedor.
-
-  292               Finaliza en backend una contratación con pago
-                    aprobado de forma atómica e idempotente: confirma el
-                    intento, marca el contrato pagado, crea el torneo
-                    activo y asigna al organizador como administrador del
-                    torneo.
-
-  293               Agrega un simulador temporal de resultado de pago de
-                    plataforma, usable por el organizador sobre sus
-                    propias contrataciones, con escenarios APROBADO y
-                    RECHAZADO y reutilizando la finalización definitiva
-                    de la 292.
-
-  294               Separa la vigencia comercial del torneo de sus fechas
-                    y estados deportivos, registrando el periodo
-                    operativo de cada torneo contratado y exponiendo
-                    helpers para identificar acceso vigente, vencido o
-                    legacy.
-
-  295               Aplica en backend el modo sólo lectura a torneos
-                    contratados cuya vigencia comercial terminó,
-                    bloqueando mutaciones en el mismo perímetro operativo
-                    protegido para torneos cancelados y preservando los
-                    torneos legacy.
-
-  296               Habilita el autorregistro backend de organizadores
-                    después de verificar el correo con Supabase Auth,
-                    creando o vinculando admin_users sin asignar todavía
-                    permisos sobre ningún torneo.
-
-  297               Crea una cola/auditoría idempotente de notificaciones
-                    comerciales cuando un pago genera un torneo, usando
-                    el correo administrativo configurable sin hacer
-                    depender la creación del torneo del envío externo de
-                    email.
-
-  298               Adapta la confirmación y reapertura de configuración
-                    a torneos de autoservicio ya activos, conservando la
-                    confirmación explícita antes de abrir inscripciones y
-                    limitándola al estado deportivo EN PLANIFICACIÓN.
-
-  299               Elimina la confirmación manual como requisito del
-                    flujo de autoservicio: al abrir inscripciones valida
-                    en vivo configuración y desempates, y ajusta el
-                    Asistente Operativo sin alterar el flujo histórico.
-
-  300               Retira el flujo comercial histórico de
-                    provisionamiento, confirmación manual de pago y
-                    liberación; conserva los datos históricos y
-                    simplifica la protección de estado de servicio sin
-                    alterar el autoservicio ni la operación deportiva.
-
-  301               Crea el catálogo transversal de Premios Especiales
-                    del Torneo con cinco premios estándar protegidos y
-                    premios personalizados por organizador, definiendo
-                    tipo de valor, unidad sugerida y criterio de
-                    comparación sin vincularlo al scoring ni al ciclo
-                    competitivo.
-
-  302               Configura Premios Especiales por torneo, ronda y
-                    hoyo, guardando snapshots del catálogo y reglas
-                    operativas como unidad, referencia, fairway, green y
-                    golpe evaluado, sin integrarlos al scoring, freezes
-                    ni ciclo competitivo.
-
-  303               Crea estaciones operativas de Premios Especiales por
-                    torneo, ronda y hoyo, registra un responsable externo
-                    sin exigir cuenta administrativa y permite que varios
-                    premios compartan la misma estación, manteniendo la
-                    consistencia premio-estación y el aislamiento
-                    deportivo.
-
-  304               Incorpora acceso QR independiente y seguro por
-                    estación de Premios Especiales, con token aleatorio
-                    propio, generación/rotación y desactivación
-                    controladas, además de una consulta pública mínima
-                    por bearer token sin reutilizar QR de jugadores ni
-                    tarjetas.
-
-  305               Incorpora el roster operativo por ronda para Premios
-                    Especiales, prefiriendo la última validación vigente
-                    de salidas y expandiendo equipos a sus jugadores;
-                    agrega captura móvil por QR con valor, testigo,
-                    corrección e invalidación auditadas sin borrar el
-                    historial.
-
-  306               Agrega el **REPORTE PROVISIONAL EN LÍNEA** de Premios
-                    Especiales para organizador/superadmin, agrupado por
-                    ronda y hoyo, con candidatos válidos ordenados según
-                    MENOR_ES_MEJOR, MAYOR_ES_MEJOR o SOLO_REGISTRO,
-                    mostrando inválidos e historial sin adjudicar
-                    ganador.
-
-  307               Incorpora mensajería bidireccional append-only entre
-                    el responsable de una estación de Premios Especiales
-                    y el organizador/superadmin, usando QR para el
-                    responsable y autenticación administrativa para el
-                    organizador, con contexto opcional de premio y sin
-                    edición ni borrado.
-
-  308               Implementa la adjudicación oficial y explícita de
-                    Premios Especiales mediante versiones inmutables por
-                    premio, posiciones asociadas a candidatos válidos,
-                    soporte para empates, snapshots de
-                    jugador/valor/unidad y anulación con motivo sin
-                    borrar el histórico.
-
-  309               Convierte el catálogo global de Premios Especiales en
-                    administrable por Superadmin, permitiendo mantener
-                    los premios estándar sin borrarlos ni desactivarlos e
-                    incorporando defaults operativos de referencia,
-                    fairway, green y golpe evaluado para futuras
-                    configuraciones de torneo.
-
-  310               Corrige la configuración de Premios Especiales por
-                    torneo para que nombre, tipo de valor y criterio se
-                    capturen del catálogo únicamente al crear la
-                    asociación y permanezcan como snapshots inmutables en
-                    ediciones posteriores. Permite además editar datos
-                    operativos históricos aunque el premio de catálogo
-                    haya sido desactivado después.
-
-  311               Agrega una consulta pública controlada por QR para
-                    que el responsable de una estación de Premios
-                    Especiales vea desde cualquier dispositivo todos los
-                    registros de esa estación y su historial, sin abrir
-                    acceso directo a las tablas operativas.
-
-  312               Corrige el ranking del REPORTE PROVISIONAL EN LÍNEA
-                    de Premios Especiales: los empates se determinan
-                    únicamente por el valor competitivo, por lo que
-                    valores idénticos comparten posición; fecha e
-                    identificador quedan sólo como orden visual
-                    determinista y SOLO_REGISTRO no recibe posición
-                    competitiva.
-
-  313               Corrige la generación/rotación del QR de estaciones
-                    de Premios Especiales calificando explícitamente
-                    extensions.gen_random_bytes(32), ya que pgcrypto está
-                    instalado en el esquema extensions y la RPC 304
-                    conserva un search_path restringido a public y
-                    pg_temp.
-
-  314               Formaliza un ciclo operativo obligatorio por ronda
-                    (PENDIENTE -\> EN JUEGO -\> FINALIZADA), incluso en
-                    torneos de una sola ronda; exige inicio manual antes
-                    de captura competitiva, reutiliza el cierre formal
-                    existente como finalización de ronda, impide iniciar
-                    una ronda posterior mientras la anterior siga
-                    abierta, incorpora el estado al Asistente y permite
-                    reprogramar la fecha sólo mientras la ronda esté
-                    pendiente, respetando la fecha de inicio del torneo y
-                    la última ronda finalizada.
-
-  315               Registra Best Ball como motor operativo reservado en
-                    el registro de inicio, inicialmente inactivo, sin
-                    alterar los motores Stroke, Stableford ni A-Go-Go.
-
-  316               Crea el snapshot oficial Best Ball por tarjeta TEAM y
-                    sus integrantes, vinculando a cada jugador con su
-                    snapshot individual de hándicap de la ronda.
-
-  317               Incorpora validación, contrato de salida y emisión
-                    oficial de tarjetas TEAM para Best Ball mediante
-                    dispatchers explícitos y aislados.
-
-  318               Inicializa la captura digital Best Ball por
-                    integrante y hoyo en tablas propias, manteniendo la
-                    sesión común de tarjeta y haciendo atómica emisión +
-                    inicialización.
-
-  319               Integra marcadores TEAM Best Ball con asignación
-                    circular o autocaptura para equipo aislado, y hace
-                    atómica la emisión + captura + marcadores.
-
-  320               Implementa captura digital Best Ball por
-                    jugador/hoyo, incluyendo SCORE, PICKUP, confirmación
-                    y disputa, y bloquea captura competitiva fuera de
-                    ronda EN JUEGO.
-
-  321               Calcula en tiempo real Best Gross y Best Net por hoyo
-                    desde los scores individuales y el Playing Handicap
-                    congelado de cada integrante.
-
-  322               Expone la tarjeta digital Best Ball y el payload
-                    administrativo TEAM, mostrando integrantes, scores,
-                    Best Gross/Net y relaciones de marcador.
-
-  323               Incorpora recepción y captura de tarjeta física Best
-                    Ball por integrante/hoyo en evidencia propia,
-                    reutilizando el contenedor común de recepción.
-
-  324               Implementa conciliación Best Ball por jugador/hoyo
-                    entre evidencia digital y física, con resoluciones y
-                    eventos propios sin contaminar las tablas comunes.
-
-  325               Construye el resultado oficial TEAM Best Ball
-                    Gross/Net desde evidencia individual conciliada, sin
-                    persistir un score TEAM por hoyo ni utilizar HCP
-                    TEAM.
-
-  326               Incorpora leaderboard Best Ball por ronda y
-                    categoría, con clasificaciones Gross/Net, posiciones
-                    TEAM y empates preservados, consumiendo sólo
-                    resultado oficial.
-
-  327               Integra desempates Best Ball Gross/Net TEAM
-                    reutilizando las reglas y resoluciones comunes, con
-                    soporte de resolución manual sin recalcular scores.
-
-  328               Integra Best Ball al cierre y publicación competitiva
-                    común por categoría y ronda, incluyendo outcomes
-                    terminales y estado de formalización.
-
-  329               Permite revisar la composición Best Ball después de
-                    emitir tarjetas sólo mientras la ronda esté
-                    PENDIENTE; conserva la tarjeta, reconstruye evidencia
-                    PENDING y marcadores, y registra auditoría propia sin
-                    HCP TEAM.
-
-  330               Bloquea permanentemente el campo del torneo desde la
-                    primera inscripción mediante un latch persistente,
-                    conservando la asignación automática de marcas de
-                    salida. El bloqueo permanece aunque posteriormente se
-                    elimine la inscripción que lo originó; el backfill
-                    excluye torneos cancelados históricos.
-
-  331               Establece el campo del torneo como única fuente de
-                    verdad para todas sus rondas: toda ronda nueva o
-                    reactivada hereda automáticamente `campo_golf_id` del
-                    torneo y el backend impide que una ronda conserve o
-                    reciba un campo distinto, preservando históricos
-                    cancelados y la firma existente del RPC de rondas.
-
-  332               Incorpora la Fase 1 del workflow operativo
-                    materializado como infraestructura paralela y
-                    reconstruible para torneos y rondas, alineada con el
-                    autoservicio vigente: en torneos pagados la
-                    configuración se considera lista por validación real
-                    al abrir inscripciones, sin exigir el antiguo hito
-                    manual de finalizar configuración. Materializa además
-                    inscripciones, Freeze, inicio y finalización del
-                    torneo y, por ronda, configuración, grupos, salidas,
-                    tarjetas, inicialización de captura, lifecycle,
-                    cierre competitivo y corte cuando aplica; conserva
-                    compatibilidad con torneos legacy y auditoría de
-                    transiciones desde la evidencia real existente.
-
-  333               Alinea el workflow operativo materializado con el
-                    autoservicio vigente: los torneos con contratación
-                    PAGADA ya no dependen del hito histórico
-                    configuracion_finalizada_at. Mientras permanecen en
-                    planificación, CONFIGURATION refleja la validación
-                    mínima real y la configuración de desempates exigidas
-                    por abrir_inscripciones_torneo; si el torneo ya abrió
-                    inscripciones o avanzó, CONFIGURATION se materializa
-                    como COMPLETE. Conserva sin cambios el comportamiento
-                    legacy y el resto de la proyección deportiva de la
-                    332.
-
-  334               Repara una recursión accidental detectada durante el
-                    diagnóstico del nuevo workflow operativo: el alias
-                    histórico pre-Best Ball del estado de cierre
-                    competitivo regresaba a la función pública y
-                    provocaba stack depth limit exceeded en modalidades
-                    no Best Ball. El alias pre328 vuelve a delegar en la
-                    cadena histórica pre249 → pre213, conservando intacto
-                    el tratamiento específico de Best Ball y sin
-                    reconstruir torneos ni modificar datos deportivos.
-
-  335               Amplía el workflow operativo materializado sin
-                    sustituir todavía al Asistente público. Incorpora
-                    como proyección explícita las franjas de hándicap,
-                    configuración de desempates, HCP TEAM cuando aplica,
-                    captura física, conciliación, resultados, cierre por
-                    categoría y publicación. Conserva las fuentes de
-                    verdad deportivas existentes y difiere las consultas
-                    profundas de resultados/formalización hasta que la
-                    conciliación esté completa. No realiza reconstrucción
-                    masiva: la nueva proyección se materializa únicamente
-                    al reconciliar un torneo.
   -----------------------------------------------------------------------
 
-## Pendientes
-
-### Premios especiales del torneo
-
--   Integrar la adjudicación oficial de Premios Especiales en frontend,
-    usando las RPC de la Migración 308, manteniendo selección explícita,
-    empates, versiones históricas y anulación sin borrar adjudicaciones.
--   Evaluar posteriormente publicación/consulta para jugadores y
-    mecanismos de notificación, sin mezclar estos premios con
-    leaderboards deportivos.
-
-### A-Go-Go / Scramble
-
--   Continuar la verificación E2E del flujo pre-inicio de composición
-    A-Go-Go ya implementado: baja administrativa, resolución de equipos
-    incompletos, excepción +1, reequilibrio 3+1 → 2+2 y retiro
-    competitivo.
--   Continuar el E2E integral A-Go-Go con torneos nuevos creados por el
-    flujo real de organizador, siguiendo el Asistente Operativo hasta
-    detectar únicamente fallas reales de operación.
--   Integrar en frontend la creación del equipo grupal y plaza inicial
-    mediante la Migración 226 y las plazas provisionales de terceros
-    mediante la Migración 227; después conectar el pago parcial 1--N de
-    las Migraciones 223/224.
--   Integrar en frontend el flujo de invitación/aceptación de jugadores
-    ya inscritos y pagados sin equipo, usando el contrato de la
-    Migración 225.
--   Mantener y terminar de integrar en UI la opción de pago individual
-    cuando la configuración del torneo lo permita.
--   Best Ball queda implementado en backend hasta la Migración 329 como
-    motor separado; las Migraciones 343, 344 y 346 completan piezas de
-    previsualización, captura física y sustitución administrativa
-    post-emisión. Queda pendiente completar su integración UI/E2E.
-    Shamble permanece como motor futuro separado.
-
-### Best Ball
-
--   Completar en frontend la integración del motor Best Ball
-    implementado en backend desde las Migraciones 315--329 y su
-    previsualización de tarjetas de la Migración 343, reutilizando
-    infraestructura común sólo donde corresponda.
--   Ejecutar prueba E2E completa: configuración, equipos, emisión,
-    marcadores, tarjeta digital, captura física, conciliación,
-    resultados, desempates, cierre/publicación y revisiones post-emisión
-    antes del inicio.
--   No permitir cambios de composición una vez que la ronda esté EN
-    JUEGO.
-
-### Generales
-
--   Retirar del frontend administrativo los controles y textos del flujo
-    histórico de provisionamiento/liberación, dejando el autoservicio
-    como flujo normal.
--   Eliminar la función huérfana `validar_cupo_categoria()` reemplazada
-    por `validar_cupo_categoria_cruzado()`.
--   Agregar ciudades al catálogo conforme se incorporen clubes en nuevas
-    localidades.
--   Configurar SMTP personalizado de Supabase antes de operar con
-    jugadores reales.
--   Revisar el flujo de cambio de correo jugador ↔ Auth para exigir
-    confirmación del nuevo correo.
--   Soporte futuro para campos de 27+ hoyos con nueves combinables.
--   Completar pantallas administrativas/club y licencias que sigan
-    pendientes.
--   Continuar la prueba E2E del autoservicio comercial desde pago hasta
-    apertura de inscripciones y operación completa del torneo,
-    verificando que el Asistente Operativo sea congruente en cada etapa.
--   Mantener pendientes los ajustes del motor de salidas que todavía
-    requieran acomodación manual, balanceo o validación integral antes
-    de tarjetas.
-
-## Regla de mantenimiento
-
-A partir de la siguiente migración, agregar **una sola entrada breve por
-migración** y actualizar **Pendientes** cuando corresponda. No incluir
-nombres de archivos SQL ni documentación exhaustiva del código en este
-README.
-
-## Migración 336 --- Reparar recursión histórica del leaderboard operativo pre328
-
-**Objetivo.** Corregir la recursión accidental del alias histórico
-`_obtener_leaderboard_operativo_ronda_pre328(uuid)`. El fallback de
-`obtener_leaderboard_operativo_ronda(uuid)` llegaba a `pre328` y
-`pre328` regresaba a la misma función pública.
-
-**Cambio.** `pre328` delega ahora en
-`_obtener_leaderboard_operativo_ronda_pre211(uuid)`, identificado en
-Supabase como su verdadero antecedente previo a Best Ball.
-
-**Cadena resultante.** La RPC pública conserva Best Ball mediante
-`obtener_leaderboard_best_ball_ronda_328(uuid)` y para el resto utiliza
-`pre328 → pre211`.
-
-**Seguridad y alcance.** Se conservan intactos `auth.uid()` y
-`puede_administrar_congelamiento_torneo()` de `pre211`. No se modifican
-datos, motores deportivos, workflow materializado, Asistente operativo
-ni RPC públicas; tampoco se reconstruyen torneos.
-
-**Verificación.** Se comprueba la cadena `pública → pre328 → pre211`,
-ausencia de retorno recursivo desde `pre328`, conservación de Best Ball,
-conservación de controles de seguridad y ausencia de escrituras. Los
-totales del workflow deben permanecer invariantes.
-
-**Estado confirmado posteriormente:** ejecutada y verificada en
-Supabase.
-
-## Migración 337 --- Workflow con evidencia persistida y secuencias corregidas
-
-**Objetivo.** Separar definitivamente la orientación del Asistente de la
-validación deportiva. La reconstrucción materializada del workflow deja
-de invocar los motores profundos de resultados, leaderboard y desempates
-para decidir el avance operativo.
-
-**Cambio.** Se incorpora `reconstruir_workflow_extendido_337(uuid)`.
-Parte de la proyección base 332/333, conserva las validaciones livianas
-de franjas, desempates configurados, HCP TEAM, captura física y
-conciliación, y obtiene los estados posteriores a conciliación mediante
-evidencia ya persistida en cierres de categoría, publicaciones y cierre
-competitivo de ronda.
-
-**Frontera deportiva.** Al completar conciliación, `ROUND_RESULTS` queda
-`AVAILABLE`. El workflow no declara por sí mismo que los resultados o
-desempates estén competitivamente resueltos. Las RPC deportivas
-existentes siguen siendo la autoridad que permite o rechaza los cierres.
-
-**Secuencias.** Se corrigen las fórmulas introducidas en 335. Para la
-ronda 1: HCP TEAM 205, captura física 252, conciliación 254, resultados
-256, cierre de categorías 258, publicación 259 y cierre competitivo 260.
-
-**Seguridad y alcance.** `reconciliar_workflow_torneo_332(uuid)`
-conserva `auth.uid()` y `puede_administrar_congelamiento_torneo()` y
-delega a 337. No se modifican motores deportivos ni sus permisos, no se
-alteran datos deportivos y no se reconstruye ningún torneo
-automáticamente.
-
-**Estado confirmado:** ejecutada y verificada en Supabase. POLLA
-MALANQUIN SEPTIEMBRE quedó con 19 nodos y evidencia persistida; la
-reconstrucción 337 devolvió `ok=true` sin recursión ni timeout.
-
-## Migración 338 --- Cutover del Asistente al workflow materializado
-
-**Objetivo.** Retirar al RPC público del Asistente Operativo de la
-cadena histórica `v22 → ... → core` y convertir el workflow
-materializado 337 en su fuente operativa.
-
-**Cambio.** Se incorpora `_adaptar_asistente_workflow_338(uuid)`. El
-adaptador reconcilia la proyección mediante
-`reconciliar_workflow_torneo_332(uuid)`, lee `tournament_workflow_nodes`
-y genera el contrato JSON esperado por la interfaz: `stage`, `status`,
-`actor`, `progress`, `summary`, `nextAction`, `blockers`, `warnings`,
-`steps` y `rounds`. `obtener_asistente_operativo_torneo(uuid)` pasa a
-delegar exclusivamente en este adaptador.
-
-**Compatibilidad.** Cada paso conserva `workflowStatus` con la semántica
-337 (`COMPLETE`, `AVAILABLE`, `IN_PROGRESS`, `BLOCKED`) y expone
-`status` compatible con la interfaz histórica (`COMPLETE`, `PENDING`,
-`BLOCKED`). No se crean nuevas acciones deportivas; las acciones del
-Asistente sólo navegan a los flujos existentes.
-
-**Siguiente acción.** Se prioriza el primer nodo `AVAILABLE` por
-secuencia; si no existe, el primer `IN_PROGRESS` y finalmente el primer
-`BLOCKED`. Esto permite que una ronda siga `IN_PROGRESS` sin ocultar
-`ROUND_RESULTS` cuando los resultados ya están disponibles. Para POLLA
-MALANQUIN SEPTIEMBRE, el estado 337 actual debe orientar a
-`ROUND_RESULTS`.
-
-**Seguridad y alcance.** Se conservan autenticación y permisos. La
-reconciliación sólo actualiza la proyección workflow. No se modifican
-Stroke Play, Stableford, A-Go-Go, Best Ball, tarjetas, resultados,
-desempates ni cierres deportivos. No se hace backfill masivo ni se
-hardcodea POLLA en la función; POLLA se utiliza únicamente como caso
-canónico de verificación.
-
-**Estado al documentar:** preparada para ejecución manual. No se
-considera ejecutada ni verificada hasta comprobarla posteriormente en
-Supabase.
-
-------------------------------------------------------------------------
-
-## Migración 339 --- Inscripción confirmada con pago pendiente / pago el día del evento
-
-**Objetivo.** Separar formalmente la condición de estar inscrito de la
-condición de haber pagado, para torneos que excepcionalmente permiten
-liquidar la inscripción el día del evento, sin utilizar pre-reservas y
-sin alterar los motores deportivos.
-
-**Cambios de base de datos.** -
-`tournaments.permitir_pago_dia_evento boolean NOT NULL DEFAULT false`:
-opt-in por torneo; ningún torneo histórico queda habilitado
-automáticamente. - `tournament_registrations.estado_pago`: `PENDIENTE` /
-`PAGADO`, con `PAGADO` como default para conservar el comportamiento
-histórico. - Las inscripciones existentes se clasifican como `PAGADO`
-mediante `DEFAULT 'PAGADO'` al crear la columna, **sin ejecutar
-UPDATE/backfill sobre `tournament_registrations`**. - Los torneos
-cancelados y vencidos quedan estrictamente en sólo lectura: la migración
-no intenta mutar sus inscripciones y por tanto no dispara los guards
-operativos existentes. - `monto_pagado`, `fecha_pago`, `medio_pago` y
-`referencia_pago` pasan a admitir `NULL`, pero una restricción 339
-obliga a que los cuatro sean `NULL` cuando el estado sea `PENDIENTE` y
-los cuatro estén completos cuando sea `PAGADO`. -
-`inscribir_pago_dia_evento_339(uuid,uuid)`: RPC autenticada para
-jugador. Sólo funciona con torneo activo, inscripciones abiertas y
-`permitir_pago_dia_evento=true`; crea una `tournament_registration`
-activa real con pago pendiente. Las validaciones existentes de perfil,
-duplicados, cupos, categoría, marca y Freeze siguen siendo autoridad
-mediante los triggers actuales. -
-`registrar_pago_inscripcion_339(uuid,numeric,medio_pago_torneo,text)`:
-RPC administrativa para Superadmin/organizador/admin del club. Registra
-el cobro real y cambia `PENDIENTE → PAGADO`. No modifica jugador,
-categoría, marca, equipo ni estado competitivo.
-
-**Decisiones de arquitectura.** - `pago_dia_evento` no se representa
-como `efectivo`; el medio real se registra al cobrar. - No se utiliza
-`tournament_pre_reservations`: el jugador ya está confirmado dentro del
-torneo. - No se toca Stroke Play, Stableford, A-Go-Go, Best Ball,
-Freeze, grupos, salidas, tarjetas, captura, conciliación, resultados,
-desempates, cierre de ronda ni workflow. - El control completo de
-check-in/no-show queda fuera de esta migración. - La habilitación para
-POLLA MALANQUIN SEPTIEMBRE se hará explícitamente después de verificar
-la migración; 339 no la activa automáticamente.
-
-**Archivos.** - `339_inscripcion_confirmada_pago_pendiente.sql` -
-`339_verificacion_inscripcion_confirmada_pago_pendiente.sql` -
-`README_TEE_CENTRAL_HASTA_339_COMPLETO.md`
-
-------------------------------------------------------------------------
-
-## Migración 340 --- Warning no bloqueante del Asistente por pagos pendientes
-
-**Objetivo.** Mantener visible en el Asistente Operativo un aviso
-administrativo mientras exista al menos una inscripción activa con
-`estado_pago = 'PENDIENTE'`, sin convertir el pago en requisito del
-workflow deportivo.
-
-**Cambios.** - Se agrega
-`_adaptar_asistente_pagos_pendientes_340(uuid)`, que toma como base
-íntegra `_adaptar_asistente_workflow_338(uuid)`. - El RPC público
-`obtener_asistente_operativo_torneo(uuid)` pasa a utilizar el adaptador
-340. - Si existen pagos pendientes activos, `warnings` incorpora
-`PENDING_PAYMENTS`, con cantidad de jugadores, `severity=WARNING` y
-`blocking=false`. - `summary.warnings` refleja la cantidad de warnings
-devueltos. - Si no quedan pagos pendientes, el warning desaparece
-automáticamente. - `schemaVersion` pasa a 340; `assistantSource` y el
-workflow materializado 337 se conservan.
-
-**Regla de no bloqueo.** El warning no modifica `blockers`,
-`nextAction`, nodos, secuencias ni estados del workflow. No bloquea
-Freeze, grupos, salidas, tarjetas, inicio de ronda, captura,
-conciliación, resultados, cierres ni finalización.
-
-**Archivos.** - `340_warning_asistente_pagos_pendientes.sql` -
-`340_verificacion_warning_asistente_pagos_pendientes.sql` -
-`README_TEE_CENTRAL_HASTA_340_COMPLETO.md`
-
-------------------------------------------------------------------------
-
-## Migración 341 --- Estructura completa de rondas antes de Freeze y acción del Asistente
-
-**Objetivo.** Mantener intacta la protección de Freeze y hacer explícita
-la regla operativa de que todas las rondas declaradas por
-`numero_rondas` deben existir y estar activas antes de congelar el
-torneo. Las rondas se siguen creando o reactivando una por una desde la
-pestaña **Rondas**; no se generan automáticamente al crear el torneo.
-
-**Regla estructural.** `numero_rondas` continúa siendo la declaración y
-el máximo absoluto del torneo. Antes de Freeze pueden faltar rondas
-mientras el torneo se encuentra en configuración. Al llegar al punto en
-que el torneo debe congelarse, el workflow exige que estén creadas y
-activas todas las rondas `1..numero_rondas`. Si falta alguna, Freeze
-queda bloqueado por `ROUND_STRUCTURE`. Después de Freeze continúa
-prohibido crear o reactivar rondas; la función
-`crear_o_reactivar_siguiente_ronda(...)` no se modifica.
-
-**Workflow.** Se agrega `reconstruir_workflow_extendido_341(uuid)`, que
-conserva íntegramente 337 y materializa el nodo de torneo
-`ROUND_STRUCTURE` con secuencia 25, entre `REGISTRATIONS` y `FREEZE`. El
-nodo registra como evidencia el número de rondas declaradas, activas,
-faltantes y si existe Freeze. `reconciliar_workflow_torneo_332(uuid)`
-pasa a delegar en 341.
-
-**Asistente.** Se agrega `_adaptar_asistente_rondas_341(uuid)`, que toma
-como base `_adaptar_asistente_pagos_pendientes_340(uuid)` para no perder
-el warning no bloqueante `PENDING_PAYMENTS`. Cuando
-`ROUND_STRUCTURE=AVAILABLE`, el `nextAction` pasa a **Crear ronda N** y
-dirige a `rondas`, donde N es la primera ronda declarada que todavía no
-está activa. Una vez creada, la reconciliación recalcula la siguiente
-faltante; cuando ya existen todas las rondas, `ROUND_STRUCTURE` queda
-`COMPLETE` y Freeze puede continuar según sus demás requisitos.
-
-**Freeze sin cambios.** 341 no abre excepciones al congelamiento, no
-permite crear/reactivar rondas después de Freeze y no modifica la
-semántica de `tournament_condition_freezes`. La reprogramación de fecha
-existente permanece separada bajo las reglas ya implementadas. La hora
-de ronda se revisará en una fase específica antes de modificarla.
-
-**Fuera de alcance.** No se modifican cortes posteriores a una ronda,
-Stroke Play, Stableford, A-Go-Go, Best Ball, HCP TEAM, grupos, salidas,
-tarjetas, captura, conciliación, resultados, desempates, cierres
-competitivos ni finalización. Los cortes multirronda continúan
-pendientes de prueba E2E y se abordarán posteriormente.
-
-**Frontend posterior.** Después de verificar 341 en Supabase, Lovable
-deberá retirar **Generar rondas** de Información/configuración del
-torneo y conservar la creación individual exclusivamente en **Rondas**.
-Esa modificación frontend no forma parte del SQL 341.
-
-**Archivos.** - `341_rondas_completas_antes_freeze_asistente.sql` -
-`341_verificacion_rondas_completas_antes_freeze_asistente.sql` -
-`README_TEE_CENTRAL_HASTA_341_COMPLETO.md`
-
-**Estado al documentar:** preparada para ejecución manual. No se
-considera ejecutada ni verificada hasta comprobarla posteriormente en
-Supabase.
-
-------------------------------------------------------------------------
-
-## Migración 342 --- Corrección RPC de inscripción con pago el día del evento
-
-**Origen del hallazgo.** La primera prueba funcional del flujo **Pago el
-día del evento** devolvió `column tc.activo does not exist`. El
-diagnóstico directo en PROD confirmó que `tournament_categories` no
-tiene ni ha definido una columna `activo`, mientras que
-`inscribir_pago_dia_evento_339(uuid,uuid)` la referenciaba.
-
-**Corrección.** Se reemplaza únicamente la definición de
-`inscribir_pago_dia_evento_339(uuid,uuid)`. La categoría se valida por
-su asociación real: `tc.id = p_tournament_category_id` y
-`tc.tournament_id = p_tournament_id`. No se inventa una bandera de
-actividad inexistente.
-
-Se conserva el resto del contrato 339: autenticación de jugador, torneo
-activo, inscripciones abiertas, opción de pago en evento habilitada e
-inserción con `estado_pago='PENDIENTE'` y datos de pago nulos. Las
-reglas existentes de `tournament_registrations` continúan siendo
-autoridad para las validaciones deportivas aplicables.
-
-**Fuera de alcance.** No modifica tablas, Freeze, workflow 341,
-Asistente, pagos pendientes 340, rondas, calendario, cortes ni motores
-deportivos.
-
-**Archivos.** - `342_fix_pago_evento_categoria_sin_activo.sql` -
-`342_verificacion_fix_pago_evento_categoria_sin_activo.sql` -
-`README_TEE_CENTRAL_HASTA_342_COMPLETO.md`
-
-**Estado al documentar:** preparada para ejecución manual; pendiente de
-verificación en PROD y de repetir la prueba funcional desde la interfaz.
-
-------------------------------------------------------------------------
-
-## Migración 343 --- Previsualización de tarjetas Best Ball
-
-**Objetivo.** Permitir que el organizador revise correctamente las
-tarjetas Best Ball antes de emitirlas, sin tratarlas como tarjetas
-A-Go-Go.
-
-**Qué hace.** Incorpora una previsualización propia para Best Ball por
-equipos, mostrando el equipo, sus integrantes, sus hándicaps
-individuales congelados, la salida y los hoyos de la ronda. Best Ball
-continúa sin HCP TEAM. La emisión oficial conserva el flujo atómico ya
-existente de tarjetas, captura digital y marcadores. Stroke Play,
-Stableford y A-Go-Go mantienen sus previsualizaciones actuales.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD.
-
-------------------------------------------------------------------------
-
-## Migración 344 --- Lectura y progreso de captura física Best Ball
-
-**Objetivo.** Completar la información necesaria para capturar una
-tarjeta física Best Ball sin depender de los resultados de la tarjeta
-digital.
-
-**Qué hace.** La captura física Best Ball entrega el equipo, sus
-integrantes y todos los hoyos necesarios para transcribir SCORE o PICKUP
-por jugador. También corrige el progreso administrativo para contar los
-resultados individuales esperados y capturados en Best Ball. Stroke
-Play, Stableford y A-Go-Go conservan su comportamiento actual.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 345 --- Notas opcionales al cerrar ronda
-
-**Objetivo.** Permitir cerrar una ronda sin capturar notas de cierre.
-
-**Qué hace.** Hace opcionales las notas de cierre sin modificar las
-validaciones ni el proceso competitivo de cierre de ronda.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 346 --- Sustitución administrativa Best Ball post-emisión
-
-**Objetivo.** Permitir sustituir de forma controlada a un integrante
-Best Ball después del Freeze y antes de iniciar la ronda, incluso cuando
-las tarjetas ya fueron emitidas.
-
-**Qué hace.** Realiza la sustitución de forma atómica y auditada,
-conserva el equipo y las tarjetas existentes, crea la nueva inscripción
-y los snapshots individuales necesarios del sustituto y, cuando
-corresponde, revisa las tarjetas Best Ball mediante el mecanismo de la
-Migración 329. No utiliza HCP TEAM ni modifica o revalida las salidas.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 347 --- Endurecimiento de permisos de sustitución Best Ball
-
-**Objetivo.** Cerrar el acceso anónimo a la sustitución administrativa
-Best Ball incorporada en la Migración 346.
-
-**Qué hace.** Retira `EXECUTE` a `anon` sobre la RPC de sustitución Best
-Ball y conserva el acceso para usuarios autenticados y `service_role`.
-No modifica la lógica de sustitución, datos, snapshots, tarjetas,
-salidas ni motores deportivos.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 348 --- Porcentaje de hándicap configurable a nivel torneo
-
-**Objetivo.** Recuperar la configuración del porcentaje de hándicap a
-nivel torneo sin perder los defaults definidos por modalidad ni los
-overrides específicos de cada ronda.
-
-**Qué hace.** Agrega al torneo un Handicap Allowance opcional y
-establece la jerarquía efectiva
-`override de ronda → porcentaje del torneo → default de la modalidad`.
-Actualiza la vista y las funciones de configuración/congelamiento que
-resolvían directamente el porcentaje efectivo. Los torneos existentes
-conservan su comportamiento mientras el nuevo valor permanezca vacío; no
-modifica automáticamente datos de torneos existentes.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 349 --- HCP competitivo específico del jugador por torneo
-
-**Objetivo.** Permitir que el organizador establezca, antes del Freeze,
-un HCP competitivo aplicable únicamente al torneo, sin modificar el HCP
-general del perfil del jugador.
-
-**Qué hace.** Guarda el ajuste en la inscripción con motivo,
-administrador y fecha, mantiene auditoría histórica y utiliza el HCP del
-torneo para elegibilidad de categoría y para el snapshot de Handicap
-Index del Freeze. La categoría actual sólo puede conservarse si continúa
-siendo elegible con el HCP ajustado; si deja de serlo, la operación
-exige una categoría elegible y, al cambiarla, sincroniza la marca de
-salida estándar activa del campo. No permite ajustes después del Freeze
-y no modifica el perfil del jugador ni los motores de resultados.
-
-## **Estado al documentar:** ejecutada manualmente y verificada en PROD.
-
-## Migración 350 --- Previsualización de categorías para HCP propuesto
-
-**Objetivo.** Permitir que el organizador conozca, antes de persistir un
-ajuste de HCP torneo, qué categorías son elegibles para el nuevo HCP y
-qué marca de salida estándar activa correspondería a cada una.
-
-**Qué hace.** Centraliza la regla existente de elegibilidad de categoría
-en un helper parametrizado por HCP y agrega una RPC de previsualización
-sin persistencia. La RPC recibe la inscripción y el HCP propuesto,
-conserva las reglas vigentes de categoría natural o superior, género y
-edad, informa si la categoría actual continúa siendo elegible y devuelve
-las categorías válidas junto con la marca estándar activa del campo. No
-modifica la inscripción, el perfil, la categoría ni la marca; el ajuste
-definitivo continúa realizándose de forma atómica mediante la RPC de la
-Migración 349.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD; se
-detectó permiso EXECUTE heredado para `anon`, corregido por la Migración
-351.
-
-------------------------------------------------------------------------
-
-## Migración 351 --- Cierre de permiso anon en previsualización HCP
-
-**Objetivo.** Cerrar el permiso formal `EXECUTE` del rol `anon` sobre
-`previsualizar_categorias_hcp_torneo_350(uuid,numeric)`, detectado
-durante la verificación de PROD posterior a la Migración 350.
-
-**Qué hace.** Revoca `EXECUTE` de `PUBLIC` y `anon` y conserva
-explícitamente `EXECUTE` para `authenticated`. No modifica datos, lógica
-de HCP, categorías, marcas de salida ni las funciones implementadas por
-las Migraciones 349 y 350.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `authenticated_execute=true`, `anon_execute=false`,
-`public_execute=false`; las RPC 349 y 350 permanecieron operativas y no
-quedaron overrides incompletos.
-
-------------------------------------------------------------------------
-
-## Migración 352 --- Total a pagar por inscripción y control de cobranza
-
-**Objetivo.** Separar formalmente la obligación económica de una
-inscripción del dinero efectivamente recibido y habilitar una fuente
-única para el control de cobranza de jugadores pendientes de pago, sin
-introducir todavía pagos parciales ni una cuenta corriente completa.
-
-**Qué hace.** Agrega `total_a_pagar` a `tournament_registrations` como
-importe congelado de la inscripción y conserva `monto_pagado`
-exclusivamente como el importe efectivamente recibido. Para las nuevas
-inscripciones individuales con pago el día del evento,
-`inscribir_pago_dia_evento_339` congela la tarifa aplicable al momento
-de inscribirse: Early Bird cuando esté configurado y vigente; en otro
-caso, la tarifa individual. `registrar_pago_inscripcion_339` mantiene el
-flujo de pago único y, cuando existe `total_a_pagar`, exige que el pago
-liquide exactamente ese total; las inscripciones históricas sin total
-conservan el comportamiento legacy.
-
-La migración incorpora además
-`obtener_control_cobranza_pendiente_352(uuid)`, RPC read-only autorizada
-para Superadmin, organizador del torneo y administrador del club.
-Devuelve encabezado del torneo, campo, moneda, tarifas de referencia,
-cantidad de pendientes, total esperado, medios de pago y jugadores
-pendientes ordenables alfabéticamente, como fuente común para pantalla
-online, reporte formal y exportación a hoja de cálculo.
-
-Como backfill operativo controlado, la migración localiza por nombre
-`POLLA SEPTIEMBRE, 24`, exige que exista exactamente una vez y valida
-antes de actualizar que su tarifa individual sea \$1,000.00, sin tarifa
-de equipo ni Early Bird. Sólo entonces asigna `total_a_pagar = 1000.00`
-a sus inscripciones activas con `estado_pago='PENDIENTE'` que aún no
-tengan total. Si la configuración económica no coincide, la transacción
-falla y hace rollback.
-
-**Alcance deliberado.** Esta fase admite un solo pago liquidatorio. No
-crea movimientos, cargos, abonos, pagos parciales ni cálculo de saldo.
-Esa evolución se diseñará posteriormente como cuenta corriente sin
-cambiar el significado establecido aquí para `total_a_pagar` y
-`monto_pagado`.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. Se
-confirmó `total_a_pagar` en las 10 inscripciones pendientes de
-`POLLA SEPTIEMBRE, 24`, todas por \$1,000.00, con total esperado de
-\$10,000.00; la RPC `obtener_control_cobranza_pendiente_352(uuid)` quedó
-presente y con `authenticated_execute=true`, `anon_execute=false` y
-`public_execute=false`.
-
-------------------------------------------------------------------------
-
-## Migración 353 --- Corrección del generador de folio de inscripción
-
-**Objetivo.** Evitar errores de llave duplicada al crear una inscripción
-cuando existen huecos históricos en la numeración de folios de un
-torneo.
-
-**Diagnóstico que la origina.** Al intentar inscribir a Manuel Romo
-Garay en `POLLA SEPTIEMBRE, 24`, PostgreSQL rechazó la operación por la
-restricción `tournament_registrations_folio_unico`. El torneo tenía 10
-inscripciones pero sus folios llegaban hasta `INS-0011`, porque faltaba
-`INS-0004`. La función `generar_folio_inscripcion()` calculaba el
-siguiente folio mediante `count(*) + 1`; por ello obtuvo 11 e intentó
-generar de nuevo `INS-0011`.
-
-**Qué hace.** Reemplaza únicamente `generar_folio_inscripcion()` para
-conservar el bloqueo `FOR UPDATE` sobre el torneo y calcular el
-siguiente folio como el máximo componente numérico de los folios válidos
-`INS-NNNN` existentes para ese torneo, más uno. De esta manera no
-reutiliza huecos históricos y, para el estado diagnosticado de
-`POLLA SEPTIEMBRE, 24`, el siguiente folio corresponde a `INS-0012`.
-
-**Alcance.** No modifica folios existentes, no inserta la inscripción de
-Manuel manualmente, no cambia reglas de inscripción, pagos, categorías,
-HCP ni motores deportivos. La restricción UNIQUE
-`(tournament_id, folio)` permanece como protección final. La generación
-continúa serializada por torneo para evitar colisiones entre
-inscripciones concurrentes.
-
-**Estado al documentar:** ejecutada manualmente y verificada en PROD. La
-función quedó usando el máximo folio numérico válido más uno,
-conservando el bloqueo por torneo y la restricción UNIQUE como
-protección final.
-
-------------------------------------------------------------------------
-
-## Migración 354 --- Historial administrativo y anulación controlada de pagos
-
-**Objetivo.** Permitir corregir errores humanos en la captura
-administrativa de pagos sin perder trazabilidad. Una inscripción pagada
-puede volver a `PENDIENTE` mediante una anulación autorizada y
-posteriormente recibir un nuevo pago normal. La evidencia del pago
-original y de cada anulación queda conservada de forma inmutable.
-
-**Qué hace.** Crea `tournament_registration_payment_history`, bitácora
-específica para eventos `PAGO_REGISTRADO` y `PAGO_ANULADO`. Cada evento
-conserva inscripción, torneo, jugador, monto, medio de pago, referencia,
-fecha del pago original, fecha del evento y, para operaciones nuevas,
-administrador y `auth.uid()` responsables. La tabla tiene RLS de lectura
-administrativa y un trigger que bloquea `UPDATE` y `DELETE`; no existen
-políticas de escritura directa.
-
-La migración reemplaza `registrar_pago_inscripcion_339` conservando las
-reglas vigentes de la migración 352 ---autenticación, autorización,
-inscripción activa, estado `PENDIENTE`, pago liquidatorio exacto cuando
-existe `total_a_pagar`, medio y referencia obligatorios--- y agrega en
-la misma transacción un evento `PAGO_REGISTRADO`. También exige que el
-usuario autenticado tenga un `admin_users` activo para atribuir
-correctamente las nuevas operaciones.
-
-Agrega `anular_pago_inscripcion_354(uuid,text,text)`. La RPC sólo admite
-Superadmin, organizador del torneo o administrador del club, bloquea la
-inscripción con `FOR UPDATE`, exige un pago vigente íntegro, registra
-primero el evento `PAGO_ANULADO` y después devuelve la inscripción a
-`PENDIENTE`, limpiando `monto_pagado`, `fecha_pago`, `medio_pago` y
-`referencia_pago`. `total_a_pagar` no se modifica, por lo que la misma
-inscripción queda lista para una nueva captura correcta mediante la RPC
-normal.
-
-**Motivos estructurados de anulación.** Los códigos permitidos son
-`JUGADOR_EQUIVOCADO`, `MONTO_INCORRECTO`, `MEDIO_PAGO_INCORRECTO`,
-`REFERENCIA_INCORRECTA`, `PAGO_DUPLICADO`,
-`PAGO_NO_RECIBIDO_NO_CONFIRMADO` y `OTRO`. Además del motivo
-estructurado, la explicación es obligatoria y se valida en backend
-mediante `_validar_explicacion_anulacion_pago_354`: entre 15 y 500
-caracteres, al menos tres palabras y al menos dos palabras de tres o más
-caracteres, con rechazo de textos triviales conocidos. Esta validación
-reduce comentarios sin contenido como `abc`, `asdf`, `xxx` o `prueba`,
-aunque no pretende sustituir el juicio humano ni afirmar semánticamente
-que todo texto aceptado sea verdadero o suficiente.
-
-**Consulta de historia.** Agrega
-`obtener_historial_pago_inscripcion_354(uuid)`, RPC read-only
-administrativa que devuelve cronológicamente los eventos, incluyendo
-etiqueta legible del motivo, explicación, datos económicos y nombre del
-administrador cuando existe. Los pagos existentes antes de la 354 se
-incorporan mediante un backfill `BACKFILL_354`; no se inventa el
-operador histórico: si no existe evidencia específica, los campos de
-autor quedan `NULL`.
-
-**Permisos.** Las RPC administrativas de anulación, historia y captura
-de pago quedan ejecutables por `authenticated` y con permisos retirados
-a `anon` y `PUBLIC`. Las tres funciones mantienen además validación
-interna de alcance administrativo. La historia no se expone al jugador
-mediante RLS ni mediante las RPC nuevas.
-
-**Alcance deliberado.** Esta migración no introduce pagos parciales,
-saldo a favor, cuenta corriente ni edición de movimientos históricos. No
-modifica `payment_attempts`, pagos de equipo, pagos de plataforma,
-prerreservas, simuladores ni otros flujos económicos. Tampoco realiza
-cambios de frontend; los botones `ANULAR PAGO` y `VER HISTORIA` se
-integrarán en una microfase posterior de Lovable, después de ejecutar y
-verificar esta migración.
-
-**Estado al documentar:** ejecutada manualmente y verificada
-directamente en PROD. Se confirmó la tabla de historia, RLS,
-inmutabilidad, backfill y las RPC de pago, anulación e historia. El
-único endurecimiento pendiente detectado fue retirar `EXECUTE` heredado
-para `anon`/`PUBLIC` del helper interno; se atiende en la migración 355.
-
-------------------------------------------------------------------------
-
-## Migración 355 --- Cierre de permisos del helper de anulación de pago
-
-**Objetivo.** Eliminar una superficie de ejecución innecesaria detectada
-durante la verificación directa en PROD de la migración 354.
-
-La función interna `_validar_explicacion_anulacion_pago_354(text)`
-valida únicamente la calidad mínima del comentario de una anulación. No
-modifica datos ni permite por sí misma registrar o anular pagos; sin
-embargo, conservaba por privilegios predeterminados permiso `EXECUTE`
-heredado para `anon` y `PUBLIC`.
-
-La migración 355 no cambia lógica, datos, historial ni motivos.
-Únicamente revoca `EXECUTE` a `PUBLIC` y `anon` y conserva `EXECUTE`
-para `authenticated`.
-
-**Resultado esperado:** `authenticated_execute = true`,
-`anon_execute = false`, `public_execute = false`.
-
-**Estado al documentar:** ejecutada manualmente y verificada
-directamente en PROD. Se confirmó que el helper conserva ejecución para
-`authenticated` y no para `anon` ni `PUBLIC`, sin cambios en lógica,
-datos ni historial.
-
-------------------------------------------------------------------------
-
-## Migración 356 --- Catálogo reutilizable de puntos de acceso del organizador
-
-**Objetivo.** Crear la base independiente de **ACCESO AL CAMPO**
-mediante un catálogo permanente y reutilizable de puntos de acceso
-propiedad de cada organizador, sin vincular todavía los puntos con
-torneos, credenciales QR, apertura de puertas ni registros de ingreso.
-
-**Qué hace.** - Crea `public.tournament_access_points`. - Cada punto
-pertenece a un `admin_user` organizador mediante
-`organizer_admin_user_id`. - Permite definir nombre, descripción
-opcional y estado activo/inactivo. - Impide nombres duplicados para un
-mismo organizador ignorando mayúsculas/minúsculas y espacios
-exteriores. - Conserva `created_at` y `updated_at`; un trigger mantiene
-`updated_at`. - Activa RLS. - El organizador autenticado sólo puede
-consultar, crear y modificar sus propios puntos. - El Superadmin puede
-consultar, crear y modificar cualquier punto. - No concede `DELETE`: los
-puntos se desactivan para conservar un catálogo reutilizable y
-estable. - Revoca acceso de `anon`. - No modifica `tournaments`,
-`tournament_registrations`, motores deportivos, premios especiales ni
-rutas/UI.
-
-**Estado.** Ejecutada manualmente en PROD y verificada directamente. Se
-confirmó la existencia de `public.tournament_access_points`, RLS
-habilitado, `anon` sin `SELECT`, y `authenticated` con `SELECT`,
-`INSERT` y `UPDATE`, sin `DELETE`.
-
-------------------------------------------------------------------------
-
-## Migración 357 --- Control de acceso QR configurable por torneo
-
-**Objetivo.** Permitir que cada torneo decida si utilizará el módulo de
-control de acceso mediante QR de Tee Central. Esto permite que los
-clubes que cuentan con controles propios de ingreso utilicen la
-inscripción de Tee Central sin tener que entregar el QR de acceso de Tee
-Central a sus jugadores.
-
-**Qué hace.** - Agrega
-`tournaments.usar_control_acceso_qr boolean NOT NULL`. - Los torneos
-existentes quedan en `true` para preservar el comportamiento actual. -
-No realiza `UPDATE` sobre los torneos existentes: la columna se agrega
-con `DEFAULT true`, evitando conflictos con torneos cancelados de sólo
-lectura. - Después del alta de la columna, el `DEFAULT` cambia a
-`false`, por lo que los torneos nuevos nacen con el módulo QR
-desactivado y el organizador decide si lo activa. - Permite cambiar la
-decisión antes del congelamiento. - Bloquea el cambio después de que
-existe `tournament_condition_freezes`. - Crea
-`_proteger_control_acceso_qr_post_freeze_357()` y
-`trg_proteger_control_acceso_qr_post_freeze_357`. - El helper del
-trigger no concede ejecución directa a `PUBLIC`, `anon` ni
-`authenticated`.
-
-**Alcance deliberado.** No modifica `tournament_registrations.qr_token`,
-no regenera QR, no modifica inscripciones, pagos ni correos. La
-integración de frontend/servidor de correo se hará después de verificar
-esta migración. Cuando se integre, la confirmación de inscripción y su
-reenvío mostrarán QR solamente si `usar_control_acceso_qr = true`. El
-correo independiente **Pago recibido** seguirá sin QR en todos los
-casos.
-
-**Estado.** Ejecutada manualmente y verificada en PROD.
-
-------------------------------------------------------------------------
-
-## Migración 358 --- Asignación de puntos de acceso a torneos
-
-**Objetivo.** Vincular los puntos reutilizables del catálogo creado en
-la Migración 356 con los torneos que hayan habilitado el Control de
-Acceso QR de Tee Central mediante la Migración 357, sin crear todavía
-credenciales QR de puerta, apertura general ni registros de ingreso.
-
-**Qué hace.** - Crea `public.tournament_access_point_assignments`. -
-Relaciona un torneo con un punto del catálogo e impide duplicar el mismo
-punto dentro del mismo torneo. - Permite `responsable_nombre` opcional;
-esa persona no requiere cuenta de Tee Central. - Incorpora `habilitado`
-para bloquear o rehabilitar individualmente una puerta sin eliminar la
-asignación. - Sólo permite asignaciones cuando
-`tournaments.usar_control_acceso_qr = true`. - Exige que el punto esté
-activo. - Para un organizador normal exige que el punto pertenezca al
-mismo `admin_user` que administra el torneo; Superadmin conserva alcance
-global. - Una asignación existente no puede cambiar de torneo ni de
-punto. - Activa RLS y no concede `DELETE`. - El helper interno del
-trigger no concede ejecución directa a `PUBLIC`, `anon` ni
-`authenticated`.
-
-**Alcance deliberado.** No genera URL o QR de puerta, no abre ni
-programa el acceso general, no valida el QR del jugador y no registra
-ingresos. No modifica `tournament_registrations.qr_token`, pagos,
-correos, motores deportivos, Premios Especiales ni workflow competitivo.
-
-**Estado al documentar:** migración 369 ejecutada y verificada en PROD.
-`pg_net` 0.20.3 habilitado y Cron `tee-central-purge-access-data-365`
-activo diariamente a las 06:15 UTC. La configuración segura de los
-secretos de Vault permanece como paso posterior para completar la
-invocación automática de la Edge Function. Pendiente de verificación
-posterior a la ejecución.
-
-------------------------------------------------------------------------
-
-## Migración 359 --- Apertura general del acceso al campo
-
-**Objetivo.** Incorporar el control general de cuándo puede comenzar a
-registrarse el acceso de jugadores al campo, de forma independiente del
-ciclo competitivo del torneo. El organizador puede abrir el acceso
-inmediatamente o programar una fecha y hora de apertura.
-
-**Qué hace.** - Crea `public.tournament_access_control_settings`, con
-una configuración única por torneo. - Permite dos modalidades mutuamente
-excluyentes: `apertura_manual_at` para **ABRIR AHORA** y
-`apertura_programada_at` para **PROGRAMAR APERTURA**. - La apertura
-programada se evalúa contra `now()` del servidor; no requiere cron, job
-ni proceso programado que cambie un estado. - Crea
-`abrir_acceso_campo_ahora_359(uuid)` para sustituir cualquier
-programación previa por apertura manual inmediata. - Crea
-`programar_apertura_acceso_campo_359(uuid,timestamptz)` para establecer
-o sustituir la fecha/hora programada. - Crea
-`acceso_campo_abierto_359(uuid)` como evaluación central del estado
-operativo del acceso. - La evaluación exige
-`usar_control_acceso_qr=true`. - Los estados `finalizado` y `cancelado`
-son bloqueo absoluto aunque la apertura manual o programada ya se
-hubiera alcanzado. - No se vincula la apertura a `inscripcion_cerrada`
-ni a `en_curso`. - Sólo Superadmin o el organizador del torneo pueden
-administrar la configuración. - Activa RLS; no concede `DELETE`. - Los
-RPC administrativos se conceden sólo a `authenticated`; el helper de
-trigger no tiene ejecución directa.
-
-**Alcance deliberado.** Esta migración no crea todavía las credenciales
-URL/QR de las puertas, no valida el QR del jugador y no registra eventos
-de ingreso. El bloqueo individual de cada puerta continúa siendo el
-campo `habilitado` incorporado por la Migración 358.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 360 --- Credencial segura URL/QR por puerta asignada
-
-**Objetivo.** Dar a cada asignación Torneo + Punto de acceso una
-credencial segura e independiente para abrir su página operativa
-exclusiva desde un teléfono o tableta, reutilizando el patrón probado de
-tokens rotables sin acoplar el módulo a Premios Especiales.
-
-**Qué hace.** - Crea `public.tournament_access_point_credentials`, con
-una sola credencial vigente por asignación de la Migración 358. - Genera
-tokens aleatorios de 256 bits representados por 64 caracteres
-hexadecimales. - Crea
-`generar_o_rotar_credencial_punto_acceso_360(uuid)`: genera la primera
-credencial o rota una existente; al rotar, el token anterior deja de
-funcionar inmediatamente. - Crea
-`revocar_credencial_punto_acceso_360(uuid)`: desactiva la credencial sin
-eliminar la puerta ni su asignación. - La generación exige que el torneo
-use Control de Acceso QR, que no esté finalizado/cancelado, que el punto
-esté activo y que la asignación no esté bloqueada. - Crea
-`obtener_punto_acceso_por_token_360(text)`, RPC pública limitada que
-resuelve exclusivamente los datos operativos mínimos de la puerta y
-torneo. - La página puede abrirse antes del inicio operativo y devolver
-`PREPARADA`; devuelve `ABIERTA` cuando la Migración 359 determina que el
-acceso general ya está abierto y `BLOQUEADA` si la puerta fue
-temporalmente deshabilitada. - Torneo finalizado/cancelado, módulo QR
-apagado, punto inactivo o credencial revocada hacen que el token deje de
-ser válido. - La tabla de credenciales no tiene acceso directo desde
-`anon` ni `authenticated`; las operaciones pasan exclusivamente por RPC
-controladas.
-
-**Alcance deliberado.** La migración no construye todavía la
-ruta/frontend que representará el token como URL o código QR. Tampoco
-valida el QR de un jugador ni registra ingresos. La URL/QR
-administrativa será simplemente una representación de esta credencial
-segura cuando se implemente la interfaz.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 361 --- Validación del QR existente del jugador
-
-**Objetivo.** Permitir que una puerta operativa valide el QR que ya
-posee la inscripción del jugador, sin generar un segundo QR y sin
-registrar todavía el ingreso.
-
-**Qué hace.** - Crea `validar_qr_jugador_acceso_361(text,text)`. -
-Recibe el token seguro de la puerta de la Migración 360 y el `qr_token`
-existente en `tournament_registrations`. - Valida el formato real de
-ambos tokens: 64 caracteres hexadecimales para la credencial de puerta y
-32 para el QR histórico de inscripción. - Exige que la credencial esté
-activa, la puerta esté habilitada, el punto esté activo, el torneo use
-Control de Acceso QR y el acceso general de la Migración 359 ya esté
-abierto. - `finalizado` y `cancelado` continúan siendo bloqueo
-absoluto. - El QR del jugador sólo se acepta si pertenece a una
-inscripción activa del mismo torneo asociado a la puerta. - Devuelve
-únicamente la identidad mínima necesaria para la comprobación humana:
-nombres, apellidos, identificador de jugador, inscripción y folio, junto
-con los datos operativos mínimos de la puerta. - Devuelve instrucción
-explícita de solicitar identificación física antes de registrar el
-ingreso. - No expone correo, teléfono ni otros datos personales
-innecesarios. - La RPC puede ejecutarse desde la página pública de
-puerta por `anon` o desde una sesión `authenticated`, pero las tablas
-subyacentes no adquieren nuevos permisos.
-
-**Alcance deliberado.** Validar un QR no registra entrada, no marca al
-jugador como ingresado, no impide usos posteriores del mismo QR y no
-modifica la inscripción. La historia de accesos, número de uso y
-advertencia por QR reutilizado se incorporarán en la siguiente fase.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 362 --- Registro de ingresos y reutilización del QR
-
-**Objetivo.** Registrar cada ingreso real al campo como un evento
-independiente y distinguir el uso normal del QR en distintos días de un
-reingreso durante el mismo día, manteniendo obligatoria la verificación
-humana de identidad.
-
-**Qué hace.** - Crea `public.tournament_access_entries` como historial
-inmutable de ingresos. - Cada evento conserva torneo, puerta/asignación,
-inscripción, jugador, fecha local del campo, timestamp exacto, número
-acumulado de uso del QR y si el jugador viene acompañado. - Exige
-`identidad_confirmada=true` para todo ingreso. - Numera cada uso del QR
-mediante `qr_uso_numero`. - Un ingreso posterior en otro día queda
-marcado como QR reutilizado, pero no genera por sí mismo una alarma
-fuerte. - Si ya existe un ingreso en la misma fecha local, la validación
-361 devuelve advertencia `STRONG` y el mensaje **QR UTILIZADO
-ANTERIORMENTE HOY --- IDENTIFIQUE A LA PERSONA BAJO SU
-RESPONSABILIDAD**. - El registro de un reingreso del mismo día exige
-confirmación expresa de esa advertencia; nunca bloquea automáticamente
-un reingreso legítimo. - La validación informa número de ingresos
-previos totales y del día, además del último ingreso y la última puerta
-utilizada. - `registrar_ingreso_acceso_362(...)` vuelve a validar en
-servidor la puerta, el torneo, la apertura y la inscripción antes de
-insertar; no confía sólo en una validación previa del navegador. -
-Bloquea la fila de inscripción durante el registro para serializar
-intentos concurrentes del mismo QR y mantener correcto el número de
-uso. - La página pública registra exclusivamente mediante RPC; no tiene
-permisos directos sobre la tabla. - Organizadores y Superadmin pueden
-consultar el historial mediante RLS, pero no modificarlo ni eliminarlo.
-
-**Alcance deliberado.** Esta migración registra únicamente si el jugador
-viene acompañado (`SÍ/NO`). No almacena cantidad de acompañantes.
-Tampoco incorpora todavía fotografía del vehículo ni placa; esa
-evidencia corresponde a la siguiente fase.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 363 --- Evidencia de vehículo
-
-**Objetivo.** Incorporar evidencia opcional del vehículo asociada a un
-ingreso ya registrado, manteniendo las fotografías fuera de
-almacenamiento público y sin almacenar imágenes de identificaciones
-oficiales.
-
-**Qué hace.** - Crea el bucket privado `acceso-campo-vehiculos`,
-limitado a imágenes JPEG, PNG y WebP y a 10 MB por archivo. - Añade a
-`tournament_access_entries` la ruta privada de fotografía y una placa
-capturada manualmente de forma opcional. - No incorpora OCR ni
-reconocimiento automático de placas. -
-`preparar_foto_vehiculo_acceso_363(...)` valida el token de la puerta y
-que el ingreso pertenezca exactamente a esa puerta y torneo; después
-genera una ruta única bajo `torneo/ingreso/archivo`. -
-`confirmar_evidencia_vehiculo_acceso_363(...)` comprueba que la
-fotografía realmente exista en el bucket privado antes de asociarla al
-evento. - La página pública puede cargar la imagen pero no leer el
-bucket. - La lectura de fotografías queda limitada mediante Storage RLS
-al organizador del torneo y al Superadmin. - No se permite sustituir
-silenciosamente una fotografía ya vinculada a un ingreso. - La placa se
-normaliza a mayúsculas y queda limitada a 30 caracteres.
-
-**Alcance deliberado.** No se almacenan fotografías de INE, pasaporte,
-licencia ni de ninguna otra identificación oficial. La identificación
-del jugador continúa siendo una comprobación visual realizada por el
-responsable de la puerta. La foto de vehículo y la placa son evidencia
-operativa, no un mecanismo biométrico ni de identificación automática.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 364 --- Retención de 15 días del Control de Acceso
-
-**Objetivo.** Establecer que la información operativa del módulo Control
-de Acceso tenga una vida limitada y se elimine 15 días después de que el
-torneo pase realmente a `finalizado` o `cancelado`.
-
-**Qué hace.** - Crea `tournament_access_retention`, que registra el
-momento exacto en que el torneo entra a un estado terminal y fija
-`purge_after = terminal_at + 15 días`. - Un trigger sobre
-`tournaments.estatus` inicia automáticamente el plazo cuando el torneo
-cambia a `finalizado` o `cancelado`. - Para torneos terminales
-preexistentes que ya tengan eventos de acceso, hace un backfill
-defensivo usando `tournaments.updated_at`, porque el esquema histórico
-no conserva un timestamp específico de cancelación/finalización. -
-`purgar_datos_acceso_vencidos_364()` elimina los objetos del bucket
-privado `acceso-campo-vehiculos` y después todos los eventos de
-`tournament_access_entries` del torneo vencido. - La purga no elimina
-jugadores, inscripciones, resultados, tarjetas ni ningún dato
-competitivo del torneo. - La función de purga es interna: `anon` y
-`authenticated` no pueden ejecutarla. -
-`obtener_retencion_acceso_torneo_364(...)` permite al
-organizador/Superadmin consultar cuándo comenzó el plazo, la fecha
-prevista de eliminación y si la purga ya ocurrió. - PROD no tiene
-actualmente `pg_cron`; por ello esta migración establece la regla y la
-operación idempotente de purga, pero la invocación periódica debe
-conectarse posteriormente a un scheduler o mecanismo de aplicación. No
-se presenta como automática mientras ese disparador periódico no exista.
-
-**Regla funcional.** Torneo `FINALIZADO` o `CANCELADO` → comienza plazo
-de 15 días → se eliminan definitivamente los registros de Control de
-Acceso y sus fotografías privadas de vehículo.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 365 --- Purga automática del Control de Acceso
-
-**Objetivo.** Convertir en automática la política de retención creada en
-la migración 364, evitando que la eliminación de datos dependa de una
-acción manual.
-
-**Qué hace.** - Habilita `pg_cron`, motor utilizado por Supabase Cron
-para trabajos programados. - Registra un único job llamado
-`tee-central-purge-access-data-365`. - El job se ejecuta diariamente a
-las 06:15 UTC e invoca `purgar_datos_acceso_vencidos_364()`. - La
-función 364 continúa siendo la autoridad para decidir qué torneos ya
-cumplieron los 15 días; el cron no adelanta ni modifica esa fecha. - Si
-no hay información vencida, la ejecución es inocua e idempotente. - La
-función de purga continúa sin permiso de ejecución para `anon` y
-`authenticated`. - La migración elimina previamente un job del mismo
-nombre si existiera, para evitar duplicados al reintentar la
-instalación. - `cron.job_run_details` permite revisar posteriormente las
-ejecuciones y sus resultados.
-
-**Regla operativa resultante.** Cuando un torneo pasa a `FINALIZADO` o
-`CANCELADO`, la migración 364 fija su vencimiento exactamente 15 días
-después. El job diario de esta migración detecta los vencidos y elimina
-los registros de Control de Acceso y las fotografías privadas de
-vehículos. Al ser un proceso diario, la eliminación física puede ocurrir
-en la primera ejecución posterior al cumplimiento exacto de los 15 días.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 366 --- Reportes y alertas del Control de Acceso
-
-**Objetivo.** Exponer al organizador y al Superadmin la información
-operativa del Control de Acceso necesaria para la futura pantalla
-administrativa, sin dar acceso público a los registros ni introducir
-reglas competitivas.
-
-**Qué hace.** - Crea `obtener_reporte_acceso_torneo_366(...)`,
-restringida al organizador del torneo o Superadmin. - El reporte trabaja
-por fecha local del campo y, si no se especifica fecha, utiliza la fecha
-actual calculada con `campos_golf.timezone_id`. - Devuelve totales de
-ingresos, jugadores únicos, reutilizaciones del QR el mismo día,
-ingresos con acompañante, fotografías de vehículo y placas capturadas. -
-Devuelve el detalle de cada ingreso con jugador, hora, punto de acceso,
-responsable actual de la asignación, número de uso del QR, confirmación
-de identidad, acompañante y evidencia de vehículo. - Crea
-`obtener_alertas_acceso_torneo_366(...)` para concentrar los casos de QR
-reutilizado el mismo día. - Las alertas se etiquetan como `REVIEW`:
-indican que el registro debe revisarse y expresamente no concluyen
-fraude, suplantación ni que dos personas hayan utilizado el QR. - Las
-RPC son sólo para usuarios autenticados autorizados; `anon` no tiene
-permiso de ejecución. - No crea ni modifica datos deportivos,
-inscripciones, tarjetas, resultados ni motores competitivos. - Los
-reportes quedan sujetos a la retención de 15 días de las migraciones
-364/365: cuando los eventos son purgados, dejan de aparecer en estos
-reportes.
-
-**Nota histórica.** El nombre del responsable se obtiene actualmente de
-la asignación vigente del punto de acceso; no existe todavía snapshot
-histórico del responsable dentro de cada evento.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 367 --- Endurecimiento de carga de fotografías de vehículos
-
-**Objetivo.** Cerrar la autorización de carga anónima de fotografías de
-vehículos para que una página pública de acceso sólo pueda subir el
-archivo a la ruta exacta, temporal y previamente emitida para un ingreso
-válido.
-
-**Qué hace.** - Crea `tournament_access_vehicle_upload_authorizations`,
-tabla privada de autorizaciones temporales de carga. -
-`preparar_foto_vehiculo_acceso_363(...)` continúa validando el token de
-la puerta, pero ahora registra una ruta aleatoria exacta con vigencia de
-10 minutos e invalida autorizaciones pendientes anteriores del mismo
-ingreso. - Crea `_storage_upload_vehiculo_autorizado_367(...)`, helper
-mínimo utilizado por la política de Storage. - Sustituye la política
-INSERT de la migración 363 por una política que exige que el nombre
-exacto del objeto tenga una autorización vigente y corresponda a un
-ingreso, asignación, torneo y punto de acceso todavía válidos. -
-`confirmar_evidencia_vehiculo_acceso_363(...)` exige que la ruta
-recibida corresponda a la autorización exacta y la consume al confirmar
-la evidencia. - La tabla de autorizaciones no queda expuesta
-directamente a `anon` ni a `authenticated`. - No modifica los motores
-deportivos ni la lógica de inscripciones.
-
-**Importante.** Esta migración endurece la **subida** de fotografías. La
-eliminación física a los 15 días se resolverá por separado mediante la
-API oficial de Supabase Storage; la documentación vigente de Supabase
-indica que los objetos no deben eliminarse mediante `DELETE` SQL sobre
-`storage.objects`.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 368 --- Purga física segura mediante Storage API
-
-**Objetivo.** Corregir el mecanismo de retención de Control de Acceso
-para que las fotografías de vehículos se eliminen físicamente mediante
-la API oficial de Supabase Storage antes de borrar los eventos de
-acceso.
-
-**Qué hace.** - Crea `tournament_access_storage_purge_queue`, cola
-privada de torneos cuya retención de 15 días ya venció. - Sustituye
-internamente `purgar_datos_acceso_vencidos_364()` para que el Cron
-existente de la migración 365 sólo encole trabajo; deja de ejecutar
-`DELETE FROM storage.objects`. - Crea RPC privadas para `service_role`
-que permiten a una función de servidor tomar lotes, confirmar una purga
-terminada y registrar errores. - Los eventos y la marca `purged_at` sólo
-se eliminan/actualizan después de que la función de servidor confirme
-que Storage API eliminó las fotografías. - Mantiene la regla:
-finalizado/cancelado + 15 días. - No modifica motores deportivos,
-inscripciones ni operación de las puertas.
-
-**Componente complementario.** La migración incluye un archivo separado
-de Edge Function `purge-access-storage-368`, que deberá desplegarse y
-programarse después de verificar el SQL. La Edge Function utiliza la
-Storage API oficial con credenciales exclusivas de servidor. Ninguna
-clave privilegiada se expone en Lovable ni en la página pública de
-acceso.
-
-**Estado al documentar:** SQL preparado para ejecución manual en PROD.
-Edge Function preparada, pendiente de despliegue y programación
-posterior a la verificación de esta migración.
-
-------------------------------------------------------------------------
-
-## Migración 369 --- Automatización de purga física de Control de Acceso
-
-**Objetivo.** Completar la ejecución automática de la retención de 15
-días, conectando el Cron existente con la Edge Function que elimina
-físicamente las fotografías mediante la Storage API oficial.
-
-**Qué hace.** - Habilita `pg_net`, requerido para llamadas HTTP
-asíncronas desde PostgreSQL. - Conserva el job
-`tee-central-purge-access-data-365` y su horario diario `15 6 * * *`. -
-El job primero ejecuta `purgar_datos_acceso_vencidos_364()` para encolar
-torneos vencidos y después invoca `purge-access-storage-368`. - La URL
-del proyecto y la secret key se leen desde Supabase Vault; ninguna
-credencial privilegiada se incorpora al SQL versionado. - La Edge
-Function desplegada en PROD usa autenticación servidor-a-servidor con
-secret key y realiza el borrado físico mediante Storage API antes de
-confirmar la eliminación de los eventos. - No modifica motores
-deportivos, inscripciones ni operación de los puntos de acceso.
-
-**Configuración posterior requerida.** Después de ejecutar la migración,
-deben crearse en Vault `tee_central_project_url_369` y
-`tee_central_purge_secret_key_369`. Se entrega un archivo separado de
-configuración segura para realizarlo sin incluir la secret key en la
-migración ni en el README.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Vault quedó
-configurado y la prueba extremo a extremo
-`pg_net -> Vault -> Edge Function` respondió HTTP 200 con `ok=true` y
-`processed=0`, resultado esperado al no existir trabajos de purga
-vencidos en ese momento.
-
-------------------------------------------------------------------------
-
-## Migración 370 --- Alias operativo de punto de acceso por torneo
-
-**Objetivo.** Permitir que la nomenclatura visible de cada punto de
-acceso se defina por torneo, de modo que un punto base reutilizable
-pueda llamarse, por ejemplo, `PUERTA NORTE` en El Campanario y
-`ACCESO PRINCIPAL` en otro club.
-
-**Qué hace.** - Agrega `alias_operativo` a
-`tournament_access_point_assignments`, por lo que el nombre operativo
-pertenece a la combinación torneo + punto y no al catálogo global. - El
-alias es obligatorio, no puede quedar vacío, tiene longitud máxima de
-120 caracteres y debe ser único dentro del torneo sin distinguir
-mayúsculas/minúsculas ni espacios exteriores. - Si existieran
-asignaciones anteriores sin alias, las inicializa con el nombre base del
-catálogo antes de hacer el campo obligatorio. - Actualiza
-`obtener_punto_acceso_por_token_360(...)` para mostrar el alias como
-nombre principal y conservar `baseName` sólo como referencia técnica. -
-Actualiza `validar_qr_jugador_acceso_361(...)` para mostrar el alias del
-punto actual y también el alias del último punto utilizado en el
-historial. - Actualiza `obtener_reporte_acceso_torneo_366(...)` y
-`obtener_alertas_acceso_torneo_366(...)` para utilizar la nomenclatura
-operativa del torneo. - No modifica credenciales, apertura, registro de
-ingresos, fotografías, retención, motores deportivos, inscripciones ni
-premios especiales.
-
-**Decisión funcional.** El catálogo `tournament_access_points` se
-conserva como base reutilizable/técnica. La nomenclatura que verá el
-personal de acceso y los reportes será `alias_operativo` de la
-asignación al torneo.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 371 --- Administración transaccional de puntos de acceso del torneo
-
-**Objetivo.** Simplificar la experiencia del organizador para que
-configure los puntos directamente dentro del torneo usando únicamente su
-nomenclatura real, sin administrar ni conocer el catálogo técnico
-`tournament_access_points`.
-
-**Qué hace.** - Crea `crear_punto_acceso_torneo_371(...)`, que valida al
-organizador/Superadmin, determina internamente el `admin_user_id`
-propietario, crea un punto base técnico con nombre opaco y crea en la
-misma operación la asignación al torneo con `alias_operativo` y
-responsable. Al ser una sola RPC, si falla cualquier paso la operación
-completa se revierte. - Crea `actualizar_punto_acceso_torneo_371(...)`
-para modificar alias, responsable y estado habilitado sin exponer el
-catálogo base. - Crea `retirar_punto_acceso_torneo_371(...)`, que
-deshabilita la asignación, revoca su credencial activa y deja inactivo
-el punto base cuando ya no tiene otro uso habilitado; no borra
-físicamente historial. - Crea `listar_puntos_acceso_torneo_371(...)`
-para entregar al frontend únicamente el modelo operativo necesario:
-nombre, responsable, estado y situación de la credencial. - Las cuatro
-RPC son `SECURITY DEFINER`; se revoca ejecución a `PUBLIC` y se concede
-únicamente a `authenticated`. - No modifica motores deportivos,
-inscripciones, premios especiales, entradas ya registradas, fotografías
-ni retención.
-
-**Decisión funcional.** El usuario no tendrá una pantalla de catálogo
-general. Desde su perspectiva sólo existen los puntos configurados en
-cada torneo, por ejemplo `PUERTA NORTE`, `ACCESO ESTACIONAMIENTO` o
-`CASA CLUB`. El catálogo base de la migración 356 queda como
-infraestructura interna.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 372 --- Hardening de permisos de las RPC 371
-
-**Objetivo.** Cerrar explícitamente al rol anónimo las operaciones
-administrativas de puntos de acceso creadas en la migración 371.
-
-**Qué hace.** - Revoca `EXECUTE` de `anon` sobre
-`crear_punto_acceso_torneo_371(...)`,
-`actualizar_punto_acceso_torneo_371(...)`,
-`retirar_punto_acceso_torneo_371(...)` y
-`listar_puntos_acceso_torneo_371(...)`. - Mantiene explícitamente
-`EXECUTE` para `authenticated`. - No modifica las funciones, datos, RLS,
-credenciales, ingresos ni lógica del módulo. - Corrige el hallazgo de
-verificación posterior a la 371, donde `anon` conservaba un grant
-explícito pese al `REVOKE FROM PUBLIC`.
-
-**Resultado esperado.** Las cuatro RPC deben quedar con
-`authenticated_execute = true` y `anon_execute = false`, conservando
-`SECURITY DEFINER`.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 373 --- Cierre definitivo de EXECUTE anónimo en RPC 371
-
-**Objetivo.** Corregir de raíz el hallazgo de permisos de las RPC
-administrativas 371 después de que la migración 372 no consiguiera
-eliminar de forma persistente el `EXECUTE` de `anon`.
-
-**Diagnóstico previo en PROD.** Se confirmó que `anon` no pertenece ni
-hereda de `authenticated` o `service_role`; las cuatro RPC 371 son
-propiedad de `postgres`; y los privilegios predeterminados para
-funciones creadas por `postgres` en el schema `public` concedían
-explícitamente `EXECUTE` a `anon`, `authenticated` y `service_role`. Las
-RPC 371 mostraban `anon=X/postgres` en su ACL real.
-
-**Qué hace.** - Modifica los privilegios predeterminados de futuras
-funciones creadas por `postgres` en `public` para retirar `EXECUTE` de
-`anon`. - Revoca `PUBLIC` y el grant explícito de `anon` en las cuatro
-RPC 371. - Conserva `EXECUTE` para `authenticated` y `service_role`. -
-No modifica lógica, tablas, datos, credenciales, entradas, reportes ni
-motores deportivos.
-
-**Resultado esperado.** Las cuatro RPC quedan con
-`authenticated_execute=true`, `anon_execute=false` y
-`service_role_execute=true`, manteniendo `SECURITY DEFINER`. Los default
-privileges de funciones de `postgres` en `public` dejan de conceder
-`EXECUTE` a `anon`.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 374 --- Estado RETIRADO y corrección del ciclo de puntos de acceso
-
-**Objetivo.** Separar inequívocamente los estados HABILITADO,
-DESHABILITADO y RETIRADO de un punto de acceso del torneo, y corregir el
-error detectado en la prueba UI-1 al intentar retirar un punto
-previamente deshabilitado.
-
-**Diagnóstico previo en PROD.** La asignación sólo tenía `habilitado`;
-la RPC de retiro desactivaba además el punto técnico base. El trigger
-358 exigía que ese punto base estuviera activo en cualquier `UPDATE` de
-la asignación. Esto podía producir el mensaje "No se puede asignar un
-punto de acceso inactivo." y no existía un estado persistente que
-distinguiera retiro de deshabilitación.
-
-**Qué hace.** Añade `retirado_at` a
-`tournament_access_point_assignments`; convierte la unicidad del alias
-en parcial para considerar sólo asignaciones no retiradas; ajusta el
-trigger 358; actualiza las cuatro RPC administrativas 371 para que
-deshabilitar sea reversible, retirar marque `retirado_at`, revoque
-credenciales y desaparezca de la lista operativa, y una asignación
-retirada no pueda editarse. Conserva los registros históricos y no
-realiza `DELETE`. Mantiene el hardening de permisos de la migración 373
-después de los `CREATE OR REPLACE`.
-
-**Compatibilidad.** La firma de las RPC 371 no cambia, por lo que la
-UI-1 no requiere una nueva integración para consumirlas. Los puntos
-retirados dejan de ser devueltos por `listar_puntos_acceso_torneo_371`.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 375 --- Lectura administrativa persistente para UI-2 de Acceso al Campo
-
-**Objetivo.** Resolver dos limitaciones detectadas al terminar UI-2:
-conservar después de recargar la pantalla el estado/fecha de apertura
-programada y permitir al administrador volver a visualizar la credencial
-activa de un punto sin tener que rotarla.
-
-**Diagnóstico previo en PROD.** `acceso_campo_abierto_359` sólo devuelve
-un booleano aunque `tournament_access_control_settings` conserva
-`apertura_manual_at` y `apertura_programada_at`. Asimismo,
-`listar_puntos_acceso_torneo_371` sólo informa si existe credencial,
-mientras el token activo permanece en
-`tournament_access_point_credentials`. La RPC pública
-`obtener_punto_acceso_por_token_360` conserva correctamente acceso
-`anon`; las nuevas lecturas administrativas no deben ser públicas.
-
-**Qué hace.** Crea `obtener_estado_acceso_campo_admin_375(uuid)`, que
-devuelve estado persistente, apertura manual/programada, fecha
-programada, estado del torneo y si el acceso está abierto; y
-`obtener_credencial_activa_punto_acceso_admin_375(uuid)`, que devuelve
-al Superadmin u organizador autorizado la credencial activa ya existente
-sin generarla ni rotarla. Ambas son `SECURITY DEFINER`, con `EXECUTE`
-sólo para `authenticated` y `service_role`; `anon` queda explícitamente
-revocado.
-
-**Datos.** No modifica registros existentes, no rota ni revoca
-credenciales y no cambia tokens.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-presencia de las RPC, permisos `authenticated=true`, `anon=false`,
-`service_role=true`, y la lógica DNS en captura/conciliación.
-
-------------------------------------------------------------------------
-
-## Migración 376 --- ACCESO AL CAMPO: estado operativo individual por puerta
-
-**Estado:** PENDIENTE DE EJECUCIÓN.
-
-**Objetivo:** separar la habilitación administrativa de un punto de
-acceso de su estado operativo individual ABIERTA/CERRADA, de modo que
-cada puerta pueda cerrarse y reabrirse sin revocar, rotar ni cambiar su
-URL/QR.
-
-**Qué hace:** - Agrega
-`tournament_access_point_assignments.operativa_abierta boolean NOT NULL DEFAULT true`. -
-Conserva `habilitado` como estado administrativo; no se reutiliza para
-representar apertura/cierre operativo. - Agrega las RPC autenticadas
-`abrir_punto_acceso_torneo_376` y `cerrar_punto_acceso_torneo_376`. -
-Cerrar una puerta no modifica `tournament_access_point_credentials`; al
-reabrir se conserva exactamente la misma credencial. -
-`listar_puntos_acceso_torneo_371` devuelve `gateOpen`, `effectiveOpen` y
-`generalAccessOpen`. - `obtener_punto_acceso_por_token_360` distingue
-`CERRADA` de `PREPARADA`, `ABIERTA` y `BLOQUEADA`. -
-`validar_qr_jugador_acceso_361` y `registrar_ingreso_acceso_362` exigen
-que la puerta individual esté operativamente abierta, además de la
-apertura general y las validaciones existentes. - Los puntos existentes
-quedan `operativa_abierta=true`; por tanto conservan el comportamiento
-previo mientras no sean cerrados individualmente. - Los puntos nuevos
-nacen operativamente abiertos, pero no son efectivos hasta que la
-apertura general del torneo esté activa. - Reafirma permisos: las RPC
-376 son solo para `authenticated`/`service_role`; las RPC públicas
-360/361/362 mantienen acceso `anon` necesario para la página móvil. - No
-modifica la credencial al cerrar/abrir y no cambia la semántica de
-RETIRAR PUNTO, que continúa revocando la credencial.
-
-**Verificación:** archivo
-`376_VERIFICACION_ACCESO_CAMPO_ESTADO_OPERATIVO_INDIVIDUAL_PUERTA.sql`.
-Debe confirmar columna, permisos, uso del nuevo estado en 360/361/362,
-exposición de `gateOpen/effectiveOpen`, conservación de credencial al
-cerrar e índice operativo.
-
-**UI posterior:** después de ejecutar y verificar esta migración, el
-frontend debe mostrar ABIERTA/CERRADA en cada puerta y ofrecer ABRIR
-PUERTA/CERRAR PUERTA. El bloque superior queda como información de
-apertura general, no como estado operativo de una puerta.
-
-------------------------------------------------------------------------
-
-## Migración 377 --- Stroke Play individual: NO SHOW (DNS) sin captura física ni conciliación
-
-**Estado:** EJECUTADA Y VERIFICADA EN PROD.
-
-**Objetivo:** permitir que una tarjeta oficial ya emitida de Stroke Play
-individual se marque administrativamente como **NO SE PRESENTÓ (DNS)**
-sin borrar la tarjeta, sin modificar la salida, sin alterar el grupo,
-sin reasignar marcadores y sin dar de baja la inscripción del torneo.
-Una tarjeta DNS deja de ser requerida para captura física y
-conciliación.
-
-**Diagnóstico previo en PROD.** La infraestructura competitiva ya
-reconoce `DNS` en `tournament_scorecard_round_outcomes` y la RPC
-`establecer_outcome_competitivo_tarjeta(...)` lo registra con auditoría.
-El cierre de resultados individual ya considera `WD`, `DNF`, `DQ`, `DNS`
-y `NO_CARD` como outcomes que resuelven una tarjeta para la ronda. El
-hueco estaba en la operación física:
-`obtener_estado_captura_conciliacion_ronda_264(...)` contaba todas las
-tarjetas `issued` como obligatorias, por lo que una tarjeta DNS sin
-recepción/captura quedaba `NOT_RECEIVED` / `NO_APLICA_AUN` y podía
-impedir completar captura y conciliación.
-
-**Qué hace:** - Crea `marcar_no_show_tarjeta_stroke_377(uuid,text)`,
-exclusivamente administrativa y limitada a `stroke`/`stroke_play` con
-participación `individual`. - Sólo admite tarjetas oficiales `issued` y
-exige motivo de al menos 5 caracteres. - Bloquea DNS si la ronda ya
-tiene cierre competitivo formal. - Bloquea DNS si la tarjeta ya tiene
-otro outcome competitivo. - Bloquea DNS si existe captura digital real,
-recepción física, resultados físicos o conciliación iniciada; `DNS`
-representa que el jugador no inició la ronda. - Reutiliza
-`establecer_outcome_competitivo_tarjeta(...)` como autoridad para
-persistir `DNS` y su evento de auditoría. - No modifica
-`tournament_registrations.activo`, la validación de salida, grupos ni
-asignaciones de marcador. - Ajusta
-`obtener_estado_captura_conciliacion_ronda_264(...)` para conservar el
-total de tarjetas oficiales emitidas, informar `dns` y `requiredCards`,
-y excluir DNS de los pendientes obligatorios de captura física y
-conciliación. - Si todas las tarjetas emitidas fueran DNS, los pasos
-físicos/conciliación pueden quedar operacionalmente completos porque no
-existe ninguna tarjeta requerida. - Ajusta
-`obtener_estados_conciliacion_ronda(...)` para devolver
-`operationalStatus='DNS'`, `outcomeCode`, motivo y los indicadores
-`requiresPhysicalCapture=false` / `requiresReconciliation=false` para
-DNS. - Mantiene los outcomes DNS visibles como evidencia histórica; no
-los convierte en tarjetas capturadas ni conciliadas ficticiamente. -
-Reafirma permisos después de `CREATE OR REPLACE`: las RPC
-administrativas/operativas quedan ejecutables por `authenticated` y
-`service_role`, no por `anon`/`PUBLIC`.
-
-**Alcance deliberado de esta fase:** no reconstruye salidas ni grupos,
-no cambia marcadores digitales y no anula/reemite tarjetas. La salida
-original permanece como evidencia de que el jugador estaba programado.
-La integración visual del botón **NO SE PRESENTÓ** y el tratamiento de
-la tarjeta DNS en la pantalla de captura física se realiza después de
-ejecutar y verificar esta migración.
-
-## **Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la presencia de las RPC, permisos `authenticated=true`, `anon=false`, `service_role=true`, y la lógica DNS en captura/conciliación.
-
-## Migración 378 --- Publicación de torneos para jugadores controlada exclusivamente por Superadmin
-
-**Estado:** EJECUTADA Y VERIFICADA EN PROD.
-
-**Objetivo:** permitir que el Superadmin oculte un torneo del catálogo
-público/de inscripción de jugadores sin cancelar el torneo, sin cambiar
-su estado deportivo/comercial y sin impedir que Administración continúe
-operándolo. Esta bandera está pensada especialmente para torneos de
-prueba.
-
-**Regla funcional:** `publicado_para_jugadores=true` conserva el
-comportamiento actual. `publicado_para_jugadores=false` significa **NO
-PUBLICADO** para descubrimiento/nuevas inscripciones de jugadores. La
-bandera es independiente de `activo`, `estatus`, `estado_servicio`,
-rondas, pagos, tarjetas y motores deportivos.
-
-**Qué hace:** - Agrega
-`tournaments.publicado_para_jugadores boolean NOT NULL DEFAULT true`,
-por lo que todos los torneos existentes conservan exactamente su
-visibilidad actual. - Crea
-`establecer_publicacion_torneo_378(uuid,boolean)`, RPC
-`SECURITY DEFINER` que sólo permite modificar la bandera cuando
-`is_superadmin(auth.uid())` es verdadero. - La RPC registra `updated_at`
-cuando esa columna existe en la tabla. - Crea un trigger protector que
-impide que usuarios autenticados no Superadmin cambien directamente
-`publicado_para_jugadores`, incluso si ya tenían permisos generales de
-edición sobre el torneo. - `service_role` queda permitido para tareas
-internas/administrativas, sin abrir la operación a jugadores u
-organizadores. - No modifica ninguna otra columna del torneo ni
-introduce un nuevo estado de torneo.
-
-**Seguridad:** la RPC puede ser invocada por `authenticated` y
-`service_role`, pero la propia función exige Superadmin para sesiones
-autenticadas. `anon`/`PUBLIC` no tienen `EXECUTE`. El trigger protege
-además cambios directos sobre la columna.
-
-**Alcance deliberado:** esta migración no modifica todavía las consultas
-de frontend. Después de ejecutarla y verificarla, Lovable debe: (1)
-mostrar el control PUBLICADO / NO PUBLICADO únicamente al Superadmin;
-(2) excluir `publicado_para_jugadores=false` del catálogo donde los
-jugadores descubren torneos o inician nuevas inscripciones; (3) proteger
-la ficha directa de inscripción; y (4) conservar acceso a un torneo no
-publicado para un jugador que ya estuviera inscrito, desde sus flujos de
-"Mis torneos".
-
-**No toca:** organizadores, motores Stroke/Stableford/A-Go-Go/Best Ball,
-inscripciones existentes, pagos, rondas, salidas, tarjetas, DNS, premios
-especiales ni Control de Acceso.
-
-**Estado al documentar:** ejecutada y verificada en PROD. Se confirmó la
-columna `publicado_para_jugadores boolean NOT NULL DEFAULT true`, los
-permisos de la RPC y del protector, el trigger
-`trg_proteger_publicacion_torneo_378` activo y que los 11 torneos
-preexistentes conservaron `publicado_para_jugadores=true`.
-
-## Migración 379 --- Flujo real de configuración, rondas antes de inscripciones y Asistente coherente
-
-**Estado:** PREPARADA PARA EJECUCIÓN MANUAL EN PROD.
-
-**Objetivo:** eliminar la dependencia operativa del hito legacy
-`configuracion_finalizada_at` para abrir inscripciones y corregir el
-orden inicial del Asistente para que refleje el flujo real de TEE
-CENTRAL: **CONFIGURACIÓN → FRANJAS HCP → DESEMPATES → RONDAS →
-INSCRIPCIONES → FREEZE**.
-
-**Diagnóstico previo en PROD:** el torneo de prueba `TORNEO CON DNS` fue
-creado directamente por Superadmin, quedó activo, planificado y NO
-PUBLICADO, con una ronda activa, franjas de hándicap válidas y
-desempates completos. Sin embargo, `abrir_inscripciones_torneo(...)` y
-`reconstruir_workflow_torneo_332(...)` clasificaban como autoservicio
-únicamente a torneos con contrato de plataforma `PAGADO`. Al no existir
-ese contrato, exigían el hito histórico `configuracion_finalizada_at`,
-aunque la configuración real estuviera lista. El workflow materializado
-mostraba `CONFIGURATION=AVAILABLE`, `REGISTRATIONS=BLOCKED`, mientras
-`ROUND_STRUCTURE` estaba después de inscripciones con secuencia 25. Esto
-producía el mensaje falso "Configuración pendiente" y ocultaba que la
-estructura de rondas debe anteceder a la apertura de inscripciones.
-
-**Qué hace:** - Crea `_estado_apertura_inscripciones_379(uuid)` como
-lectura central del estado real necesario para abrir inscripciones.
-Separa configuración general, franjas HCP, desempates y estructura de
-rondas, y conserva `validar_configuracion_minima_torneo(...)` como
-validación final de integridad. - Reemplaza
-`abrir_inscripciones_torneo(uuid)` para que todos los torneos modernos
-en `planificado`, sin importar si nacieron por autoservicio o
-directamente por Superadmin, se validen por su estado real. Ya no exige
-`configuracion_finalizada_at` como puerta operativa. - Exige que todas
-las rondas declaradas existan y estén activas antes de abrir
-inscripciones. - Mantiene las validaciones de configuración general,
-franjas HCP, desempates, servicio activo y estado deportivo. - Reemplaza
-`reconstruir_workflow_extendido_341(uuid)` para corregir la cadena
-inicial del Asistente a
-`CONFIGURATION(10) → HANDICAP_RANGES(12) → TIEBREAK_CONFIGURATION(14) → ROUND_STRUCTURE(16) → REGISTRATIONS(20) → FREEZE(30)`. -
-`CONFIGURATION` representa sólo la configuración general; no absorbe
-silenciosamente los pasos que ya tienen nodo propio. - `ROUND_STRUCTURE`
-queda explícitamente requerida antes de `REGISTRATIONS`. -
-`REGISTRATIONS` queda disponible cuando la configuración real está
-completa y las rondas declaradas existen, aunque el hito legacy
-permanezca NULL. - Conserva íntegro el workflow deportivo posterior
-generado por 337/341 y no cambia las reglas de Freeze, grupos, salidas,
-tarjetas, captura, conciliación, resultados ni cierres.
-
-**Compatibilidad legacy:** no elimina las columnas
-`configuracion_finalizada_at` / `configuracion_finalizada_por`, ni
-elimina `finalizar_configuracion_torneo(...)` o
-`reabrir_configuracion_torneo(...)`. El dato histórico permanece
-disponible, pero deja de ser requisito artificial para el flujo
-operativo vigente.
-
-**No toca:** publicación PUBLICADO/NO PUBLICADO, motores
-Stroke/Stableford/A-Go-Go/Best Ball, jugadores, pagos, grupos, salidas,
-tarjetas, DNS, premios especiales, Control de Acceso ni datos
-competitivos.
-
-**Estado al documentar:** preparada para ejecución manual en PROD.
-Después de ejecutarla debe correrse el SQL de verificación y comprobar
-especialmente `TORNEO CON DNS`: `REGISTRATIONS` debe quedar disponible
-si su configuración real y estructura de rondas están completas,
-manteniendo `configuracion_finalizada_at=NULL` y
-`publicado_para_jugadores=false`.
-
-## Migración 380 --- Rondas realmente configuradas antes de abrir inscripciones
+## MIGRACIÓN 388 --- PREPARADA --- HCP INMUTABLE EN RESULTADOS PUBLICADOS DESDE POLLA SEPTIEMBRE, 24
 
 **Estado:** PREPARADA --- pendiente de ejecución manual y verificación
 en PROD.
 
-**Objetivo:** corregir el criterio de `ROUND_STRUCTURE`/apertura
-introducido en 379. La existencia de las rondas no es suficiente: antes
-de abrir inscripciones, cada ronda declarada debe estar creada, activa y
-tener su configuración básica terminada.
+**Objetivo:** hacer que el HCP utilizado realmente en una ronda
+individual forme parte del resultado oficial congelado y publicado, para
+que la APP de jugadores pueda mostrar resultados Gross/Neto junto con el
+HCP histórico correcto sin consultar el HCP actual del catálogo.
 
-**Qué hace:** actualiza
-`public._estado_apertura_inscripciones_379(uuid)` para que
-`roundStructureReady` exija, por cada ronda declarada, fecha, campo del
-torneo y `formato_salida`. Expone `unconfiguredRounds` con el detalle de
-los pendientes. Como `abrir_inscripciones_torneo()` y
-`reconstruir_workflow_extendido_341()` ya consumen
-`roundStructureReady`, ambos quedan alineados sin duplicar criterios.
+**Alcance acordado:** la única publicación ya existente que se corrige
+es `POLLA SEPTIEMBRE, 24`, torneo
+`0d9ea628-10a1-4214-a078-e73bb5f59313`, Ronda 1
+`42a4aa4d-75d8-4d35-8301-cb20091afaaa`. No se corrigen torneos
+anteriores. A partir de esta migración, todos los nuevos cierres
+competitivos individuales materializan automáticamente el HCP congelado.
 
-**Orden operativo preservado:** CONFIGURACIÓN → FRANJAS HCP → DESEMPATES
-→ RONDAS CONFIGURADAS → INSCRIPCIONES → FREEZE.
+**Diagnóstico confirmado en PROD:**
+`cerrar_categoria_competitiva_ronda(...)` congela `leaderboardCategory`
+dentro de `closure_snapshot`; `publicar_resultados_categoria_ronda(...)`
+copia exactamente ese cierre dentro de `publication_snapshot` sin
+recalcular; y `obtener_resultados_publicados_categoria_ronda(...)`
+devuelve posteriormente ese snapshot publicado. Los jugadores publicados
+contienen actualmente identidad, estado competitivo y métricas
+Gross/Neto, pero no `playingHandicap` ni `courseHandicap`.
 
-**Fuera de alcance:** no exige todavía grupos, horarios/salidas
-materializadas, validación de salidas, tarjetas, captura, conciliación
-ni resultados. No modifica motores deportivos, pagos, publicación, DNS
-ni premios especiales.
+**Caso de control:** en `POLLA SEPTIEMBRE, 24` existen 48 participantes
+en la publicación oficial y los 48 tienen correspondencia exacta por
+ronda + jugador con `tournament_round_handicap_snapshots`; no existen
+faltantes. El HCP competitivo que debe mostrarse en la APP es
+`playing_handicap`; `course_handicap` se conserva adicionalmente como
+evidencia histórica.
 
-## Migración 381 --- Turno activo obligatorio antes de abrir inscripciones
+**Qué crea:** `_materializar_hcp_leaderboard_388(uuid,jsonb)`, helper
+interno que toma un `leaderboardCategory` individual y agrega a cada
+elemento de `players[]` los campos `playingHandicap` y `courseHandicap`
+obtenidos exclusivamente de `tournament_round_handicap_snapshots`. Si
+algún participante con `playerId` no tiene correspondencia congelada en
+la ronda, la operación falla en lugar de fabricar o consultar un HCP
+actual.
 
-**Estado:** PREPARADA --- pendiente de ejecución manual y verificación
-en PROD.
+**Persistencia futura:** crea el trigger
+`trg_materializar_hcp_cierre_388` sobre
+`tournament_round_category_competitive_closures`. Antes de insertar un
+cierre cuya `participationType` sea `individual`, el trigger enriquece
+el `leaderboardCategory` del `closure_snapshot`. La publicación
+posterior continúa copiando exactamente el cierre formal, por lo que el
+HCP queda integrado al resultado inmutable sin cambiar el contrato de
+publicación ni agregar una segunda fuente de datos a la APP.
 
-**Objetivo:** completar la definición de ronda configurada previa a
-inscripciones: además de fecha, campo y formato de salida, cada ronda
-declarada debe tener al menos un turno activo.
+**Corrección única de POLLA SEPTIEMBRE, 24:** dentro de la misma
+transacción, la migración enriquece el `closure_snapshot` ya existente
+de la Ronda 1 y sustituye exclusivamente el `closureSnapshot` contenido
+en su publicación oficial por esa misma versión enriquecida. Exige
+encontrar el cierre individual y exactamente una publicación
+`PUBLISHED`; cualquier inconsistencia provoca rollback.
 
-**Qué hace:** actualiza `_estado_apertura_inscripciones_379(uuid)` e
-incorpora `TURNO_ACTIVO` en `unconfiguredRounds`.
-`abrir_inscripciones_torneo()` y el workflow ya consumen
-`roundStructureReady`, por lo que quedan bloqueados mientras falte el
-turno.
+**Qué no modifica:** no recalcula Gross, Neto, posiciones, desempates,
+estados competitivos ni outcomes; no cambia HCP del catálogo,
+inscripciones ni snapshots congelados; no toca torneos anteriores a
+`POLLA SEPTIEMBRE, 24`; no hace backfill general; no modifica resultados
+TEAM; no cambia Stroke Play, Stableford, A-Go-Go o Best Ball; no
+modifica Freeze, salidas, tarjetas, captura, conciliación ni cierre de
+ronda.
 
-**No adelanta operación posterior:** no exige grupos, jugadores
-asignados, hoyos/tee times materializados, validación de salidas,
-tarjetas ni captura.
+**Regla para la APP de jugadores:** el HCP mostrado en resultados
+publicados debe provenir de
+`results.leaderboardCategory.players[].playingHandicap` entregado por
+`obtener_resultados_publicados_categoria_ronda(...)`. La APP no debe
+consultar `players`, inscripciones ni ningún HCP vigente para
+reconstruir resultados históricos. `courseHandicap` queda disponible en
+el snapshot como respaldo, aunque la columna visible HCP utilice
+`playingHandicap`.
 
-**Caso de control:** TORNEO CON DNS tiene Ronda 1 Shotgun y cero turnos;
-debe devolver `roundStructureReady=false` y `readyToOpen=false`.
+**Atomicidad:** helper, trigger y corrección de `POLLA SEPTIEMBRE, 24`
+se aplican en una sola transacción. Si falta un snapshot HCP, el
+cierre/publicación objetivo no es único o falla cualquier validación,
+toda la migración hace rollback.
 
-## Migración 382 — Pago simulado conserva total a pagar y estado pagado
+**Verificación prevista:** confirmar existencia del helper y trigger;
+comprobar en `POLLA SEPTIEMBRE, 24` 48 publicados / 48 con
+`playingHandicap` / 48 con `courseHandicap` / 0 faltantes; comprobar 0
+diferencias contra `tournament_round_handicap_snapshots`; y verificar
+que Gross/Neto permanecen sin cambio.
+
+## MIGRACIÓN 389 --- PREPARADA --- CIERRE FORMAL DE CAPTURA POR RONDA
+
+**Estado:** PREPARADA --- pendiente de ejecución manual y verificación en PROD.
+
+**Objetivo:** separar explícitamente el fin de la captura del cierre competitivo. La ronda permanece con captura abierta mientras existan correcciones operativas; cuando todas las unidades están resueltas, un administrador autorizado puede ejecutar un cierre formal y auditable de captura.
+
+**Qué hace:** crea `tournament_round_capture_events` como historial append-only `CLOSED/REOPENED`; agrega `obtener_estado_cierre_captura_ronda_389(...)` con resumen de tarjetas físicas capturadas, conciliaciones completadas, `NOT_REQUIRED`, outcomes `DNS/WD/DNF/DQ/NO_CARD`, unidades resueltas y pendientes; agrega RPC para cerrar y reabrir captura; y agrega un gate de base de datos que impide nuevos cierres competitivos de categoría mientras la captura de la ronda siga abierta.
+
+**Reglas:** pagos pendientes no intervienen en el cierre deportivo; cerrar captura no cierra categorías ni ronda automáticamente; la reapertura exige motivo y queda bloqueada si ya existe una categoría cerrada formalmente. `POLLA SEPTIEMBRE, 24` conserva intactos sus cierres históricos y no recibe un cierre de captura retroactivo fabricado.
+
+**Frontend/Asistente pendiente:** la siguiente fase debe consumir este contrato para mostrar permanentemente el bloque `ESTADO DE CAPTURA DE LA RONDA`, el botón visible `CERRAR CAPTURA`, bloquear edición después del cierre, habilitar `CERRAR CATEGORÍA` sólo después del cierre de captura y reflejar la misma secuencia en el Asistente Operativo.
+
+## MIGRACIÓN 390 --- PREPARADA --- BLINDAJE DE BASE DE DATOS DESPUÉS DEL CIERRE DE CAPTURA
+
+**Estado:** PREPARADA --- pendiente de ejecución manual y verificación en PROD.
+
+**Objetivo:** convertir `CAPTURA CERRADA` en una frontera real de base de datos y no sólo de interfaz, impidiendo que jugadores, marcadores, administradores, enlaces directos o solicitudes ya abiertas modifiquen captura después del cierre formal.
+
+**Qué hace:** agrega un guard transaccional sobre las tablas mutables de sesión de captura, scores digitales individual/A-Go-Go/Best Ball, recepción y scores físicos individual/Best Ball, conciliación, resoluciones de conciliación y outcomes. El guard serializa cada mutación contra el mismo registro de ronda que bloquea `cerrar_captura_ronda_389`, evitando carreras entre una acción en vuelo y el cierre. Si la última acción formal 389 es `CLOSED`, PostgreSQL rechaza la mutación con mensaje `CAPTURA CERRADA`.
+
+**Consulta para jugador/marcador:** agrega `obtener_cierre_captura_score_card_390(uuid)`, que reutiliza `puede_ver_score_card_captura(...)` y entrega únicamente `captureClosed`, estado, ronda y fecha de cierre para que `/score/card` pueda mostrar modo lectura a participantes autorizados sin abrir la consulta administrativa de la Migración 389.
+
+**Compatibilidad:** una ronda sin evento 389 se considera `OPEN`; por ello los torneos históricos, incluido `POLLA SEPTIEMBRE, 24`, no se reinterpretan ni reciben eventos artificiales. La reapertura formal 389 vuelve a permitir mutaciones siempre que sus propias reglas la autoricen.
+
+**Qué no modifica:** pagos, premios, control de acceso, emisión de tarjetas, sustituciones, cierre de categoría, desempates, publicación, cierre de ronda, resultados históricos ni snapshots.
+
+## Migración 391 — Blindaje de reapertura de captura con ronda cerrada
+
+**Objetivo:** establecer explícitamente que el cierre competitivo de una ronda es un punto de no retorno para la captura.
+
+**Qué hace:** actualiza `public.reabrir_captura_ronda_389` para rechazar la reapertura cuando exista un cierre competitivo `FINAL` en `tournament_round_competitive_closures`. Conserva además la protección existente que impide reabrir cuando ya existe al menos una categoría cerrada formalmente. No modifica resultados, pagos, desempates, publicaciones ni cierres existentes.
+
+
+## Migración 392 — Estado competitivo de categoría respeta cierre de captura
+
+**Estado:** EJECUTADA Y VERIFICADA ESTRUCTURALMENTE EN PROD.
+
+**Objetivo:** impedir que una categoría se presente como `READY_TO_CLOSE` mientras la captura formal de la ronda continúe abierta.
+
+**Qué hace:** extiende `obtener_estado_competitivo_categorias_ronda(...)` con `captureClosed`, `captureStatus`, `blockingReason` y `statusBeforeCaptureGate`. `CAPTURE_OPEN` tiene prioridad como bloqueo de cierre de categoría, sin alterar resultados ni el motor de desempates. Los desempates `RESOLVED_AUTOMATIC` continúan siendo silenciosos.
+
+**Frontend:** UI-392A consume esos campos sin una segunda consulta a 389; `CERRAR CATEGORÍA` permanece visible pero deshabilitado con el mensaje `Primero debes cerrar la captura de la ronda.` mientras captura esté abierta.
+
+## Migración 393 — Workflow formal de cierre de captura
+
+**Estado:** EJECUTADA Y VERIFICADA ESTRUCTURALMENTE EN PROD.
+
+**Objetivo:** incorporar `CIERRE DE CAPTURA` como fase formal del workflow materializado que alimenta al Asistente Operativo, manteniendo la posibilidad de consultar resultados provisionales mientras la captura siga abierta.
+
+**Qué hace:** agrega/materializa el nodo de ronda `ROUND_CAPTURE_CLOSE` entre conciliación y cierre de categorías. El nodo queda `COMPLETE` cuando el último evento formal de captura es `CLOSED`, `AVAILABLE` cuando conciliación ya está completa y corresponde cerrar captura, y `BLOCKED` mientras la conciliación no esté completa. `ROUND_RESULTS` permanece independiente del cierre de captura para permitir visualización provisional. `ROUND_CATEGORY_CLOSURE` exige simultáneamente resultados completos y `ROUND_CAPTURE_CLOSE=COMPLETE`; si captura sigue abierta queda bloqueado explícitamente por `ROUND_CAPTURE_CLOSE`.
+
+**Qué no modifica:** motores deportivos, Gross/Neto, desempates, pagos, publicaciones, cierres ya registrados, captura física, conciliación ni la RPC 389 de cierre/reapertura. Tampoco convierte resultados provisionales en dependientes del cierre formal de captura.
+
+**Frontend/Asistente pendiente:** después de verificar 393, adaptar la presentación del Asistente para nombrar `ROUND_CAPTURE_CLOSE` como `Cierre de captura`, ofrecer la acción correspondiente cuando esté disponible y mantener pagos pendientes únicamente como warning no bloqueante.
+
+
+## Migración 394 — Plantilla maestra de workflow y preferencias funcionales del torneo
+
+**Estado:** EJECUTADA Y VERIFICADA EN PROD.
+
+**Objetivo:** crear la capa declarativa maestra del ciclo operativo de TEE CENTRAL y registrar en Información general del torneo las decisiones `usar_tarjeta_digital` y `usar_estaciones_digitales_premios`, sin sustituir todavía el workflow materializado vigente ni alterar ninguna regla deportiva.
+
+**Qué hace:** agrega a `tournaments` los dos indicadores funcionales; crea `workflow_master_templates` y `workflow_master_nodes`; registra la plantilla `TEE_CENTRAL_STANDARD` versión 1 con los 25 nodos aprobados; agrega `workflow_template_version` al torneo para fijar la versión aplicable; y publica `obtener_plantilla_workflow_394(uuid)` como consulta descriptiva de la plantilla correspondiente al torneo. La plantilla almacena orden, ámbito, textos, navegación, aplicabilidad y claves de evidencia, pero no SQL ejecutable ni reglas de autorización.
+
+**Tarjeta digital:** `usar_tarjeta_digital=true` hace aplicables las fases descriptivas de captura digital/conciliación. No existe un cierre digital separado: `ROUND_CAPTURE_CLOSE` continúa siendo el único cierre formal de captura de scores y se sustenta en `tournament_round_capture_events`.
+
+**Premios especiales:** `usar_estaciones_digitales_premios` sólo declara si se utilizarán estaciones digitales. No crea nodos deportivos, bloqueos ni requisitos de cierre/publicación. Los premios capturados podrán incorporarse a resultados por el módulo existente. El control de acceso no recibe un campo nuevo: se conserva `usar_control_acceso_qr`.
+
+**Compatibilidad y seguridad:** no modifica `reconciliar_workflow_torneo_332`, `_adaptar_asistente_workflow_338`, las reconstrucciones 332–393, motores Stroke Play/Stableford/A-Go-Go/Best Ball, HCP, desempates, Freeze, inscripciones, salidas, tarjetas, captura, conciliación, resultados, cierres, publicaciones, pagos, acceso ni premios. `tournament_workflow_nodes` sigue siendo el estado materializado vigente. La 394 es fundacional y no cambia el comportamiento operativo del Asistente hasta una integración posterior expresamente aprobada.
+
+**Estados terminales:** la plantilla registra como regla arquitectónica que FINALIZADO, CANCELADO y VENCIDO son no operativos para el Asistente; `VENCIDO` se determinará reutilizando `torneo_esta_vencido_295`, sin modificar el enum `estatus_torneo`. Esta migración no cambia el comportamiento actual del Asistente.
+
+**Verificación prevista:** comprobar columnas nuevas y defaults; existencia/ACL/RLS de las tablas maestras; exactamente una plantilla activa versión 1; exactamente 25 nodos activos y secuencias únicas; ausencia de nodo de estaciones de premios; presencia de `START_TOURNAMENT` y `ROUND_CAPTURE_CLOSE`; y confirmar que las funciones operativas existentes conservan su definición.
+
+
+## Migración 395 — Evaluador descriptivo del workflow maestro
+
+**Estado:** EJECUTADA Y VERIFICADA EN PROD.
+
+**Objetivo:** evaluar la plantilla maestra 394 contra evidencia operativa real para producir un estado descriptivo del ciclo y una propuesta de `nextAction`, sin sustituir todavía al Asistente vigente y sin participar en ninguna autorización o bloqueo.
+
+**Qué hace:** agrega `obtener_workflow_evaluado_395(uuid)`, una RPC `STABLE` y de sólo lectura. Lee la plantilla versionada, las preferencias del torneo y evidencia existente de configuración, inscripciones, Freeze, HCP de equipos, grupos, salidas, emisión de tarjetas, inicio de ronda, captura física, conciliación, cierre único de captura, resultados, desempates excepcionales, cierres de categoría, publicación, cierre de ronda, corte y finalización. Expande los nodos de ronda para cada ronda activa y devuelve `COMPLETE`, `PENDING`, `NOT_APPLICABLE` o `INFORMATIONAL`.
+
+**Asistente:** calcula descriptivamente el primer nodo accionable, aplicable y no completo como `nextAction`. Ese dato es únicamente una guía. La aplicación continúa siendo la única autoridad para decidir si una operación puede ejecutarse. La 395 no conecta todavía `_adaptar_asistente_workflow_338` con este evaluador.
+
+**Captura digital:** `ROUND_DIGITAL_SCORING` permanece informativo. No tiene cierre independiente. `ROUND_CAPTURE_CLOSE`, sustentado por el cierre 389, sigue siendo el único cierre formal de la captura de scores física y digital.
+
+**Premios:** `usar_estaciones_digitales_premios` se devuelve sólo como preferencia. No existe nodo de premios, no se evalúa como requisito y no puede impedir resultados, publicación, cierre de categoría, cierre de ronda ni finalización.
+
+**Estados terminales:** FINALIZADO, CANCELADO y VENCIDO producen `assistantOperational=false` y `nextAction=null`; VENCIDO reutiliza `torneo_esta_vencido_295`.
+
+**Qué no modifica:** `tournament_workflow_nodes`, reconstrucciones 332–393, Asistente 338, motores deportivos, reglas de HCP, desempates, inscripciones, Freeze, salidas, emisión, captura, conciliación, resultados, cierres, publicación, pagos, acceso o premios. No contiene `INSERT`, `UPDATE` ni `DELETE` operativos.
+
+
+### Verificación posterior a la ejecución de la Migración 395
+
+Se confirmó directamente en PROD la existencia de `public.obtener_workflow_evaluado_395(uuid)`. La función conserva `SECURITY INVOKER`, tiene `EXECUTE` para `authenticated` y `service_role`, no para `anon`, y referencia la plantilla maestra `workflow_master_nodes` sin depender de `tournament_workflow_nodes`. La plantilla `TEE_CENTRAL_STANDARD` versión 1 conserva sus 25 nodos.
+
+La prueba desde el canal administrativo de diagnóstico devolvió `No autenticado` al no existir `auth.uid()` en ese contexto; este resultado es consistente con el contrato de seguridad de la RPC y no constituye un fallo funcional. La prueba del payload con identidad autenticada queda para la integración controlada del frontend/Asistente.
+
+
+## MIGRACIÓN 396 — PREPARADA — ADAPTADOR DEL ASISTENTE A LA PLANTILLA MAESTRA
 
 **Estado:** PREPARADA — pendiente de ejecución manual y verificación en PROD.
 
-**Objetivo:** corregir el defecto por el cual `procesar_resultado_pago()` podía materializar una inscripción pagada con `monto_pagado`, `fecha_pago`, `medio_pago` y referencia, pero sin guardar `total_a_pagar`.
+**Objetivo:** crear un contrato de Asistente Operativo que consuma exclusivamente el evaluador descriptivo 395 para seleccionar el siguiente paso, manteniendo a la aplicación como única autoridad sobre bloqueos, autorizaciones y operaciones deportivas.
 
-**Diagnóstico confirmado en PROD:** la rama `inscripcion_individual` omitía `total_a_pagar` al insertar `tournament_registrations`. La rama `confirmar_pre_reserva` presentaba la misma omisión. Los intentos históricos aprobados de `POLLA SEPTIEMBRE, 24` conservaron monto de $1,000; las inscripciones asociadas actualmente ya están saneadas como pendientes con `total_a_pagar = 1000.00` por el flujo posterior de anulación/corrección.
+**Qué crea:** `obtener_asistente_operativo_torneo_396(uuid)`. La RPC valida autenticación y permisos, consulta `obtener_workflow_evaluado_395(uuid)`, expone `nextAction`, nodos de torneo, rondas, preferencias y mensajes terminales, y conserva el warning administrativo no bloqueante de pagos pendientes.
 
-**Qué hace:** reemplaza únicamente `procesar_resultado_pago(uuid, boolean, text)`. Para `inscripcion_individual`, una aprobación crea la inscripción con `total_a_pagar = v_attempt.monto`, `monto_pagado = v_attempt.monto` y `estado_pago = 'PAGADO'`. Para `confirmar_pre_reserva`, usa `v_pre.monto` tanto como obligación como pago, establece `estado_pago = 'PAGADO'` y agrega una revalidación para impedir convertir la pre-reserva si el monto del intento ya no coincide con su monto vigente.
+**Qué no hace:** no sustituye todavía `obtener_asistente_operativo_torneo(uuid)`; no modifica `_adaptar_asistente_workflow_338`, 340, 341 ni los reconstructores 332–393; no escribe `tournament_workflow_nodes`; no ejecuta acciones; no cambia motores, reglas, procesos, autorizaciones, guards, bloqueos, Freeze, inscripciones, salidas, tarjetas, captura, conciliación, resultados, desempates, cierres, publicación, pagos ni finalización.
 
-**Qué no hace:** no realiza backfill; no modifica inscripciones históricas; no reprocesa intentos ya procesados; no cambia el flujo administrativo `registrar_pago_inscripcion_339`; no cambia anulaciones ni historial 354; no modifica pagos de equipo ni sus coberturas; no cambia frontend.
+**Estrategia de despliegue:** esta fase instala la nueva RPC en paralelo. Primero se verifica su payload autenticado en la aplicación. Sólo después se cambiará el frontend del Asistente para consumirla. De esta forma existe rollback funcional inmediato: el contrato público actual permanece intacto durante la prueba.
 
-**Criterio posterior a 382:** una inscripción creada por un pago individual simulado/aprobado debe nacer económicamente consistente: `total_a_pagar = monto_pagado` y `estado_pago = 'PAGADO'`.
+**Regla de autoridad:** `authority=APPLICATION`, `assistantRole=GUIDE_ONLY`, `writesOperationalState=false`.
+
+
+## MIGRACIÓN 397 — EVALUADOR NO ANTICIPA RESULTADOS SIN SNAPSHOT
+
+**Objetivo:** corregir exclusivamente la capa descriptiva del evaluador 395 para que el Asistente pueda consultar torneos que todavía están en configuración y cuya ronda aún no tiene snapshot congelado de scoring.
+
+**Qué hace:** antes de consultar evidencia competitiva de resultados, desempates, cierre de categorías y publicación, `obtener_workflow_evaluado_395(uuid)` comprueba si existe un `tournament_round_condition_snapshots` con `scoring_engine`. Si todavía no existe, esas evidencias futuras se consideran aún no disponibles y sus pasos permanecen descriptivamente pendientes. No se crea ni congela ningún snapshot.
+
+**Qué no hace:** no modifica motores deportivos, reglas, procesos, autorizaciones, guards, bloqueos, Freeze, snapshots, inscripciones, salidas, tarjetas, captura, conciliación, desempates, resultados, cierres, publicación, pagos ni finalización. No escribe `tournament_workflow_nodes`.
+
+**Causa corregida:** PRUEBA AUTOSERVICIO #3 devolvía HTTP 500 al consultar la RPC 396 porque el evaluador 395 pedía anticipadamente evidencia competitiva y una función deportiva respondía `La ronda no tiene snapshot congelado de scoring.` El torneo se encontraba correctamente en una fase anterior.
+
+
+## MIGRACIÓN 398 — ASISTENTE 396 SIN CADENA LEGACY
+
+**Objetivo:** eliminar de la nueva capa de guía la dependencia indirecta del Asistente anterior.
+
+**Qué hace:** `obtener_asistente_operativo_torneo_396(uuid)` deja de llamar `_adaptar_asistente_pagos_pendientes_340`, porque esa función invoca `_adaptar_asistente_workflow_338` y éste ejecuta la reconciliación legacy. El warning `PENDING_PAYMENTS` se conserva mediante una consulta directa de solo lectura a las inscripciones activas con `estado_pago='PENDIENTE'`.
+
+**Qué no hace:** no modifica motores, reglas deportivas, procesos, autorizaciones, bloqueos, snapshots, Freeze, salidas, tarjetas, captura, conciliación, resultados, cierres, publicación, pagos ni finalización. No modifica el significado ni el carácter no bloqueante del warning de pagos.
+
+
+## MIGRACIÓN 399 — CORRECCIÓN DE EVIDENCIA DE CIERRE DE RONDA
+
+**Objetivo:** corregir una referencia de columna exclusivamente descriptiva en el evaluador 395.
+
+**Qué hace:** en la evidencia `ROUND_CLOSED`, sustituye la referencia inexistente `tournament_round_competitive_closures.status` por la columna real `competitive_status`. Conserva íntegramente la protección 397 para rondas sin snapshot.
+
+**Qué no hace:** no modifica ningún cierre, estado deportivo, motor, regla, autorización, bloqueo ni dato operativo. Únicamente corrige cómo el Asistente lee evidencia ya existente.
+
+
+## MIGRACIÓN 400 — CORRECCIÓN DE EVIDENCIA DE CORTES EN EL EVALUADOR
+
+**Objetivo:** corregir de una vez las referencias del evaluador descriptivo 395 al esquema real del módulo de cortes.
+
+**Qué hace:** elimina la referencia inexistente `tournament_cut_rules.tournament_id`; determina la aplicabilidad del corte mediante `despues_de_ronda_id`; y cuenta las decisiones desde `tournament_cut_player_statuses`, usando sus columnas reales `tournament_id`, `cut_after_round_id`, `tournament_registration_id` y `cut_status`.
+
+**Qué no hace:** no modifica reglas de corte, resultados, motores deportivos, autorizaciones, bloqueos ni datos operativos. Sólo corrige la lectura descriptiva utilizada por el Asistente.
+
+
+## MIGRACIÓN 401 — ORDEN CORRECTO DE `nextAction` EN EL WORKFLOW MAESTRO
+
+**Objetivo:** hacer que el Asistente seleccione “Qué sigue” después de evaluar toda la evidencia, evitando que un nodo de torneo posterior —especialmente `TOURNAMENT_FINALIZATION`— se adelante a los pasos pendientes de una ronda.
+
+**Qué hace:** conserva intacta la evaluación de evidencia y cambia únicamente la selección descriptiva de `nextAction`. Respeta los pasos iniciales del torneo (10–70), la preparación de la ronda, `START_TOURNAMENT` una sola vez en la secuencia 130, la operación/cierre de la ronda desde 140, el orden de rondas y finalmente `TOURNAMENT_FINALIZATION` 900.
+
+**Qué no hace:** no modifica motores deportivos, reglas, autorizaciones, bloqueos, estados operativos, datos de torneo ni la plantilla maestra. El Asistente continúa siendo exclusivamente una guía.
+
+## MIGRACIÓN 402 — GUARDADO ATÓMICO DE CUPOS Y CATEGORÍAS
+
+**Objetivo:** impedir que un torneo quede con una configuración parcial o descuadrada entre el cupo total y los cupos de sus categorías.
+
+**Qué hace:** crea `guardar_configuracion_cupos_categorias_402(uuid,jsonb,integer)`, una operación transaccional que recibe la configuración completa, exige al menos una categoría, cupos enteros mayores a cero y que la suma de cupos sea exactamente igual al cupo total del torneo. Permite cambiar en la misma operación el cupo general y su distribución, conserva los IDs de categorías existentes al actualizar y revierte toda la llamada ante cualquier error.
+
+**Qué conserva:** no modifica los guards existentes de congelamiento, cancelación o vencimiento; tampoco cambia motores deportivos, reglas de inscripción, elegibilidad, resultados, autorizaciones ni bloqueos. Los guards actuales continúan siendo la autoridad para decidir cuándo la configuración puede editarse.
+
+**Integración pendiente de frontend:** sustituir los guardados directos `DELETE/INSERT/UPDATE` de `tournament_categories` por esta RPC y enviar conjuntamente el cupo total cuando éste cambie.
+
+
+
+## MIGRACIÓN 403 — BLINDAJE DEL CUPO TOTAL CONTRA DESCUADRE DE CATEGORÍAS
+
+**Objetivo:** cerrar el camino alterno que permitía modificar directamente `tournaments.cupo_maximo` y dejarlo distinto de la suma de los cupos de categorías.
+
+**Qué hace:** agrega un trigger `BEFORE UPDATE OF cupo_maximo` sobre `tournaments`. Si el torneo ya tiene categorías, rechaza un cambio aislado cuyo nuevo cupo total no coincida con la suma vigente de `tournament_categories.cupo_maximo`, o si existen categorías con cupo nulo/no positivo. Los cambios conjuntos de cupo total y distribución siguen realizándose mediante `guardar_configuracion_cupos_categorias_402`, en una sola transacción.
+
+**Compatibilidad:** no corrige automáticamente inconsistencias preexistentes y no modifica motores deportivos, congelamiento, inscripción, resultados ni reglas competitivas. Conserva todos los guards existentes.
+
+## MIGRACIÓN 404 — CUPOS DE CATEGORÍAS MENORES O IGUALES AL CUPO TOTAL
+
+**Objetivo:** permitir que el cupo total del torneo sea mayor que la suma de los cupos distribuidos entre categorías, manteniendo como única condición inválida que las categorías comprometan más lugares que el cupo total.
+
+**Qué hace:** ajusta las validaciones creadas por 402 y 403 para aplicar `SUM(cupos categorías) <= cupo total`. La RPC 402 continúa siendo atómica, mantiene cupos individuales enteros y mayores a cero y ahora devuelve también `sinAsignar`. El guard 403 permite aumentar el cupo total dejando lugares todavía sin distribuir y bloquea únicamente cuando el nuevo total queda por debajo de la suma ya asignada.
+
+**Orden transaccional:** la RPC 402 actualiza la distribución de categorías antes de modificar el cupo total para que el guard 403 pueda validar correctamente reducciones conjuntas dentro de la misma transacción.
+
+**Qué no cambia:** Freeze, cancelación, vencimiento, autorizaciones, inscripción, motores deportivos, hándicap, desempates, resultados y cierres competitivos permanecen intactos.
+
+## MIGRACIÓN 405 — DATOS GENERALES COMO EVIDENCIA DEL PRIMER PASO DEL WORKFLOW
+
+**Objetivo:** hacer que `CONFIGURATION / Configurar datos generales` se considere completo exclusivamente cuando los campos obligatorios de Datos generales tengan valores válidos guardados, sin depender de categorías, franjas de HCP, desempates ni estructura de rondas.
+
+**Qué hace:** agrega `obtener_estado_datos_generales_torneo_405(uuid)`, función descriptiva que revisa Nombre, Campo de golf, Fecha inicio, Fecha fin, Cupo máximo, Número de rondas, Modalidad, Porcentaje de hándicap y Tarifa individual. La tarifa individual acepta cero para torneos gratuitos. Actualiza únicamente la evidencia usada por `TOURNAMENT_CONFIGURATION_COMPLETE` dentro de `obtener_workflow_evaluado_395`.
+
+**Separación de responsabilidades:** categorías, franjas de hándicap, desempates y estructura de rondas conservan sus propios nodos del workflow. La migración no cambia la autoridad de la aplicación ni ninguna autorización o bloqueo operativo.
+
+**No modifica:** motores deportivos, Freeze, inscripciones, apertura/cierre de inscripciones, reglas competitivas, resultados, desempates, cierres, pagos ni acciones operativas.
+
+## MIGRACIÓN 406 — EVIDENCIA DE CONFIGURACIÓN DE DESEMPATES
+
+**Objetivo:** hacer que `TIEBREAK_CONFIGURATION / Configurar desempates` se considere completo a partir de la configuración activa realmente guardada en `tournament_tiebreak_rules`, en lugar de depender del indicador agregado `tiebreakReady` usado por la lógica de apertura de inscripciones.
+
+**Qué hace:** agrega `obtener_estado_configuracion_desempates_406(uuid)`, función exclusivamente descriptiva que cuenta reglas activas Gross y Neto. Para la configuración global actual, el nodo queda completo cuando existe al menos una regla activa para Gross y al menos una para Neto. Actualiza únicamente la evidencia utilizada por `TIEBREAK_CONFIGURATION_COMPLETE` en `obtener_workflow_evaluado_395`.
+
+**Caso verificado antes de migrar:** PRUEBA AUTOSERVICIO #3 tiene cuatro reglas activas Gross y cuatro Neto, todas con alcance global `todos`, por lo que debe reconocerse como configuración guardada.
+
+**No modifica:** motor de desempates, métodos, secuencias guardadas, resolución automática/manual, autorizaciones, Freeze, inscripciones, resultados, cierres ni ningún bloqueo operativo.
+
+## MIGRACIÓN 407 — CATEGORÍAS COMPLETAS Y REGLA DE CUPOS EN APERTURA
+
+**Objetivo:** impedir que la fase de configuración de categorías se considere completa si alguna categoría carece de clasificación competitiva, y alinear las validaciones de apertura con la regla vigente de cupos.
+
+**Qué hace:** agrega `obtener_estado_categorias_configuradas_407(uuid)`, que considera completa la fase `HANDICAP_RANGES` sólo cuando las franjas HCP son válidas y todas las categorías tienen al menos una clasificación competitiva configurada (`GROSS`, `NET` o `BOTH`). El evaluador 395 utiliza esta evidencia para ese nodo.
+
+**Cupos:** actualiza `validar_configuracion_minima_torneo` y la comparación de `baseConfigurationReady` en `_estado_apertura_inscripciones_379` para aceptar `suma de cupos de categorías <= cupo máximo del torneo`; sólo el excedente es inválido.
+
+**No modifica:** motor de desempates, reglas guardadas, Freeze, autorizaciones, motores deportivos ni acciones operativas. Las clasificaciones se siguen configurando mediante la RPC existente `configurar_clasificacion_categoria_torneo`.
+
+## MIGRACIÓN 408 — MENSAJE DE RONDAS AL ABRIR INSCRIPCIONES
+
+**Objetivo:** orientar al operador cuando intenta abrir inscripciones antes de terminar la configuración de rondas.
+
+**Qué hace:** conserva exactamente el bloqueo existente de `abrir_inscripciones_torneo`, pero reemplaza el mensaje técnico por: “No se pueden abrir las inscripciones todavía. Debes configurar todas las rondas y sus turnos antes de abrir las inscripciones.”
+
+**No modifica:** criterios de apertura, validación de rondas o turnos, autorizaciones, motores deportivos, Freeze, desempates ni ningún proceso operativo.
+
