@@ -1315,3 +1315,347 @@ La prueba desde el canal administrativo de diagnóstico devolvió `No autenticad
 
 **No modifica:** criterios de apertura, validación de rondas o turnos, autorizaciones, motores deportivos, Freeze, desempates ni ningún proceso operativo.
 
+
+## MIGRACIÓN 409 — VIGENCIA COMERCIAL NO INTERRUMPE TORNEO EN CURSO
+
+**Objetivo:** impedir que el fin de la vigencia comercial de plataforma interrumpa un torneo que ya fue iniciado formalmente y corregir el corte prematuro del último día causado por evaluar la fecha en UTC.
+
+**Qué hace:** centraliza la regla en `torneo_esta_vencido_295` y `obtener_estado_vigencia_torneo_294`. Ambas usan la fecha local correspondiente a `campos_golf.timezone_id`. Si `tournaments.estatus = 'en_curso'`, la vigencia comercial no marca el torneo como vencido ni lo pone en solo lectura, permitiendo completar captura, conciliación, resultados, desempates, cierres, publicación y finalización mediante las reglas ya existentes. Para torneos que no están en curso, la vigencia comercial conserva su función de habilitar o bloquear escritura según sus fechas.
+
+**Zona horaria:** no se hardcodea México. Se utiliza la zona horaria configurada en el campo del torneo; sólo existe fallback técnico a UTC si faltara ese dato. Al preparar la migración, todos los campos existentes tenían `timezone_id` configurado.
+
+**Caso de validación:** `PRUEBA AUTOSERVICIO #3` permanece `en_curso` y conserva su `valid_through_date = 2026-09-27`. Después de la migración debe dejar de considerarse VENCIDO sin ampliar manualmente su vigencia y debe poder continuar su ciclo deportivo.
+
+**No modifica:** fechas de contratación, estatus del torneo, motores deportivos, reglas competitivas, captura, conciliación, resultados, desempates, cierres, pagos, Asistente Operativo ni los guards consumidores; éstos continúan usando la función central de vigencia.
+
+## MIGRACIÓN 410 — ETIQUETA CERRAR CAPTURA EN ASISTENTE
+
+**Objetivo:** hacer que el Asistente Operativo nombre correctamente la acción del nodo `ROUND_CAPTURE_CLOSE`, evitando presentar como revisión una acción que corresponde ejecutar.
+
+**Qué hace:** actualiza exclusivamente `workflow_master_nodes.action_label` del nodo 180 `ROUND_CAPTURE_CLOSE` de la plantilla activa `TEE_CENTRAL_STANDARD` versión 1, cambiando “Revisar cierre de captura” por “Cerrar captura”. Conserva el título `Cerrar captura` y el destino `captura-fisica`.
+
+**Arquitectura:** la corrección se realiza en la plantilla maestra, que es la fuente de la etiqueta mostrada por el Asistente; no se hardcodea el texto en frontend.
+
+**No modifica:** evaluador 395, RPC 396, navegación, cierre de captura, guards, autorizaciones, motores deportivos, reglas competitivas, resultados ni ningún proceso operativo. El Asistente continúa siendo guía y la aplicación conserva la autoridad para permitir o bloquear la acción.
+
+## MIGRACIÓN 411 — RESULTADOS PARCIALES Y OFICIALES POR CATEGORÍA
+
+**Objetivo:** permitir que cada categoría formalmente cerrada pueda publicar resultados parciales inmediatamente, visibles en la aplicación del jugador, sin esperar al cierre de las demás categorías; posteriormente la publicación oficial sustituye a la parcial.
+
+**Modelo:** `tournament_round_category_publications.publication_status` admite `PARTIAL` y `PUBLISHED`. `PARTIAL` significa resultado parcial visible; `PUBLISHED` conserva el significado histórico de publicación oficial. La restricción única por ronda/categoría se conserva: no se crean dos publicaciones visibles de una misma categoría.
+
+**Publicación parcial:** agrega `publicar_resultados_parciales_categoria_ronda`. Sólo permite publicar una categoría con cierre competitivo formal `FINAL` y congela exactamente el snapshot de ese cierre; no recalcula resultados ni modifica motores deportivos.
+
+**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva su firma y su función como publicación oficial. Si la categoría ya tiene una publicación `PARTIAL`, la promueve sobre la misma fila a `PUBLISHED`, reemplazando para el jugador la condición parcial por oficial sin duplicar resultados. Si ya es oficial, continúa siendo idempotente.
+
+**Aplicación del jugador:** `obtener_resultados_publicados_categoria_ronda` pasa a esquema 2 e informa `publicationType = PARTIAL | OFFICIAL`. Agrega `obtener_categorias_resultados_publicados_ronda_411`, que devuelve todas las categorías de la ronda que ya tengan resultados visibles para construir un selector; el jugador puede consultar cualquier categoría publicada, no sólo aquella en la que participó.
+
+**Ciclo maestro:** las publicaciones `PARTIAL` no satisfacen la publicación formal de la ronda. Las funciones existentes de formalización continúan considerando `publication_status='PUBLISHED'` como publicación oficial, por lo que el nodo `ROUND_RESULTS_PUBLICATION` no se completa únicamente porque todas las categorías tengan parciales.
+
+**Compatibilidad:** las publicaciones históricas `PUBLISHED` permanecen oficiales sin migración de datos. Se conservan las restricciones únicas existentes por ronda/categoría y por cierre formal.
+
+**No modifica:** motores Stroke Play, Stableford, A-Go-Go, Best Ball, cálculo de hándicap, desempates, cierre de captura, cierre competitivo de categoría, cierre competitivo de ronda, guards deportivos ni autorizaciones existentes. La publicación sigue dependiendo del cierre formal de categoría.
+
+## MIGRACIÓN 412 — CIERRE DE RONDA ANTES DE PUBLICACIÓN OFICIAL
+
+**Objetivo:** establecer la secuencia operativa correcta después del cierre de categorías: `Cerrar categorías → publicaciones parciales opcionales → Cerrar ronda → Publicar resultados oficiales`.
+
+**Cierre de ronda:** `_cerrar_ronda_competitiva_pre314` deja de tratar `PUBLICATIONS_PENDING` como bloqueo. Continúa exigiendo cierres formales de categorías y el resto de las condiciones deportivas existentes. No modifica motores ni desempates.
+
+**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva su firma, pero ahora exige que exista un cierre competitivo de ronda `FINAL`. Mientras la ronda permanezca abierta sólo corresponde la publicación parcial creada en 411.
+
+**Guía maestra:** reordena `ROUND_COMPETITIVE_CLOSE` a secuencia 220 y `ROUND_RESULTS_PUBLICATION` a 230. El Asistente continúa siendo exclusivamente guía; no adquiere autoridad operativa.
+
+**Reparación de prueba:** corrige exclusivamente la publicación de categoría A de PRUEBA AUTOSERVICIO #3, creada durante la prueba de 411 antes del cierre de ronda, de `PUBLISHED/OFFICIAL` a `PARTIAL/PARTIAL`, siempre que la ronda continúe sin cierre formal.
+
+**No modifica:** resultados deportivos congelados, cierres de categoría, captura, hándicaps, motores Stroke Play/Stableford/A-Go-Go/Best Ball, desempates, pagos ni autorizaciones administrativas.
+
+
+## MIGRACIÓN 413 — PUBLICACIÓN OFICIAL DESPUÉS DEL CIERRE DE RONDA
+
+**Objetivo:** corregir la evidencia descriptiva del ciclo para que cerrar competitivamente una ronda no equivalga a considerar sus resultados oficialmente publicados.
+
+**Qué hace:** modifica únicamente `_estado_formalizacion_resultados_ronda_265`. Elimina la regla heredada `grandfatheredByRoundClosure` que, ante una ronda `FINAL`, marcaba todas sus categorías como cerradas y publicadas sin consultar las publicaciones reales. La función continúa evaluando la ronda cerrada mediante los cierres formales de categoría y `tournament_round_category_publications`.
+
+**Publicación oficial:** una categoría cuenta como publicada para `allCategoriesPublished` únicamente cuando existe `publication_status='PUBLISHED'`. Una publicación `PARTIAL` continúa visible como parcial, pero no completa el nodo 230 `ROUND_RESULTS_PUBLICATION`.
+
+**Compatibilidad:** se conserva la clave `grandfatheredByRoundClosure` en el payload normal con valor `false`. El estado `roundClosed` pasa a informar el cierre competitivo real aun cuando la función continúa evaluando publicaciones.
+
+**Efecto en el Asistente:** el evaluador 395 podrá mantener pendiente `ROUND_RESULTS_PUBLICATION` después de cerrar la ronda mientras falten publicaciones oficiales, en vez de saltar directamente a `Finalizar torneo`. El Asistente sigue siendo guía y no adquiere autoridad operativa.
+
+**No modifica:** publicaciones existentes, snapshots deportivos, cierres de categoría o ronda, motores Stroke Play/Stableford/A-Go-Go/Best Ball, hándicap, desempates, captura, pagos, guards ni autorizaciones.
+
+## MIGRACIÓN 414 — FINALIZACIÓN EXIGE PUBLICACIÓN OFICIAL
+
+**Objetivo:** impedir la finalización formal de un torneo mientras exista alguna ronda activa con categorías participantes cuyos resultados todavía no hayan sido publicados oficialmente.
+
+**Qué hace:** modifica únicamente `previsualizar_finalizacion_torneo`. Conserva todos los gates históricos de cierre de rondas, lifecycle y clasificación acumulada Stableford, y agrega un gate de publicaciones oficiales reutilizando `_estado_formalizacion_resultados_ronda_265` para cada ronda activa.
+
+**Regla:** sólo `publication_status='PUBLISHED'` cuenta como publicación oficial. `PARTIAL` no permite finalizar el torneo. Las categorías sin participantes no generan pendientes de publicación.
+
+**Autoridad:** `finalizar_torneo` no se modifica porque ya vuelve a ejecutar `previsualizar_finalizacion_torneo` inmediatamente antes de crear el sello de finalización y cambiar `tournaments.estatus` a `finalizado`. Por tanto, el nuevo gate queda protegido en Supabase y no depende del frontend ni del Asistente.
+
+**Evidencia adicional:** la previsualización incorpora `officialPublications` con conteos por torneo y por ronda para que la interfaz pueda explicar cuántas categorías participantes están publicadas oficialmente y cuántas faltan.
+
+**No modifica:** motores Stroke Play/Stableford/A-Go-Go/Best Ball, resultados deportivos, desempates, hándicap, cierres de captura/categoría/ronda, publicaciones existentes, snapshots, pagos, permisos ni el evaluador/Asistente 395/396.
+
+
+## MIGRACIÓN 415 — OPERACIÓN DE TARJETA STABLEFORD: HCP, VENTAJAS Y PUNTOS
+
+**Objetivo:** completar la experiencia operativa de Stableford Individual para que tarjeta/captura digital, captura física/comparación y revisión administrativa puedan mostrar el Playing Handicap congelado, las ventajas por hoyo y los puntos Stableford Gross/Neto sin crear un segundo motor de cálculo.
+
+**Qué hace:** agrega `obtener_operacion_stableford_tarjeta_415(score_card_id)`, una RPC de sólo lectura y exclusiva de `scoring_engine='stableford'` + `participation_type='individual'`. La función reutiliza los snapshots congelados de ronda y las funciones oficiales existentes `calcular_golpes_handicap_hoyo` y `calcular_puntos_stableford_estandar`. Devuelve por hoyo PAR, Stroke Index, `handicapStrokes`, evidencia digital y física, y sus puntos Stableford Gross/Neto. También devuelve Playing Handicap, clasificaciones Gross/Neto configuradas y metadatos del snapshot del motor.
+
+**Ventajas:** `handicapStrokes` se deriva exclusivamente del `playing_handicap` congelado de `tournament_round_handicap_snapshots` y del Stroke Index congelado del hoyo. La suma de las ventajas/disventajas distribuidas debe coincidir exactamente con el Playing Handicap. El frontend puede representar cada golpe positivo con un punto verde dentro del recuadro del hoyo; valores mayores a 18 producen múltiples marcas según corresponda.
+
+**Puntos durante la operación:** la RPC 415 calcula puntos sobre la evidencia disponible sin exigir captura física finalizada ni conciliación. Un hoyo `PENDING` conserva puntos `NULL`; `PICKUP` produce 0 puntos; `SCORE` usa la misma tabla matemática del motor oficial. La regla congelada de Hole In One, cuando esté habilitada, se respeta igual que en el resultado oficial.
+
+**Gross/Neto:** la RPC informa las clasificaciones congeladas de la categoría mediante `grossEnabled` y `netEnabled`. Para `TORNEO PRUEBA STABLEFORD OCTUBRE`, categoría ÚNICA, ambas clasificaciones están habilitadas, por lo que la interfaz debe mostrar PUNTOS GROSS y PUNTOS NETO, con subtotales FRONT/OUT, BACK/IN y TOTAL.
+
+**Frontend requerido:** consumir la RPC 415 únicamente cuando `useRoundScoringEngine` resuelva `stableford`. En la tarjeta/captura digital mostrar Playing HCP, ventajas por hoyo y puntos conforme se captura. En `physical-card-capture` agregar las ventajas y filas de puntos Stableford a `RESULTADO DE COMPARACIÓN`. En la revisión administrativa permitir ver los 18 hoyos de cada jugador con PAR, SI, ventajas, score y puntos. No duplicar en React la fórmula Stableford: React sólo presenta y totaliza los puntos por hoyo devueltos por 415.
+
+**Seguridad y aislamiento:** la función reutiliza el guard de lectura vigente de `obtener_detalle_captura_tarjeta_score`, no abre permisos a `anon` y rechaza cualquier tarjeta que no sea Stableford Individual. No reemplaza ni modifica la RPC genérica de captura ni la RPC de resultado oficial Stableford.
+
+**No modifica:** Stroke Play, A-Go-Go/team_stroke, Best Ball, sus RPC, cálculos, tarjetas o componentes; tampoco modifica scores, captura física/digital, conciliación, resultados oficiales, snapshots, hándicaps, clasificaciones, cierres, pagos, publicaciones ni datos existentes. La migración es aditiva y no hace backfill.
+
+## MIGRACIÓN 416 — CORRECCIÓN DE NOMBRE DE JUGADOR EN ACUMULADO STABLEFORD
+
+**Objetivo:** corregir el error `column p.nombre does not exist` que impedía consultar la clasificación acumulada Stableford y, por consecuencia, bloqueaba la previsualización de finalización de torneos Stableford.
+
+**Causa:** `obtener_resultados_stableford_torneo(p_tournament_id)` hacía `JOIN public.players p` y utilizaba `p.nombre AS player_name`, pero `public.players` no tiene una columna `nombre`; el esquema vigente almacena el nombre del jugador en `nombres` y `apellidos`.
+
+**Qué hace:** reemplaza exclusivamente esa referencia obsoleta por `btrim(concat_ws(' ', p.nombres, p.apellidos)) AS player_name`, siguiendo el patrón vigente utilizado por otras funciones de Tee Central. La migración valida previamente que exista exactamente una ocurrencia del patrón obsoleto esperado; si la definición no coincide con ese estado, aborta sin reemplazar la función.
+
+**Impacto funcional:** restablece la cadena `obtener_resultados_stableford_torneo` → `obtener_leaderboard_stableford_torneo` → previsualización de finalización Stableford. También elimina la misma causa de error para consumidores de la clasificación global y desempates Stableford que dependan de `obtener_resultados_stableford_torneo`.
+
+**Seguridad:** conserva la firma, lenguaje, volatilidad, `SECURITY DEFINER`, `search_path`, permisos y toda la lógica existente de la función. No modifica datos.
+
+**No modifica:** frontend, Stroke Play, Best Ball, A-Go-Go/team_stroke, motor matemático Stableford, resultados por ronda, snapshots, hándicap, desempates, conciliación, captura física/digital, cierres, publicaciones, pagos ni permisos.
+
+---
+
+## Migración 417 — Reporte detallado de scores: Stroke Play Individual
+
+**Archivo:** `417_reporte_detallado_scores_stroke_play.sql`  
+**Verificación:** `417_verificacion_reporte_detallado_scores_stroke_play.sql`
+
+### Objetivo
+
+Agregar una capa de reporte detallado para **Stroke Play Individual**, por categoría, que permita consumir en una sola respuesta los resultados oficiales hoyo por hoyo y los acumulados **OUT / IN / TOTAL** para Gross y Neto, sin duplicar las reglas deportivas existentes.
+
+### Qué hace
+
+- Crea la RPC aditiva `public.obtener_reporte_detallado_scores_stroke_play_417(p_tournament_round_id uuid, p_tournament_category_id uuid, p_criterio text)`.
+- La RPC está limitada explícitamente a `scoring_engine = stroke` y `tipo_participacion = individual`.
+- Reutiliza como fuentes oficiales existentes:
+  - `obtener_resultados_oficiales_ronda`
+  - `obtener_leaderboard_ronda`
+  - `obtener_desempates_ronda`
+- Devuelve los hoyos oficiales existentes de cada tarjeta y agrega para presentación del reporte:
+  - Gross OUT / IN / TOTAL.
+  - Neto OUT / IN / TOTAL.
+  - posición/base rank y evidencia de desempate disponible.
+  - estado competitivo/outcome disponible.
+  - Playing Handicap y datos identificadores de tarjeta/jugador.
+- El criterio de presentación admite `GROSS` o `NETO` y valida que la clasificación correspondiente esté habilitada.
+- Mantiene los cálculos deportivos en las funciones oficiales ya existentes; la nueva RPC funciona como capa de consulta/reporte.
+- La función requiere usuario autenticado y permiso administrativo sobre el torneo.
+- `PUBLIC` queda sin permiso de ejecución y `authenticated` recibe `EXECUTE`.
+- Otras modalidades son rechazadas de forma controlada; 417 no implementa Stableford, Best Ball, A-Go-Go ni Stableford por equipos.
+
+### Aislamiento y protección de motores existentes
+
+La migración es aditiva y no redefine los motores deportivos existentes. No modifica captura, conciliación, leaderboard, desempates, cierre de ronda ni publicación de resultados.
+
+El reporte A-Go-Go existente queda fuera del alcance de 417. Antes de la migración se registró como referencia el hash de definición de:
+
+`obtener_reporte_scores_fisicos_categoria_a_gogo_ronda`
+
+con MD5:
+
+`567781c11fb33f443d61555f0950d87c`
+
+El SQL de verificación comprueba que dicha definición permanezca intacta.
+
+### Verificación prevista
+
+El archivo independiente de verificación comprueba, en solo lectura:
+
+- existencia, firma, retorno, volatilidad y `SECURITY DEFINER` de la nueva RPC;
+- permisos de ejecución;
+- permanencia de las funciones oficiales Stroke Play utilizadas;
+- aislamiento respecto del reporte A-Go-Go;
+- conservación exacta de la definición de la RPC A-Go-Go mediante su hash previo;
+- disponibilidad de rondas y categorías Stroke Play Individual para prueba;
+- consumo de resultados, leaderboard y desempates oficiales;
+- prueba funcional autenticada con una ronda/categoría real;
+- rechazo controlado de una modalidad distinta de Stroke Play Individual.
+
+### Estado
+
+**Preparada para ejecución manual y verificación.** La aplicación de la migración corresponde al operador; después de ejecutarla debe correrse/verificarse el SQL independiente antes de continuar con el frontend del reporte.
+
+---
+
+## Migración 418 — HCP declarado congelado en reporte detallado Stroke Play
+
+**Archivo:** `418_hcp_declarado_reporte_stroke_play.sql`  
+**Verificación:** `418_verificacion_hcp_declarado_reporte_stroke_play.sql`
+
+### Objetivo
+
+Enriquecer el reporte detallado de **Stroke Play Individual** creado en la migración 417 para que pueda mostrar por separado el **HCP declarado/índice congelado para el torneo** y el **Playing HCP** de la ronda.
+
+### Diagnóstico previo
+
+La RPC 417 entregaba únicamente `playingHandicap`. La base sí conserva el índice histórico utilizado para la competencia en `tournament_handicap_snapshots.handicap_index`, enlazado a la unidad de validación oficial de la tarjeta.
+
+Esta fuente es preferible al valor actual de `players.handicap_declarado`, porque el perfil del jugador puede cambiar después. El snapshot conserva además `handicap_source`, `handicap_source_date` y `handicap_status`.
+
+En la revisión de **PRUEBA AUTOSERVICIO #3** se comprobó que el snapshot conserva el valor histórico utilizado para cada jugador y que éste es distinto conceptualmente del Playing Handicap calculado para la ronda.
+
+### Qué hace
+
+- Redefine únicamente `public.obtener_reporte_detallado_scores_stroke_play_417(...)`, conservando su nombre y parámetros para no romper el frontend ya conectado.
+- Eleva `schemaVersion` del payload de 1 a 2.
+- Agrega a cada jugador:
+  - `declaredHandicap`: `tournament_handicap_snapshots.handicap_index`.
+  - `handicapSource`.
+  - `handicapSourceDate`.
+  - `handicapStatus`.
+- Conserva sin cambios `playingHandicap`.
+- El dato nuevo se obtiene a través de la tarjeta oficial → unidad de validación → snapshot de hándicap congelado.
+- No consulta el HCP actual del perfil como fuente del reporte y no recalcula hándicap en frontend.
+
+### Aislamiento
+
+418 no modifica tablas, triggers, motores deportivos, captura, conciliación, leaderboard, desempates, cierre, resultados oficiales, Stableford, Best Ball ni A-Go-Go.
+
+La RPC A-Go-Go protegida debe conservar el MD5:
+
+`567781c11fb33f443d61555f0950d87c`
+
+### Uso previsto en frontend
+
+Una vez ejecutada y verificada 418, el reporte Stroke Play puede presentar:
+
+`POS | JUGADOR | HCP DECLARADO | PLAYING HCP | 1–9 | OUT | 10–18 | IN | TOTAL`
+
+El frontend debe leer `declaredHandicap` y `playingHandicap` como datos distintos y no recalcular ninguno.
+
+### Estado
+
+**Preparada para ejecución manual y verificación.**
+
+---
+
+## Migración 419 — Reporte detallado de puntos Stableford Individual
+
+**Archivo:** `419_reporte_detallado_puntos_stableford.sql`  
+**Verificación:** `419_verificacion_reporte_detallado_puntos_stableford.sql`
+
+### Objetivo
+
+Agregar un contrato backend específico para el **Reporte Detallado de Stableford Individual**, equivalente operativamente al reporte detallado de Stroke Play pero respetando el motor Stableford: por hoyo se reportan **puntos Stableford GROSS o NETO**, no golpes recalculados por frontend.
+
+### Diagnóstico previo
+
+Stableford ya dispone de fuentes deportivas oficiales completas:
+
+- `obtener_resultado_stableford_oficial_tarjeta`
+- `obtener_resultados_stableford_oficiales_ronda`
+- `obtener_leaderboard_stableford_ronda`
+- `obtener_desempates_stableford_ronda`
+
+El resultado oficial por tarjeta ya contiene por hoyo `grossPoints`, `netPoints`, `handicapStrokes`, score gross/net oficial, PICKUP y aplicación de reglas especiales. El leaderboard ya resuelve posiciones y desempates Stableford.
+
+Por tanto, el nuevo reporte no debe duplicar el motor ni recalcular puntos en frontend.
+
+### Qué hace
+
+Crea `public.obtener_reporte_detallado_scores_stableford_419(round_id, category_id, criterio)`.
+
+- Solo admite `scoring_engine=stableford` y `participation_type=individual`.
+- Reutiliza resultados y leaderboard oficiales Stableford.
+- Admite criterio `GROSS` o `NETO` únicamente cuando la clasificación correspondiente está habilitada.
+- Entrega posición oficial y metadatos de desempate.
+- Entrega por hoyo el payload oficial Stableford existente.
+- Calcula en backend OUT/IN como suma de los **puntos oficiales ya producidos por el motor**; no vuelve a calcular las reglas Stableford.
+- Entrega TOTAL oficial del motor.
+- Incluye `declaredHandicap` desde `tournament_handicap_snapshots.handicap_index` y mantiene separado `playingHandicap`.
+- Conserva estados terminales, pickups y demás evidencia oficial contenida en `holes`.
+- Seguridad: `SECURITY DEFINER`, requiere usuario autenticado y permiso administrativo; `anon` no recibe EXECUTE.
+
+### Contrato previsto
+
+`reportType = DETAILED_POINTS_STABLEFORD`
+
+Cada jugador incluye, entre otros:
+
+- posición/orden/desempate;
+- `declaredHandicap`;
+- `playingHandicap`;
+- puntos GROSS OUT / IN / TOTAL;
+- puntos NETO OUT / IN / TOTAL;
+- `holes` oficiales con `grossPoints`, `netPoints`, `handicapStrokes`, PICKUP y evidencia Stableford.
+
+### Aislamiento
+
+419 no modifica Stroke Play, Best Ball, A-Go-Go, tablas, triggers, captura, conciliación, cierre ni publicación.
+
+La RPC protegida de A-Go-Go debe conservar el MD5:
+
+`567781c11fb33f443d61555f0950d87c`
+
+### Estado
+
+**Preparada para ejecución manual y verificación.**
+
+---
+
+## Migración 420 — Reporte detallado de scores Best Ball TEAM
+
+**Archivo:** `420_reporte_detallado_scores_best_ball.sql`  
+**Verificación:** `420_verificacion_reporte_detallado_scores_best_ball.sql`
+
+### Objetivo
+
+Agregar el contrato backend para el reporte detallado de **Best Ball por equipos**, sin duplicar el motor deportivo.
+
+### Diagnóstico previo
+
+Best Ball ya cuenta con una cadena oficial:
+
+- `obtener_resultado_oficial_best_ball_325`: autoridad oficial por tarjeta/equipo. Calcula el mejor GROSS y el mejor NET por hoyo después de conciliación y conserva qué integrantes cuentan en cada métrica.
+- `obtener_desempates_best_ball_ronda_327`: evidencia de desempates.
+- `obtener_leaderboard_best_ball_ronda_328`: leaderboard oficial por categoría/equipo, clasificación GROSS/NETO y estado competitivo.
+
+El resultado F11 conserva por hoyo `officialBestGross`, `officialBestNet`, `grossCountingPlayers`, `netCountingPlayers` y la evidencia individual de todos los integrantes.
+
+### Qué hace
+
+Crea `public.obtener_reporte_detallado_scores_best_ball_420(round_id, category_id, criterio)`.
+
+- Solo admite Best Ball TEAM.
+- Reutiliza F11/F13/F14; no reproduce el cálculo de Best Ball.
+- Unidad competitiva: TEAM.
+- Devuelve equipo, integrantes congelados, HCP congelado y Playing HCP individual.
+- Devuelve por hoyo el mejor score oficial GROSS y NET del equipo y qué integrante(s) aportaron ese score.
+- Devuelve OUT/IN calculados en backend a partir de los scores oficiales F11 y TOTAL oficial F11.
+- Devuelve rank base y evidencia de empate/desempate del backend.
+- GROSS y NETO solo se permiten cuando la categoría correspondiente está habilitada.
+- Requiere autenticación y permiso administrativo; `anon` no recibe EXECUTE.
+
+### Importante
+
+Best Ball no tiene un único HCP TEAM. Cada integrante conserva su HCP/Playing HCP individual congelado; el motor selecciona el mejor resultado por hoyo después de aplicar el handicap individual correspondiente para NET.
+
+No existe actualmente una ronda Best Ball detectada en los snapshots de condiciones consultados antes de preparar 420, por lo que la prueba funcional real deberá realizarse cuando exista una ronda Best Ball emitida, capturada y conciliada.
+
+### Aislamiento
+
+420 no modifica Stroke Play, Stableford, A-Go-Go, captura, conciliación, resultados existentes, cierres ni publicación. A-Go-Go continúa protegido y sus tres archivos frontend existentes no deben modificarse.
+
+### Estado
+
+**Preparada para ejecución manual y verificación.**
