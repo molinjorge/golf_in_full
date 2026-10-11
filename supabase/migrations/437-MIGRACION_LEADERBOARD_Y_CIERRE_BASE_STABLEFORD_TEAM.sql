@@ -1,0 +1,661 @@
+-- 437-MIGRACION_LEADERBOARD_Y_CIERRE_BASE_STABLEFORD_TEAM.sql
+-- TEE CENTRAL / GOLF IN FULL
+-- NO ejecutar desde Lovable. Ejecutar manualmente en Supabase.
+--
+-- Objetivo:
+-- 1) Reconocer al TEAM como unidad competitiva real para futuros desempates,
+--    sin crear una tarjeta TEAM ficticia.
+-- 2) Crear el leaderboard operativo Stableford por equipos a partir del motor 434.
+-- 3) Conectar stableford/equipo al dispatcher operativo.
+-- 4) Dar estado competitivo real a la ronda y eliminar el "modalidad no soportada".
+--
+-- IMPORTANTE:
+-- Esta migración NO resuelve todavía desempates TEAM. Si hay empate, lo reporta
+-- como PENDING y bloquea correctamente el cierre. La resolución automática/manual
+-- TEAM se completa en la fase siguiente, sobre la identidad TEAM creada aquí.
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- A. IDENTIDAD DE UNIDAD COMPETITIVA EN RESOLUCIONES DE DESEMPATE
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE public.tournament_tiebreak_resolution_players
+    ADD COLUMN IF NOT EXISTS tournament_team_id uuid NULL;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid='public.tournament_tiebreak_resolution_players'::regclass
+          AND conname='tournament_tiebreak_resolution_players_team_id_fkey'
+    ) THEN
+        ALTER TABLE public.tournament_tiebreak_resolution_players
+            ADD CONSTRAINT tournament_tiebreak_resolution_players_team_id_fkey
+            FOREIGN KEY (tournament_team_id)
+            REFERENCES public.tournament_teams(id)
+            ON DELETE RESTRICT;
+    END IF;
+END $$;
+
+-- Los registros históricos PLAYER/CARD conservan score_card_id.
+-- Para Stableford TEAM se permitirá tournament_team_id sin tarjeta TEAM.
+ALTER TABLE public.tournament_tiebreak_resolution_players
+    ALTER COLUMN score_card_id DROP NOT NULL;
+
+ALTER TABLE public.tournament_tiebreak_resolution_players
+    DROP CONSTRAINT IF EXISTS tournament_tiebreak_resolution_players_competitive_unit_check;
+
+ALTER TABLE public.tournament_tiebreak_resolution_players
+    ADD CONSTRAINT tournament_tiebreak_resolution_players_competitive_unit_check
+    CHECK (
+        (score_card_id IS NOT NULL AND tournament_team_id IS NULL)
+        OR
+        (score_card_id IS NULL AND tournament_team_id IS NOT NULL)
+    );
+
+CREATE UNIQUE INDEX IF NOT EXISTS
+    tournament_tiebreak_resolution_players_resolution_team_key
+ON public.tournament_tiebreak_resolution_players(resolution_id,tournament_team_id)
+WHERE tournament_team_id IS NOT NULL;
+
+COMMENT ON COLUMN public.tournament_tiebreak_resolution_players.tournament_team_id
+IS '437: unidad competitiva TEAM para desempates sin tarjeta TEAM ficticia. Exactamente una identidad: score_card_id o tournament_team_id.';
+
+-- ---------------------------------------------------------------------------
+-- B. LEADERBOARD OPERATIVO STABLEFORD TEAM
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.obtener_leaderboard_stableford_team_ronda_437(
+    p_tournament_round_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public','pg_temp'
+AS $function$
+DECLARE
+    v_round record;
+    v_rcs record;
+    v_teams jsonb;
+BEGIN
+    IF auth.uid() IS NULL THEN
+        RAISE EXCEPTION 'No autenticado.' USING ERRCODE='42501';
+    END IF;
+
+    SELECT tr.id,tr.tournament_id,tr.numero_ronda,tr.fecha
+      INTO v_round
+      FROM public.tournament_rounds tr
+     WHERE tr.id=p_tournament_round_id
+       AND tr.activo=true;
+
+    IF v_round.id IS NULL THEN
+        RAISE EXCEPTION 'La ronda indicada no existe o no está activa.'
+            USING ERRCODE='22023';
+    END IF;
+
+    IF NOT public.puede_administrar_congelamiento_torneo(v_round.tournament_id) THEN
+        RAISE EXCEPTION 'No tienes permiso administrativo para consultar resultados de esta ronda.'
+            USING ERRCODE='42501';
+    END IF;
+
+    SELECT rcs.scoring_engine,rcs.participation_type,rcs.format_code
+      INTO v_rcs
+      FROM public.tournament_round_condition_snapshots rcs
+     WHERE rcs.tournament_round_id=p_tournament_round_id
+     ORDER BY rcs.created_at DESC,rcs.id DESC
+     LIMIT 1;
+
+    IF v_rcs.scoring_engine<>'stableford'
+       OR v_rcs.participation_type<>'equipo'
+       OR COALESCE(v_rcs.format_code,'')<>'STABLEFORD_EQUIPO'
+    THEN
+        RAISE EXCEPTION 'La ronda indicada no corresponde a Stableford por equipos.'
+            USING ERRCODE='0A000';
+    END IF;
+
+    -- Una llamada al motor 434 por equipo activo. No se crea ni se usa tarjeta TEAM.
+    SELECT COALESCE(
+        jsonb_agg(
+            public.obtener_resultado_stableford_equipo_ronda_434(
+                p_tournament_round_id,tt.id
+            )
+            ORDER BY tt.nombre_equipo,tt.id
+        ),
+        '[]'::jsonb
+    )
+      INTO v_teams
+      FROM public.tournament_teams tt
+     WHERE tt.tournament_id=v_round.tournament_id
+       AND tt.activo=true
+       AND EXISTS (
+           SELECT 1
+           FROM public.tournament_score_cards sc
+           WHERE sc.tournament_round_id=p_tournament_round_id
+             AND sc.tournament_team_id=tt.id
+             AND sc.status='issued'
+             AND sc.unit_type='registration'
+       );
+
+    RETURN (
+      WITH team_raw AS (
+        SELECT
+            t AS team_json,
+            NULLIF(t->>'tournamentTeamId','')::uuid AS team_id,
+            t->>'teamName' AS team_name,
+            NULLIF(t->>'tournamentCategoryId','')::uuid AS category_id,
+            COALESCE(NULLIF(t#>>'{result,grossPointsTotal}','')::integer,0) AS gross_points,
+            COALESCE(NULLIF(t#>>'{result,netPointsTotal}','')::integer,0) AS net_points,
+            COALESCE(t->'holes','[]'::jsonb) AS holes
+        FROM jsonb_array_elements(v_teams) t
+      ),
+      category_info AS (
+        SELECT
+            tc.id AS category_id,
+            c.codigo AS category_code,
+            c.nombre AS category_name,
+            c.display_order AS category_display_order,
+            COALESCE(ccs.clasifica_gross,true) AS gross_enabled,
+            COALESCE(ccs.clasifica_neto,true) AS net_enabled
+        FROM public.tournament_categories tc
+        JOIN public.categories c ON c.id=tc.category_id
+        LEFT JOIN LATERAL (
+            SELECT s.clasifica_gross,s.clasifica_neto
+            FROM public.tournament_category_classification_snapshots s
+            WHERE s.tournament_category_id=tc.id
+            ORDER BY s.created_at DESC,s.id DESC
+            LIMIT 1
+        ) ccs ON true
+        WHERE tc.tournament_id=v_round.tournament_id
+      ),
+      readiness AS (
+        SELECT
+            tr.team_id,
+            count(*)::integer AS member_cards,
+            count(*) FILTER (
+                WHERE
+                    o.outcome_code IN ('WD','DNF','DQ','DNS','NO_CARD')
+                    OR (
+                        pr.status='CAPTURED'
+                        AND rec.status='COMPLETED'
+                    )
+            )::integer AS resolved_member_cards,
+            count(*) FILTER (
+                WHERE NOT (
+                    o.outcome_code IN ('WD','DNF','DQ','DNS','NO_CARD')
+                    OR (
+                        pr.status='CAPTURED'
+                        AND rec.status='COMPLETED'
+                    )
+                )
+            )::integer AS unresolved_member_cards
+        FROM team_raw tr
+        JOIN public.tournament_score_cards sc
+          ON sc.tournament_round_id=p_tournament_round_id
+         AND sc.tournament_team_id=tr.team_id
+         AND sc.status='issued'
+         AND sc.unit_type='registration'
+        LEFT JOIN public.tournament_scorecard_round_outcomes o
+          ON o.score_card_id=sc.id
+        LEFT JOIN public.tournament_scorecard_physical_receptions pr
+          ON pr.score_card_id=sc.id
+        LEFT JOIN public.tournament_scorecard_reconciliations rec
+          ON rec.score_card_id=sc.id
+        GROUP BY tr.team_id
+      ),
+      base AS (
+        SELECT
+            tr.*,
+            ci.category_code,ci.category_name,ci.category_display_order,
+            ci.gross_enabled,ci.net_enabled,
+            COALESCE(r.member_cards,0) AS member_cards,
+            COALESCE(r.resolved_member_cards,0) AS resolved_member_cards,
+            COALESCE(r.unresolved_member_cards,0) AS unresolved_member_cards,
+            (COALESCE(r.member_cards,0)>0 AND COALESCE(r.unresolved_member_cards,0)=0) AS official_ready
+        FROM team_raw tr
+        LEFT JOIN category_info ci ON ci.category_id=tr.category_id
+        LEFT JOIN readiness r ON r.team_id=tr.team_id
+      ),
+      ranked AS (
+        SELECT
+            b.*,
+            CASE WHEN b.official_ready AND b.gross_enabled THEN
+                rank() OVER (
+                    PARTITION BY b.category_id
+                    ORDER BY b.gross_points DESC
+                )::integer
+            END AS gross_rank,
+            CASE WHEN b.official_ready AND b.gross_enabled THEN
+                count(*) OVER (
+                    PARTITION BY b.category_id,b.gross_points
+                )::integer
+            END AS gross_tie_size,
+            CASE WHEN b.official_ready AND b.net_enabled THEN
+                rank() OVER (
+                    PARTITION BY b.category_id
+                    ORDER BY b.net_points DESC
+                )::integer
+            END AS net_rank,
+            CASE WHEN b.official_ready AND b.net_enabled THEN
+                count(*) OVER (
+                    PARTITION BY b.category_id,b.net_points
+                )::integer
+            END AS net_tie_size
+        FROM base b
+      ),
+      category_summary AS (
+        SELECT
+            category_id,category_code,category_name,category_display_order,
+            count(*)::integer AS total_participants,
+            count(*) FILTER(WHERE official_ready)::integer AS ranked_participants,
+            count(*) FILTER(WHERE official_ready)::integer AS resolved_participants,
+            count(*) FILTER(WHERE NOT official_ready)::integer AS unresolved_participants,
+            count(*) FILTER(
+                WHERE official_ready AND (
+                    (gross_enabled AND COALESCE(gross_tie_size,0)>1)
+                    OR
+                    (net_enabled AND COALESCE(net_tie_size,0)>1)
+                )
+            )::integer AS participants_in_ties
+        FROM ranked
+        GROUP BY category_id,category_code,category_name,category_display_order
+      ),
+      global_state AS (
+        SELECT
+            count(*) FILTER(WHERE NOT official_ready)::integer AS unresolved_teams,
+            count(*) FILTER(
+                WHERE official_ready
+                  AND gross_enabled
+                  AND COALESCE(gross_tie_size,0)>1
+            )::integer
+            +
+            count(*) FILTER(
+                WHERE official_ready
+                  AND net_enabled
+                  AND COALESCE(net_tie_size,0)>1
+            )::integer AS unresolved_tie_entries
+        FROM ranked
+      )
+      SELECT jsonb_build_object(
+        'supported',true,
+        'applicable',true,
+        'round',jsonb_build_object(
+            'tournamentId',v_round.tournament_id,
+            'tournamentRoundId',v_round.id,
+            'roundNumber',v_round.numero_ronda,
+            'roundDate',v_round.fecha,
+            'scoringEngine','stableford',
+            'participationType','equipo',
+            'formatCode','STABLEFORD_EQUIPO',
+            'competitiveUnit','TEAM'
+        ),
+        'status',(
+            SELECT jsonb_build_object(
+                'unresolvedTeams',unresolved_teams,
+                'unresolvedTieEntries',unresolved_tie_entries,
+                'leaderboardStatus',
+                    CASE
+                        WHEN unresolved_teams>0 THEN 'PROVISIONAL'
+                        WHEN unresolved_tie_entries>0 THEN 'READY_FOR_TIEBREAK'
+                        ELSE 'READY_FOR_PUBLICATION'
+                    END
+            )
+            FROM global_state
+        ),
+        'summary',(
+            SELECT jsonb_build_object(
+                'totalParticipants',count(*)::integer,
+                'rankedParticipants',count(*) FILTER(WHERE official_ready)::integer,
+                'resolvedParticipants',count(*) FILTER(WHERE official_ready)::integer,
+                'unresolvedParticipants',count(*) FILTER(WHERE NOT official_ready)::integer,
+                'terminalExceptions',0,
+                'competitiveUnit','TEAM'
+            )
+            FROM ranked
+        ),
+        'categories',COALESCE((
+            SELECT jsonb_agg(
+                jsonb_build_object(
+                    'tournamentCategoryId',cs.category_id,
+                    'categoryCode',cs.category_code,
+                    'categoryName',cs.category_name,
+                    'categoryDisplayOrder',cs.category_display_order,
+                    'summary',jsonb_build_object(
+                        'totalParticipants',cs.total_participants,
+                        'rankedParticipants',cs.ranked_participants,
+                        'resolvedParticipants',cs.resolved_participants,
+                        'unresolvedParticipants',cs.unresolved_participants,
+                        'terminalExceptions',0
+                    ),
+                    -- Se conserva la llave "players" porque es el contrato histórico
+                    -- consumido por la formalización común. Cada elemento declara
+                    -- competitiveUnit=TEAM y contiene teamId/teamName.
+                    'players',COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'competitiveUnit','TEAM',
+                                'teamId',r.team_id,
+                                'teamName',r.team_name,
+                                'playerId',NULL,
+                                'playerName',r.team_name,
+                                'eligibleForRanking',r.official_ready,
+                                'competitionStatus',
+                                    CASE WHEN r.official_ready THEN 'OFFICIAL' ELSE 'PENDING' END,
+                                'memberCards',r.member_cards,
+                                'resolvedMemberCards',r.resolved_member_cards,
+                                'unresolvedMemberCards',r.unresolved_member_cards,
+                                'gross',jsonb_build_object(
+                                    'enabled',r.gross_enabled,
+                                    'points',r.gross_points,
+                                    'baseRank',r.gross_rank,
+                                    'tieSize',r.gross_tie_size,
+                                    'finalRank',
+                                        CASE WHEN COALESCE(r.gross_tie_size,0)<=1
+                                             THEN r.gross_rank ELSE NULL END,
+                                    'tiebreakStatus',
+                                        CASE
+                                            WHEN NOT r.gross_enabled THEN NULL
+                                            WHEN NOT r.official_ready THEN NULL
+                                            WHEN COALESCE(r.gross_tie_size,0)<=1 THEN 'NOT_NEEDED'
+                                            ELSE 'PENDING'
+                                        END
+                                ),
+                                'net',jsonb_build_object(
+                                    'enabled',r.net_enabled,
+                                    'points',r.net_points,
+                                    'baseRank',r.net_rank,
+                                    'tieSize',r.net_tie_size,
+                                    'finalRank',
+                                        CASE WHEN COALESCE(r.net_tie_size,0)<=1
+                                             THEN r.net_rank ELSE NULL END,
+                                    'tiebreakStatus',
+                                        CASE
+                                            WHEN NOT r.net_enabled THEN NULL
+                                            WHEN NOT r.official_ready THEN NULL
+                                            WHEN COALESCE(r.net_tie_size,0)<=1 THEN 'NOT_NEEDED'
+                                            ELSE 'PENDING'
+                                        END
+                                ),
+                                'holes',r.holes,
+                                'members',COALESCE(r.team_json->'members','[]'::jsonb)
+                            )
+                            ORDER BY
+                                CASE WHEN r.official_ready THEN 0 ELSE 1 END,
+                                COALESCE(r.net_rank,r.gross_rank) NULLS LAST,
+                                r.team_name,r.team_id
+                        )
+                        FROM ranked r
+                        WHERE r.category_id IS NOT DISTINCT FROM cs.category_id
+                    ),'[]'::jsonb)
+                )
+                ORDER BY cs.category_display_order NULLS LAST,cs.category_name
+            )
+            FROM category_summary cs
+        ),'[]'::jsonb)
+      )
+    );
+END;
+$function$;
+
+COMMENT ON FUNCTION public.obtener_leaderboard_stableford_team_ronda_437(uuid)
+IS '437: leaderboard operativo Stableford TEAM derivado del motor 434; tarjetas oficiales siguen siendo individuales. Los empates TEAM se reportan PENDING hasta la fase de desempates TEAM.';
+
+-- ---------------------------------------------------------------------------
+-- C. DISPATCHER OPERATIVO COMÚN
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.obtener_leaderboard_operativo_ronda(
+    p_tournament_round_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public','pg_temp'
+AS $function$
+DECLARE
+    v_engine text;
+    v_participation text;
+    v_format_code text;
+    v_result jsonb;
+BEGIN
+    SELECT s.scoring_engine,s.participation_type,s.format_code
+      INTO v_engine,v_participation,v_format_code
+      FROM public.tournament_round_condition_snapshots s
+     WHERE s.tournament_round_id=p_tournament_round_id
+     ORDER BY s.created_at DESC,s.id DESC
+     LIMIT 1;
+
+    IF v_engine='best_ball' AND v_participation='equipo' THEN
+        RETURN public.obtener_leaderboard_best_ball_ronda_328(p_tournament_round_id);
+    END IF;
+
+    IF v_engine='team_stroke' AND v_participation='equipo' THEN
+        v_result:=public.obtener_leaderboard_a_gogo_ronda(p_tournament_round_id);
+        RETURN COALESCE(v_result,'{}'::jsonb)
+               || jsonb_build_object('supported',true,'applicable',true);
+    END IF;
+
+    IF v_engine='stableford'
+       AND v_participation='equipo'
+       AND v_format_code='STABLEFORD_EQUIPO'
+    THEN
+        RETURN public.obtener_leaderboard_stableford_team_ronda_437(
+            p_tournament_round_id
+        );
+    END IF;
+
+    RETURN public._obtener_leaderboard_operativo_ronda_pre328(
+        p_tournament_round_id
+    );
+END;
+$function$;
+
+-- ---------------------------------------------------------------------------
+-- D. ESTADO COMPETITIVO BASE STABLEFORD TEAM
+--    No finge que los empates están resueltos.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.obtener_estado_cierre_stableford_team_ronda_437(
+    p_tournament_round_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public','pg_temp'
+AS $function$
+DECLARE
+    v_lb jsonb;
+    v_pending jsonb;
+    v_unresolved integer;
+    v_pending_count integer;
+BEGIN
+    v_lb:=public.obtener_leaderboard_stableford_team_ronda_437(
+        p_tournament_round_id
+    );
+
+    v_unresolved:=COALESCE(
+        NULLIF(v_lb#>>'{summary,unresolvedParticipants}','')::integer,0
+    );
+
+    SELECT COALESCE(jsonb_agg(x.obj ORDER BY x.category_order,x.category_name,x.result_type,x.base_rank),'[]'::jsonb)
+      INTO v_pending
+      FROM (
+        SELECT
+            NULLIF(c->>'categoryDisplayOrder','')::integer AS category_order,
+            c->>'categoryName' AS category_name,
+            'gross'::text AS result_type,
+            NULLIF(p#>>'{gross,baseRank}','')::integer AS base_rank,
+            jsonb_build_object(
+                'competitiveUnit','TEAM',
+                'tournamentCategoryId',NULLIF(c->>'tournamentCategoryId','')::uuid,
+                'categoryName',c->>'categoryName',
+                'resultType','gross',
+                'baseRank',NULLIF(p#>>'{gross,baseRank}','')::integer,
+                'tiedTotal',NULLIF(p#>>'{gross,points}','')::integer,
+                'status','PENDING',
+                'reason','STABLEFORD_TEAM_TIE_ENGINE_PENDING'
+            ) AS obj
+        FROM jsonb_array_elements(COALESCE(v_lb->'categories','[]'::jsonb)) c
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(c->'players','[]'::jsonb)) p
+        WHERE COALESCE((p#>>'{gross,enabled}')::boolean,false)
+          AND COALESCE(NULLIF(p#>>'{gross,tieSize}','')::integer,0)>1
+
+        UNION
+
+        SELECT
+            NULLIF(c->>'categoryDisplayOrder','')::integer,
+            c->>'categoryName',
+            'neto'::text,
+            NULLIF(p#>>'{net,baseRank}','')::integer,
+            jsonb_build_object(
+                'competitiveUnit','TEAM',
+                'tournamentCategoryId',NULLIF(c->>'tournamentCategoryId','')::uuid,
+                'categoryName',c->>'categoryName',
+                'resultType','neto',
+                'baseRank',NULLIF(p#>>'{net,baseRank}','')::integer,
+                'tiedTotal',NULLIF(p#>>'{net,points}','')::integer,
+                'status','PENDING',
+                'reason','STABLEFORD_TEAM_TIE_ENGINE_PENDING'
+            )
+        FROM jsonb_array_elements(COALESCE(v_lb->'categories','[]'::jsonb)) c
+        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(c->'players','[]'::jsonb)) p
+        WHERE COALESCE((p#>>'{net,enabled}')::boolean,false)
+          AND COALESCE(NULLIF(p#>>'{net,tieSize}','')::integer,0)>1
+      ) x;
+
+    v_pending_count:=jsonb_array_length(COALESCE(v_pending,'[]'::jsonb));
+
+    RETURN jsonb_build_object(
+        'supported',true,
+        'applicable',true,
+        'round',v_lb->'round',
+        'summary',v_lb->'summary',
+        'pendingTiebreaks',COALESCE(v_pending,'[]'::jsonb),
+        'status',jsonb_build_object(
+            'competitiveStatus',
+                CASE
+                    WHEN v_unresolved>0 THEN 'RESULTS_PENDING'
+                    WHEN v_pending_count>0 THEN 'TIEBREAKS_PENDING'
+                    ELSE 'READY'
+                END,
+            'competitivelyClosed',false,
+            'unresolvedParticipants',v_unresolved,
+            'pendingTiebreakGroups',v_pending_count
+        )
+    );
+END;
+$function$;
+
+-- ---------------------------------------------------------------------------
+-- E. CIERRE COMPETITIVO: branch explícito Stableford TEAM.
+--    Best Ball conserva exactamente su rama; demás modalidades conservan legado.
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.obtener_estado_cierre_competitivo_ronda(
+    p_tournament_round_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public','pg_temp'
+AS $function$
+DECLARE
+  v_engine text;
+  v_participation text;
+  v_format_code text;
+  v_base jsonb;
+  v_formal jsonb;
+  v_round_closed boolean;
+  v_all_closed boolean;
+  v_all_published boolean;
+  v_base_status text;
+BEGIN
+  SELECT s.scoring_engine,s.participation_type,s.format_code
+    INTO v_engine,v_participation,v_format_code
+  FROM public.tournament_round_condition_snapshots s
+  WHERE s.tournament_round_id=p_tournament_round_id
+  ORDER BY s.created_at DESC,s.id DESC LIMIT 1;
+
+  IF v_engine='stableford'
+     AND v_participation='equipo'
+     AND v_format_code='STABLEFORD_EQUIPO'
+  THEN
+      v_base:=public.obtener_estado_cierre_stableford_team_ronda_437(
+          p_tournament_round_id
+      );
+
+      SELECT EXISTS(
+          SELECT 1
+          FROM public.tournament_round_competitive_closures rc
+          WHERE rc.tournament_round_id=p_tournament_round_id
+            AND rc.competitive_status='FINAL'
+      ) INTO v_round_closed;
+
+      IF v_round_closed THEN
+          v_base:=jsonb_set(
+              v_base,'{status,competitiveStatus}',
+              to_jsonb('FINAL'::text),true
+          );
+          v_base:=jsonb_set(
+              v_base,'{status,competitivelyClosed}',
+              'true'::jsonb,true
+          );
+      END IF;
+
+      RETURN v_base;
+  END IF;
+
+  IF NOT (v_engine='best_ball' AND v_participation='equipo') THEN
+    RETURN public._obtener_estado_cierre_competitivo_ronda_pre328(
+        p_tournament_round_id
+    );
+  END IF;
+
+  -- Rama Best Ball preservada.
+  v_base:=public._obtener_estado_cierre_best_ball_ronda_328(
+      p_tournament_round_id
+  );
+  v_formal:=public._estado_formalizacion_best_ball_ronda_328(
+      p_tournament_round_id
+  );
+
+  v_round_closed:=COALESCE((v_formal->>'roundClosed')::boolean,false);
+  v_all_closed:=COALESCE((v_formal->>'allCategoriesClosed')::boolean,false);
+  v_all_published:=COALESCE((v_formal->>'allCategoriesPublished')::boolean,false);
+  v_base_status:=v_base#>>'{status,competitiveStatus}';
+
+  v_base:=jsonb_set(v_base,'{formalization}',v_formal,true);
+  v_base:=jsonb_set(v_base,'{status,categoryClosuresReady}',to_jsonb(v_all_closed),true);
+  v_base:=jsonb_set(v_base,'{status,publicationsReady}',to_jsonb(v_all_published),true);
+
+  IF v_round_closed THEN
+    v_base:=jsonb_set(v_base,'{status,competitiveStatus}',to_jsonb('FINAL'::text),true);
+    v_base:=jsonb_set(v_base,'{status,competitivelyClosed}','true'::jsonb,true);
+    RETURN v_base;
+  END IF;
+
+  IF v_base_status='FINAL' AND NOT v_all_closed THEN
+    v_base:=jsonb_set(v_base,'{status,competitiveStatus}',to_jsonb('CATEGORIES_PENDING'::text),true);
+    v_base:=jsonb_set(v_base,'{status,competitivelyClosed}','false'::jsonb,true);
+    RETURN v_base;
+  END IF;
+
+  IF v_base_status='FINAL' AND v_all_closed AND NOT v_all_published THEN
+    v_base:=jsonb_set(v_base,'{status,competitiveStatus}',to_jsonb('PUBLICATIONS_PENDING'::text),true);
+    v_base:=jsonb_set(v_base,'{status,competitivelyClosed}','false'::jsonb,true);
+    RETURN v_base;
+  END IF;
+
+  RETURN v_base;
+END;
+$function$;
+
+COMMENT ON FUNCTION public.obtener_estado_cierre_competitivo_ronda(uuid)
+IS '437: agrega estado competitivo Stableford TEAM sin alterar ramas históricas. Empates TEAM permanecen pendientes hasta su motor de desempate.';
+
+COMMIT;
