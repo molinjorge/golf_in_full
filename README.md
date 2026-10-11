@@ -1,51 +1,5 @@
 # Migraciones de base de datos --- Tee Central / GOLF IN FULL
 
-## 433A — Normalización del contrato operativo A-Go-Go
-
-**Objetivo.** Corregir la integración introducida por 433: el leaderboard A-Go-Go ya entregaba categorías, equipos y resultados oficiales, pero su contrato histórico no incluía la bandera superior `supported`. `_estado_formalizacion_resultados_ronda_265` interpreta la ausencia de esa bandera como `false`, dejando permanentemente pendiente REVISAR RESULTADOS.
-
-**Qué hace.**
-- Mantiene el despacho `team_stroke/equipo` hacia `obtener_leaderboard_a_gogo_ronda`.
-- Añade exclusivamente en el adaptador común `supported=true` y `applicable=true`.
-- Conserva intactas las ramas Best Ball y fallback histórico.
-- No recalcula ni modifica scores, rankings, desempates, cierres, publicaciones, HCP TEAM, tarjetas, QR, captura o conciliación.
-- Resultado esperado para PRUEBA A-GO-GO CON QR: 1 categoría, 4 equipos resueltos, `allCategoriesReady=true`; el Asistente avanza de REVISAR RESULTADOS a CERRAR CATEGORÍAS.
-
-
-## 433 — Formalización de resultados A-Go-Go y orden de cierre
-
-**Objetivo.** Integrar A-Go-Go (`equipo / team_stroke`) al contrato operativo común de resultados, cierres por categoría y publicación oficial, reutilizando el leaderboard A-Go-Go existente; impedir además que una ronda futura pueda cerrarse antes de sus categorías.
-
-**Qué hace.**
-- `obtener_leaderboard_operativo_ronda` conserva Best Ball y el fallback histórico, y agrega el despacho `team_stroke/equipo` hacia `obtener_leaderboard_a_gogo_ronda`.
-- No crea un segundo cálculo: reutiliza el resultado, rankings y desempates ya encapsulados por el leaderboard A-Go-Go.
-- `_estado_formalizacion_resultados_ronda_265` puede así evaluar `allCategoriesReady`, `allCategoriesClosed` y `allCategoriesPublished` para A-Go-Go.
-- `cerrar_categoria_competitiva_ronda` y `publicar_resultados_categoria_ronda` conservan sus contratos existentes.
-- `cerrar_ronda_competitiva` agrega un guard: cuando la formalización está soportada exige `allCategoriesClosed=true` antes del cierre histórico `_pre314`.
-- No reabre ni modifica rondas ya cerradas; la ronda histórica de PRUEBA A-GO-GO CON QR puede cerrar su categoría y publicar después de 433.
-- No modifica scoring, HCP TEAM, tarjetas, QR, captura, conciliación ni resultados ya calculados.
-
-**Flujo esperado.** Captura cerrada → Revisar resultados → Cerrar categorías → Cerrar ronda → Publicar resultados → Finalizar torneo.
-
-
-## 432A — Corrección del orden de workflow: congelamiento antes de grupos/salidas
-
-**Objetivo.** Corregir la Migración 432 ya aplicada para restablecer el orden operativo común: el congelamiento de condiciones ocurre antes de preparar grupos y salidas. La composición de equipos se evalúa antes del congelamiento en modalidades por equipos; el HCP TEAM permanece como paso exclusivo de A-Go-Go.
-
-**Qué hace.**
-- `TEAM_COMPOSITION` aplica a formatos con `tipo_participacion = equipo`.
-- A-Go-Go conserva como evidencia especializada `obtener_estado_equipos_incompletos_a_gogo_274`.
-- Best Ball y Stableford por equipos consideran resuelta la composición cuando todas las inscripciones activas están asignadas a un equipo activo; no se introduce HCP TEAM en esas modalidades.
-- `FREEZE` pasa a secuencia 85, antes de grupos (90), salidas (100), validación (110) y emisión (120).
-- El evaluador 395 queda con el flujo: pasos iniciales → pasos específicos pre-freeze → freeze → preparación de ronda → emisión → inicio.
-- No modifica motores deportivos, reglas de score, autorizaciones ni funciones de congelamiento.
-
-**Orden operativo resultante.**
-- Individual: cerrar inscripciones → congelar → grupos → salidas → validar → emitir.
-- Best Ball / Stableford equipo: cerrar inscripciones → formar equipos → congelar → grupos → salidas → validar → emitir.
-- A-Go-Go: cerrar inscripciones → formar equipos → HCP TEAM → congelar → grupos → salidas → validar → emitir.
-
-
 Este documento conserva un registro breve de cada migración aplicada o
 preparada en el proyecto.
 
@@ -1133,874 +1087,387 @@ que Gross/Neto permanecen sin cambio.
 
 ## MIGRACIÓN 389 --- PREPARADA --- CIERRE FORMAL DE CAPTURA POR RONDA
 
-**Estado:** PREPARADA --- pendiente de ejecución manual y verificación
-en PROD.
+**Estado:** PREPARADA --- pendiente de ejecución manual y verificación en PROD.
 
-**Objetivo:** separar explícitamente el fin de la captura del cierre
-competitivo. La ronda permanece con captura abierta mientras existan
-correcciones operativas; cuando todas las unidades están resueltas, un
-administrador autorizado puede ejecutar un cierre formal y auditable de
-captura.
+**Objetivo:** separar explícitamente el fin de la captura del cierre competitivo. La ronda permanece con captura abierta mientras existan correcciones operativas; cuando todas las unidades están resueltas, un administrador autorizado puede ejecutar un cierre formal y auditable de captura.
 
-**Qué hace:** crea `tournament_round_capture_events` como historial
-append-only `CLOSED/REOPENED`; agrega
-`obtener_estado_cierre_captura_ronda_389(...)` con resumen de tarjetas
-físicas capturadas, conciliaciones completadas, `NOT_REQUIRED`, outcomes
-`DNS/WD/DNF/DQ/NO_CARD`, unidades resueltas y pendientes; agrega RPC
-para cerrar y reabrir captura; y agrega un gate de base de datos que
-impide nuevos cierres competitivos de categoría mientras la captura de
-la ronda siga abierta.
+**Qué hace:** crea `tournament_round_capture_events` como historial append-only `CLOSED/REOPENED`; agrega `obtener_estado_cierre_captura_ronda_389(...)` con resumen de tarjetas físicas capturadas, conciliaciones completadas, `NOT_REQUIRED`, outcomes `DNS/WD/DNF/DQ/NO_CARD`, unidades resueltas y pendientes; agrega RPC para cerrar y reabrir captura; y agrega un gate de base de datos que impide nuevos cierres competitivos de categoría mientras la captura de la ronda siga abierta.
 
-**Reglas:** pagos pendientes no intervienen en el cierre deportivo;
-cerrar captura no cierra categorías ni ronda automáticamente; la
-reapertura exige motivo y queda bloqueada si ya existe una categoría
-cerrada formalmente. `POLLA SEPTIEMBRE, 24` conserva intactos sus
-cierres históricos y no recibe un cierre de captura retroactivo
-fabricado.
+**Reglas:** pagos pendientes no intervienen en el cierre deportivo; cerrar captura no cierra categorías ni ronda automáticamente; la reapertura exige motivo y queda bloqueada si ya existe una categoría cerrada formalmente. `POLLA SEPTIEMBRE, 24` conserva intactos sus cierres históricos y no recibe un cierre de captura retroactivo fabricado.
 
-**Frontend/Asistente pendiente:** la siguiente fase debe consumir este
-contrato para mostrar permanentemente el bloque
-`ESTADO DE CAPTURA DE LA RONDA`, el botón visible `CERRAR CAPTURA`,
-bloquear edición después del cierre, habilitar `CERRAR CATEGORÍA` sólo
-después del cierre de captura y reflejar la misma secuencia en el
-Asistente Operativo.
+**Frontend/Asistente pendiente:** la siguiente fase debe consumir este contrato para mostrar permanentemente el bloque `ESTADO DE CAPTURA DE LA RONDA`, el botón visible `CERRAR CAPTURA`, bloquear edición después del cierre, habilitar `CERRAR CATEGORÍA` sólo después del cierre de captura y reflejar la misma secuencia en el Asistente Operativo.
 
 ## MIGRACIÓN 390 --- PREPARADA --- BLINDAJE DE BASE DE DATOS DESPUÉS DEL CIERRE DE CAPTURA
 
-**Estado:** PREPARADA --- pendiente de ejecución manual y verificación
-en PROD.
+**Estado:** PREPARADA --- pendiente de ejecución manual y verificación en PROD.
 
-**Objetivo:** convertir `CAPTURA CERRADA` en una frontera real de base
-de datos y no sólo de interfaz, impidiendo que jugadores, marcadores,
-administradores, enlaces directos o solicitudes ya abiertas modifiquen
-captura después del cierre formal.
+**Objetivo:** convertir `CAPTURA CERRADA` en una frontera real de base de datos y no sólo de interfaz, impidiendo que jugadores, marcadores, administradores, enlaces directos o solicitudes ya abiertas modifiquen captura después del cierre formal.
 
-**Qué hace:** agrega un guard transaccional sobre las tablas mutables de
-sesión de captura, scores digitales individual/A-Go-Go/Best Ball,
-recepción y scores físicos individual/Best Ball, conciliación,
-resoluciones de conciliación y outcomes. El guard serializa cada
-mutación contra el mismo registro de ronda que bloquea
-`cerrar_captura_ronda_389`, evitando carreras entre una acción en vuelo
-y el cierre. Si la última acción formal 389 es `CLOSED`, PostgreSQL
-rechaza la mutación con mensaje `CAPTURA CERRADA`.
+**Qué hace:** agrega un guard transaccional sobre las tablas mutables de sesión de captura, scores digitales individual/A-Go-Go/Best Ball, recepción y scores físicos individual/Best Ball, conciliación, resoluciones de conciliación y outcomes. El guard serializa cada mutación contra el mismo registro de ronda que bloquea `cerrar_captura_ronda_389`, evitando carreras entre una acción en vuelo y el cierre. Si la última acción formal 389 es `CLOSED`, PostgreSQL rechaza la mutación con mensaje `CAPTURA CERRADA`.
 
-**Consulta para jugador/marcador:** agrega
-`obtener_cierre_captura_score_card_390(uuid)`, que reutiliza
-`puede_ver_score_card_captura(...)` y entrega únicamente
-`captureClosed`, estado, ronda y fecha de cierre para que `/score/card`
-pueda mostrar modo lectura a participantes autorizados sin abrir la
-consulta administrativa de la Migración 389.
+**Consulta para jugador/marcador:** agrega `obtener_cierre_captura_score_card_390(uuid)`, que reutiliza `puede_ver_score_card_captura(...)` y entrega únicamente `captureClosed`, estado, ronda y fecha de cierre para que `/score/card` pueda mostrar modo lectura a participantes autorizados sin abrir la consulta administrativa de la Migración 389.
 
-**Compatibilidad:** una ronda sin evento 389 se considera `OPEN`; por
-ello los torneos históricos, incluido `POLLA SEPTIEMBRE, 24`, no se
-reinterpretan ni reciben eventos artificiales. La reapertura formal 389
-vuelve a permitir mutaciones siempre que sus propias reglas la
-autoricen.
+**Compatibilidad:** una ronda sin evento 389 se considera `OPEN`; por ello los torneos históricos, incluido `POLLA SEPTIEMBRE, 24`, no se reinterpretan ni reciben eventos artificiales. La reapertura formal 389 vuelve a permitir mutaciones siempre que sus propias reglas la autoricen.
 
-**Qué no modifica:** pagos, premios, control de acceso, emisión de
-tarjetas, sustituciones, cierre de categoría, desempates, publicación,
-cierre de ronda, resultados históricos ni snapshots.
+**Qué no modifica:** pagos, premios, control de acceso, emisión de tarjetas, sustituciones, cierre de categoría, desempates, publicación, cierre de ronda, resultados históricos ni snapshots.
 
-## Migración 391 --- Blindaje de reapertura de captura con ronda cerrada
+## Migración 391 — Blindaje de reapertura de captura con ronda cerrada
 
-**Objetivo:** establecer explícitamente que el cierre competitivo de una
-ronda es un punto de no retorno para la captura.
+**Objetivo:** establecer explícitamente que el cierre competitivo de una ronda es un punto de no retorno para la captura.
 
-**Qué hace:** actualiza `public.reabrir_captura_ronda_389` para rechazar
-la reapertura cuando exista un cierre competitivo `FINAL` en
-`tournament_round_competitive_closures`. Conserva además la protección
-existente que impide reabrir cuando ya existe al menos una categoría
-cerrada formalmente. No modifica resultados, pagos, desempates,
-publicaciones ni cierres existentes.
+**Qué hace:** actualiza `public.reabrir_captura_ronda_389` para rechazar la reapertura cuando exista un cierre competitivo `FINAL` en `tournament_round_competitive_closures`. Conserva además la protección existente que impide reabrir cuando ya existe al menos una categoría cerrada formalmente. No modifica resultados, pagos, desempates, publicaciones ni cierres existentes.
 
-## Migración 392 --- Estado competitivo de categoría respeta cierre de captura
+
+## Migración 392 — Estado competitivo de categoría respeta cierre de captura
 
 **Estado:** EJECUTADA Y VERIFICADA ESTRUCTURALMENTE EN PROD.
 
-**Objetivo:** impedir que una categoría se presente como
-`READY_TO_CLOSE` mientras la captura formal de la ronda continúe
-abierta.
+**Objetivo:** impedir que una categoría se presente como `READY_TO_CLOSE` mientras la captura formal de la ronda continúe abierta.
 
-**Qué hace:** extiende
-`obtener_estado_competitivo_categorias_ronda(...)` con `captureClosed`,
-`captureStatus`, `blockingReason` y `statusBeforeCaptureGate`.
-`CAPTURE_OPEN` tiene prioridad como bloqueo de cierre de categoría, sin
-alterar resultados ni el motor de desempates. Los desempates
-`RESOLVED_AUTOMATIC` continúan siendo silenciosos.
+**Qué hace:** extiende `obtener_estado_competitivo_categorias_ronda(...)` con `captureClosed`, `captureStatus`, `blockingReason` y `statusBeforeCaptureGate`. `CAPTURE_OPEN` tiene prioridad como bloqueo de cierre de categoría, sin alterar resultados ni el motor de desempates. Los desempates `RESOLVED_AUTOMATIC` continúan siendo silenciosos.
 
-**Frontend:** UI-392A consume esos campos sin una segunda consulta a
-389; `CERRAR CATEGORÍA` permanece visible pero deshabilitado con el
-mensaje `Primero debes cerrar la captura de la ronda.` mientras captura
-esté abierta.
+**Frontend:** UI-392A consume esos campos sin una segunda consulta a 389; `CERRAR CATEGORÍA` permanece visible pero deshabilitado con el mensaje `Primero debes cerrar la captura de la ronda.` mientras captura esté abierta.
 
-## Migración 393 --- Workflow formal de cierre de captura
+## Migración 393 — Workflow formal de cierre de captura
 
 **Estado:** EJECUTADA Y VERIFICADA ESTRUCTURALMENTE EN PROD.
 
-**Objetivo:** incorporar `CIERRE DE CAPTURA` como fase formal del
-workflow materializado que alimenta al Asistente Operativo, manteniendo
-la posibilidad de consultar resultados provisionales mientras la captura
-siga abierta.
+**Objetivo:** incorporar `CIERRE DE CAPTURA` como fase formal del workflow materializado que alimenta al Asistente Operativo, manteniendo la posibilidad de consultar resultados provisionales mientras la captura siga abierta.
 
-**Qué hace:** agrega/materializa el nodo de ronda `ROUND_CAPTURE_CLOSE`
-entre conciliación y cierre de categorías. El nodo queda `COMPLETE`
-cuando el último evento formal de captura es `CLOSED`, `AVAILABLE`
-cuando conciliación ya está completa y corresponde cerrar captura, y
-`BLOCKED` mientras la conciliación no esté completa. `ROUND_RESULTS`
-permanece independiente del cierre de captura para permitir
-visualización provisional. `ROUND_CATEGORY_CLOSURE` exige
-simultáneamente resultados completos y `ROUND_CAPTURE_CLOSE=COMPLETE`;
-si captura sigue abierta queda bloqueado explícitamente por
-`ROUND_CAPTURE_CLOSE`.
+**Qué hace:** agrega/materializa el nodo de ronda `ROUND_CAPTURE_CLOSE` entre conciliación y cierre de categorías. El nodo queda `COMPLETE` cuando el último evento formal de captura es `CLOSED`, `AVAILABLE` cuando conciliación ya está completa y corresponde cerrar captura, y `BLOCKED` mientras la conciliación no esté completa. `ROUND_RESULTS` permanece independiente del cierre de captura para permitir visualización provisional. `ROUND_CATEGORY_CLOSURE` exige simultáneamente resultados completos y `ROUND_CAPTURE_CLOSE=COMPLETE`; si captura sigue abierta queda bloqueado explícitamente por `ROUND_CAPTURE_CLOSE`.
 
-**Qué no modifica:** motores deportivos, Gross/Neto, desempates, pagos,
-publicaciones, cierres ya registrados, captura física, conciliación ni
-la RPC 389 de cierre/reapertura. Tampoco convierte resultados
-provisionales en dependientes del cierre formal de captura.
+**Qué no modifica:** motores deportivos, Gross/Neto, desempates, pagos, publicaciones, cierres ya registrados, captura física, conciliación ni la RPC 389 de cierre/reapertura. Tampoco convierte resultados provisionales en dependientes del cierre formal de captura.
 
-**Frontend/Asistente pendiente:** después de verificar 393, adaptar la
-presentación del Asistente para nombrar `ROUND_CAPTURE_CLOSE` como
-`Cierre de captura`, ofrecer la acción correspondiente cuando esté
-disponible y mantener pagos pendientes únicamente como warning no
-bloqueante.
+**Frontend/Asistente pendiente:** después de verificar 393, adaptar la presentación del Asistente para nombrar `ROUND_CAPTURE_CLOSE` como `Cierre de captura`, ofrecer la acción correspondiente cuando esté disponible y mantener pagos pendientes únicamente como warning no bloqueante.
 
-## Migración 394 --- Plantilla maestra de workflow y preferencias funcionales del torneo
+
+## Migración 394 — Plantilla maestra de workflow y preferencias funcionales del torneo
 
 **Estado:** EJECUTADA Y VERIFICADA EN PROD.
 
-**Objetivo:** crear la capa declarativa maestra del ciclo operativo de
-TEE CENTRAL y registrar en Información general del torneo las decisiones
-`usar_tarjeta_digital` y `usar_estaciones_digitales_premios`, sin
-sustituir todavía el workflow materializado vigente ni alterar ninguna
-regla deportiva.
+**Objetivo:** crear la capa declarativa maestra del ciclo operativo de TEE CENTRAL y registrar en Información general del torneo las decisiones `usar_tarjeta_digital` y `usar_estaciones_digitales_premios`, sin sustituir todavía el workflow materializado vigente ni alterar ninguna regla deportiva.
 
-**Qué hace:** agrega a `tournaments` los dos indicadores funcionales;
-crea `workflow_master_templates` y `workflow_master_nodes`; registra la
-plantilla `TEE_CENTRAL_STANDARD` versión 1 con los 25 nodos aprobados;
-agrega `workflow_template_version` al torneo para fijar la versión
-aplicable; y publica `obtener_plantilla_workflow_394(uuid)` como
-consulta descriptiva de la plantilla correspondiente al torneo. La
-plantilla almacena orden, ámbito, textos, navegación, aplicabilidad y
-claves de evidencia, pero no SQL ejecutable ni reglas de autorización.
+**Qué hace:** agrega a `tournaments` los dos indicadores funcionales; crea `workflow_master_templates` y `workflow_master_nodes`; registra la plantilla `TEE_CENTRAL_STANDARD` versión 1 con los 25 nodos aprobados; agrega `workflow_template_version` al torneo para fijar la versión aplicable; y publica `obtener_plantilla_workflow_394(uuid)` como consulta descriptiva de la plantilla correspondiente al torneo. La plantilla almacena orden, ámbito, textos, navegación, aplicabilidad y claves de evidencia, pero no SQL ejecutable ni reglas de autorización.
 
-**Tarjeta digital:** `usar_tarjeta_digital=true` hace aplicables las
-fases descriptivas de captura digital/conciliación. No existe un cierre
-digital separado: `ROUND_CAPTURE_CLOSE` continúa siendo el único cierre
-formal de captura de scores y se sustenta en
-`tournament_round_capture_events`.
+**Tarjeta digital:** `usar_tarjeta_digital=true` hace aplicables las fases descriptivas de captura digital/conciliación. No existe un cierre digital separado: `ROUND_CAPTURE_CLOSE` continúa siendo el único cierre formal de captura de scores y se sustenta en `tournament_round_capture_events`.
 
-**Premios especiales:** `usar_estaciones_digitales_premios` sólo declara
-si se utilizarán estaciones digitales. No crea nodos deportivos,
-bloqueos ni requisitos de cierre/publicación. Los premios capturados
-podrán incorporarse a resultados por el módulo existente. El control de
-acceso no recibe un campo nuevo: se conserva `usar_control_acceso_qr`.
+**Premios especiales:** `usar_estaciones_digitales_premios` sólo declara si se utilizarán estaciones digitales. No crea nodos deportivos, bloqueos ni requisitos de cierre/publicación. Los premios capturados podrán incorporarse a resultados por el módulo existente. El control de acceso no recibe un campo nuevo: se conserva `usar_control_acceso_qr`.
 
-**Compatibilidad y seguridad:** no modifica
-`reconciliar_workflow_torneo_332`, `_adaptar_asistente_workflow_338`,
-las reconstrucciones 332--393, motores Stroke
-Play/Stableford/A-Go-Go/Best Ball, HCP, desempates, Freeze,
-inscripciones, salidas, tarjetas, captura, conciliación, resultados,
-cierres, publicaciones, pagos, acceso ni premios.
-`tournament_workflow_nodes` sigue siendo el estado materializado
-vigente. La 394 es fundacional y no cambia el comportamiento operativo
-del Asistente hasta una integración posterior expresamente aprobada.
+**Compatibilidad y seguridad:** no modifica `reconciliar_workflow_torneo_332`, `_adaptar_asistente_workflow_338`, las reconstrucciones 332–393, motores Stroke Play/Stableford/A-Go-Go/Best Ball, HCP, desempates, Freeze, inscripciones, salidas, tarjetas, captura, conciliación, resultados, cierres, publicaciones, pagos, acceso ni premios. `tournament_workflow_nodes` sigue siendo el estado materializado vigente. La 394 es fundacional y no cambia el comportamiento operativo del Asistente hasta una integración posterior expresamente aprobada.
 
-**Estados terminales:** la plantilla registra como regla arquitectónica
-que FINALIZADO, CANCELADO y VENCIDO son no operativos para el Asistente;
-`VENCIDO` se determinará reutilizando `torneo_esta_vencido_295`, sin
-modificar el enum `estatus_torneo`. Esta migración no cambia el
-comportamiento actual del Asistente.
+**Estados terminales:** la plantilla registra como regla arquitectónica que FINALIZADO, CANCELADO y VENCIDO son no operativos para el Asistente; `VENCIDO` se determinará reutilizando `torneo_esta_vencido_295`, sin modificar el enum `estatus_torneo`. Esta migración no cambia el comportamiento actual del Asistente.
 
-**Verificación prevista:** comprobar columnas nuevas y defaults;
-existencia/ACL/RLS de las tablas maestras; exactamente una plantilla
-activa versión 1; exactamente 25 nodos activos y secuencias únicas;
-ausencia de nodo de estaciones de premios; presencia de
-`START_TOURNAMENT` y `ROUND_CAPTURE_CLOSE`; y confirmar que las
-funciones operativas existentes conservan su definición.
+**Verificación prevista:** comprobar columnas nuevas y defaults; existencia/ACL/RLS de las tablas maestras; exactamente una plantilla activa versión 1; exactamente 25 nodos activos y secuencias únicas; ausencia de nodo de estaciones de premios; presencia de `START_TOURNAMENT` y `ROUND_CAPTURE_CLOSE`; y confirmar que las funciones operativas existentes conservan su definición.
 
-## Migración 395 --- Evaluador descriptivo del workflow maestro
+
+## Migración 395 — Evaluador descriptivo del workflow maestro
 
 **Estado:** EJECUTADA Y VERIFICADA EN PROD.
 
-**Objetivo:** evaluar la plantilla maestra 394 contra evidencia
-operativa real para producir un estado descriptivo del ciclo y una
-propuesta de `nextAction`, sin sustituir todavía al Asistente vigente y
-sin participar en ninguna autorización o bloqueo.
+**Objetivo:** evaluar la plantilla maestra 394 contra evidencia operativa real para producir un estado descriptivo del ciclo y una propuesta de `nextAction`, sin sustituir todavía al Asistente vigente y sin participar en ninguna autorización o bloqueo.
 
-**Qué hace:** agrega `obtener_workflow_evaluado_395(uuid)`, una RPC
-`STABLE` y de sólo lectura. Lee la plantilla versionada, las
-preferencias del torneo y evidencia existente de configuración,
-inscripciones, Freeze, HCP de equipos, grupos, salidas, emisión de
-tarjetas, inicio de ronda, captura física, conciliación, cierre único de
-captura, resultados, desempates excepcionales, cierres de categoría,
-publicación, cierre de ronda, corte y finalización. Expande los nodos de
-ronda para cada ronda activa y devuelve `COMPLETE`, `PENDING`,
-`NOT_APPLICABLE` o `INFORMATIONAL`.
+**Qué hace:** agrega `obtener_workflow_evaluado_395(uuid)`, una RPC `STABLE` y de sólo lectura. Lee la plantilla versionada, las preferencias del torneo y evidencia existente de configuración, inscripciones, Freeze, HCP de equipos, grupos, salidas, emisión de tarjetas, inicio de ronda, captura física, conciliación, cierre único de captura, resultados, desempates excepcionales, cierres de categoría, publicación, cierre de ronda, corte y finalización. Expande los nodos de ronda para cada ronda activa y devuelve `COMPLETE`, `PENDING`, `NOT_APPLICABLE` o `INFORMATIONAL`.
 
-**Asistente:** calcula descriptivamente el primer nodo accionable,
-aplicable y no completo como `nextAction`. Ese dato es únicamente una
-guía. La aplicación continúa siendo la única autoridad para decidir si
-una operación puede ejecutarse. La 395 no conecta todavía
-`_adaptar_asistente_workflow_338` con este evaluador.
+**Asistente:** calcula descriptivamente el primer nodo accionable, aplicable y no completo como `nextAction`. Ese dato es únicamente una guía. La aplicación continúa siendo la única autoridad para decidir si una operación puede ejecutarse. La 395 no conecta todavía `_adaptar_asistente_workflow_338` con este evaluador.
 
-**Captura digital:** `ROUND_DIGITAL_SCORING` permanece informativo. No
-tiene cierre independiente. `ROUND_CAPTURE_CLOSE`, sustentado por el
-cierre 389, sigue siendo el único cierre formal de la captura de scores
-física y digital.
+**Captura digital:** `ROUND_DIGITAL_SCORING` permanece informativo. No tiene cierre independiente. `ROUND_CAPTURE_CLOSE`, sustentado por el cierre 389, sigue siendo el único cierre formal de la captura de scores física y digital.
 
-**Premios:** `usar_estaciones_digitales_premios` se devuelve sólo como
-preferencia. No existe nodo de premios, no se evalúa como requisito y no
-puede impedir resultados, publicación, cierre de categoría, cierre de
-ronda ni finalización.
+**Premios:** `usar_estaciones_digitales_premios` se devuelve sólo como preferencia. No existe nodo de premios, no se evalúa como requisito y no puede impedir resultados, publicación, cierre de categoría, cierre de ronda ni finalización.
 
-**Estados terminales:** FINALIZADO, CANCELADO y VENCIDO producen
-`assistantOperational=false` y `nextAction=null`; VENCIDO reutiliza
-`torneo_esta_vencido_295`.
+**Estados terminales:** FINALIZADO, CANCELADO y VENCIDO producen `assistantOperational=false` y `nextAction=null`; VENCIDO reutiliza `torneo_esta_vencido_295`.
 
-**Qué no modifica:** `tournament_workflow_nodes`, reconstrucciones
-332--393, Asistente 338, motores deportivos, reglas de HCP, desempates,
-inscripciones, Freeze, salidas, emisión, captura, conciliación,
-resultados, cierres, publicación, pagos, acceso o premios. No contiene
-`INSERT`, `UPDATE` ni `DELETE` operativos.
+**Qué no modifica:** `tournament_workflow_nodes`, reconstrucciones 332–393, Asistente 338, motores deportivos, reglas de HCP, desempates, inscripciones, Freeze, salidas, emisión, captura, conciliación, resultados, cierres, publicación, pagos, acceso o premios. No contiene `INSERT`, `UPDATE` ni `DELETE` operativos.
+
 
 ### Verificación posterior a la ejecución de la Migración 395
 
-Se confirmó directamente en PROD la existencia de
-`public.obtener_workflow_evaluado_395(uuid)`. La función conserva
-`SECURITY INVOKER`, tiene `EXECUTE` para `authenticated` y
-`service_role`, no para `anon`, y referencia la plantilla maestra
-`workflow_master_nodes` sin depender de `tournament_workflow_nodes`. La
-plantilla `TEE_CENTRAL_STANDARD` versión 1 conserva sus 25 nodos.
-
-La prueba desde el canal administrativo de diagnóstico devolvió
-`No autenticado` al no existir `auth.uid()` en ese contexto; este
-resultado es consistente con el contrato de seguridad de la RPC y no
-constituye un fallo funcional. La prueba del payload con identidad
-autenticada queda para la integración controlada del frontend/Asistente.
-
-## MIGRACIÓN 396 --- PREPARADA --- ADAPTADOR DEL ASISTENTE A LA PLANTILLA MAESTRA
-
-**Estado:** PREPARADA --- pendiente de ejecución manual y verificación
-en PROD.
-
-**Objetivo:** crear un contrato de Asistente Operativo que consuma
-exclusivamente el evaluador descriptivo 395 para seleccionar el
-siguiente paso, manteniendo a la aplicación como única autoridad sobre
-bloqueos, autorizaciones y operaciones deportivas.
-
-**Qué crea:** `obtener_asistente_operativo_torneo_396(uuid)`. La RPC
-valida autenticación y permisos, consulta
-`obtener_workflow_evaluado_395(uuid)`, expone `nextAction`, nodos de
-torneo, rondas, preferencias y mensajes terminales, y conserva el
-warning administrativo no bloqueante de pagos pendientes.
-
-**Qué no hace:** no sustituye todavía
-`obtener_asistente_operativo_torneo(uuid)`; no modifica
-`_adaptar_asistente_workflow_338`, 340, 341 ni los reconstructores
-332--393; no escribe `tournament_workflow_nodes`; no ejecuta acciones;
-no cambia motores, reglas, procesos, autorizaciones, guards, bloqueos,
-Freeze, inscripciones, salidas, tarjetas, captura, conciliación,
-resultados, desempates, cierres, publicación, pagos ni finalización.
-
-**Estrategia de despliegue:** esta fase instala la nueva RPC en
-paralelo. Primero se verifica su payload autenticado en la aplicación.
-Sólo después se cambiará el frontend del Asistente para consumirla. De
-esta forma existe rollback funcional inmediato: el contrato público
-actual permanece intacto durante la prueba.
-
-**Regla de autoridad:** `authority=APPLICATION`,
-`assistantRole=GUIDE_ONLY`, `writesOperationalState=false`.
-
-## MIGRACIÓN 397 --- EVALUADOR NO ANTICIPA RESULTADOS SIN SNAPSHOT
-
-**Objetivo:** corregir exclusivamente la capa descriptiva del evaluador
-395 para que el Asistente pueda consultar torneos que todavía están en
-configuración y cuya ronda aún no tiene snapshot congelado de scoring.
-
-**Qué hace:** antes de consultar evidencia competitiva de resultados,
-desempates, cierre de categorías y publicación,
-`obtener_workflow_evaluado_395(uuid)` comprueba si existe un
-`tournament_round_condition_snapshots` con `scoring_engine`. Si todavía
-no existe, esas evidencias futuras se consideran aún no disponibles y
-sus pasos permanecen descriptivamente pendientes. No se crea ni congela
-ningún snapshot.
-
-**Qué no hace:** no modifica motores deportivos, reglas, procesos,
-autorizaciones, guards, bloqueos, Freeze, snapshots, inscripciones,
-salidas, tarjetas, captura, conciliación, desempates, resultados,
-cierres, publicación, pagos ni finalización. No escribe
-`tournament_workflow_nodes`.
-
-**Causa corregida:** PRUEBA AUTOSERVICIO #3 devolvía HTTP 500 al
-consultar la RPC 396 porque el evaluador 395 pedía anticipadamente
-evidencia competitiva y una función deportiva respondía
-`La ronda no tiene snapshot congelado de scoring.` El torneo se
-encontraba correctamente en una fase anterior.
-
-## MIGRACIÓN 398 --- ASISTENTE 396 SIN CADENA LEGACY
-
-**Objetivo:** eliminar de la nueva capa de guía la dependencia indirecta
-del Asistente anterior.
-
-**Qué hace:** `obtener_asistente_operativo_torneo_396(uuid)` deja de
-llamar `_adaptar_asistente_pagos_pendientes_340`, porque esa función
-invoca `_adaptar_asistente_workflow_338` y éste ejecuta la
-reconciliación legacy. El warning `PENDING_PAYMENTS` se conserva
-mediante una consulta directa de solo lectura a las inscripciones
-activas con `estado_pago='PENDIENTE'`.
-
-**Qué no hace:** no modifica motores, reglas deportivas, procesos,
-autorizaciones, bloqueos, snapshots, Freeze, salidas, tarjetas, captura,
-conciliación, resultados, cierres, publicación, pagos ni finalización.
-No modifica el significado ni el carácter no bloqueante del warning de
-pagos.
-
-## MIGRACIÓN 399 --- CORRECCIÓN DE EVIDENCIA DE CIERRE DE RONDA
-
-**Objetivo:** corregir una referencia de columna exclusivamente
-descriptiva en el evaluador 395.
-
-**Qué hace:** en la evidencia `ROUND_CLOSED`, sustituye la referencia
-inexistente `tournament_round_competitive_closures.status` por la
-columna real `competitive_status`. Conserva íntegramente la protección
-397 para rondas sin snapshot.
-
-**Qué no hace:** no modifica ningún cierre, estado deportivo, motor,
-regla, autorización, bloqueo ni dato operativo. Únicamente corrige cómo
-el Asistente lee evidencia ya existente.
-
-## MIGRACIÓN 400 --- CORRECCIÓN DE EVIDENCIA DE CORTES EN EL EVALUADOR
-
-**Objetivo:** corregir de una vez las referencias del evaluador
-descriptivo 395 al esquema real del módulo de cortes.
-
-**Qué hace:** elimina la referencia inexistente
-`tournament_cut_rules.tournament_id`; determina la aplicabilidad del
-corte mediante `despues_de_ronda_id`; y cuenta las decisiones desde
-`tournament_cut_player_statuses`, usando sus columnas reales
-`tournament_id`, `cut_after_round_id`, `tournament_registration_id` y
-`cut_status`.
-
-**Qué no hace:** no modifica reglas de corte, resultados, motores
-deportivos, autorizaciones, bloqueos ni datos operativos. Sólo corrige
-la lectura descriptiva utilizada por el Asistente.
-
-## MIGRACIÓN 401 --- ORDEN CORRECTO DE `nextAction` EN EL WORKFLOW MAESTRO
-
-**Objetivo:** hacer que el Asistente seleccione "Qué sigue" después de
-evaluar toda la evidencia, evitando que un nodo de torneo posterior
----especialmente `TOURNAMENT_FINALIZATION`--- se adelante a los pasos
-pendientes de una ronda.
-
-**Qué hace:** conserva intacta la evaluación de evidencia y cambia
-únicamente la selección descriptiva de `nextAction`. Respeta los pasos
-iniciales del torneo (10--70), la preparación de la ronda,
-`START_TOURNAMENT` una sola vez en la secuencia 130, la operación/cierre
-de la ronda desde 140, el orden de rondas y finalmente
-`TOURNAMENT_FINALIZATION` 900.
-
-**Qué no hace:** no modifica motores deportivos, reglas, autorizaciones,
-bloqueos, estados operativos, datos de torneo ni la plantilla maestra.
-El Asistente continúa siendo exclusivamente una guía.
-
-## MIGRACIÓN 402 --- GUARDADO ATÓMICO DE CUPOS Y CATEGORÍAS
-
-**Objetivo:** impedir que un torneo quede con una configuración parcial
-o descuadrada entre el cupo total y los cupos de sus categorías.
-
-**Qué hace:** crea
-`guardar_configuracion_cupos_categorias_402(uuid,jsonb,integer)`, una
-operación transaccional que recibe la configuración completa, exige al
-menos una categoría, cupos enteros mayores a cero y que la suma de cupos
-sea exactamente igual al cupo total del torneo. Permite cambiar en la
-misma operación el cupo general y su distribución, conserva los IDs de
-categorías existentes al actualizar y revierte toda la llamada ante
-cualquier error.
-
-**Qué conserva:** no modifica los guards existentes de congelamiento,
-cancelación o vencimiento; tampoco cambia motores deportivos, reglas de
-inscripción, elegibilidad, resultados, autorizaciones ni bloqueos. Los
-guards actuales continúan siendo la autoridad para decidir cuándo la
-configuración puede editarse.
-
-**Integración pendiente de frontend:** sustituir los guardados directos
-`DELETE/INSERT/UPDATE` de `tournament_categories` por esta RPC y enviar
-conjuntamente el cupo total cuando éste cambie.
-
-## MIGRACIÓN 403 --- BLINDAJE DEL CUPO TOTAL CONTRA DESCUADRE DE CATEGORÍAS
-
-**Objetivo:** cerrar el camino alterno que permitía modificar
-directamente `tournaments.cupo_maximo` y dejarlo distinto de la suma de
-los cupos de categorías.
-
-**Qué hace:** agrega un trigger `BEFORE UPDATE OF cupo_maximo` sobre
-`tournaments`. Si el torneo ya tiene categorías, rechaza un cambio
-aislado cuyo nuevo cupo total no coincida con la suma vigente de
-`tournament_categories.cupo_maximo`, o si existen categorías con cupo
-nulo/no positivo. Los cambios conjuntos de cupo total y distribución
-siguen realizándose mediante
-`guardar_configuracion_cupos_categorias_402`, en una sola transacción.
-
-**Compatibilidad:** no corrige automáticamente inconsistencias
-preexistentes y no modifica motores deportivos, congelamiento,
-inscripción, resultados ni reglas competitivas. Conserva todos los
-guards existentes.
-
-## MIGRACIÓN 404 --- CUPOS DE CATEGORÍAS MENORES O IGUALES AL CUPO TOTAL
-
-**Objetivo:** permitir que el cupo total del torneo sea mayor que la
-suma de los cupos distribuidos entre categorías, manteniendo como única
-condición inválida que las categorías comprometan más lugares que el
-cupo total.
-
-**Qué hace:** ajusta las validaciones creadas por 402 y 403 para aplicar
-`SUM(cupos categorías) <= cupo total`. La RPC 402 continúa siendo
-atómica, mantiene cupos individuales enteros y mayores a cero y ahora
-devuelve también `sinAsignar`. El guard 403 permite aumentar el cupo
-total dejando lugares todavía sin distribuir y bloquea únicamente cuando
-el nuevo total queda por debajo de la suma ya asignada.
-
-**Orden transaccional:** la RPC 402 actualiza la distribución de
-categorías antes de modificar el cupo total para que el guard 403 pueda
-validar correctamente reducciones conjuntas dentro de la misma
-transacción.
-
-**Qué no cambia:** Freeze, cancelación, vencimiento, autorizaciones,
-inscripción, motores deportivos, hándicap, desempates, resultados y
-cierres competitivos permanecen intactos.
-
-## MIGRACIÓN 405 --- DATOS GENERALES COMO EVIDENCIA DEL PRIMER PASO DEL WORKFLOW
-
-**Objetivo:** hacer que `CONFIGURATION / Configurar datos generales` se
-considere completo exclusivamente cuando los campos obligatorios de
-Datos generales tengan valores válidos guardados, sin depender de
-categorías, franjas de HCP, desempates ni estructura de rondas.
-
-**Qué hace:** agrega `obtener_estado_datos_generales_torneo_405(uuid)`,
-función descriptiva que revisa Nombre, Campo de golf, Fecha inicio,
-Fecha fin, Cupo máximo, Número de rondas, Modalidad, Porcentaje de
-hándicap y Tarifa individual. La tarifa individual acepta cero para
-torneos gratuitos. Actualiza únicamente la evidencia usada por
-`TOURNAMENT_CONFIGURATION_COMPLETE` dentro de
-`obtener_workflow_evaluado_395`.
-
-**Separación de responsabilidades:** categorías, franjas de hándicap,
-desempates y estructura de rondas conservan sus propios nodos del
-workflow. La migración no cambia la autoridad de la aplicación ni
-ninguna autorización o bloqueo operativo.
-
-**No modifica:** motores deportivos, Freeze, inscripciones,
-apertura/cierre de inscripciones, reglas competitivas, resultados,
-desempates, cierres, pagos ni acciones operativas.
-
-## MIGRACIÓN 406 --- EVIDENCIA DE CONFIGURACIÓN DE DESEMPATES
-
-**Objetivo:** hacer que `TIEBREAK_CONFIGURATION / Configurar desempates`
-se considere completo a partir de la configuración activa realmente
-guardada en `tournament_tiebreak_rules`, en lugar de depender del
-indicador agregado `tiebreakReady` usado por la lógica de apertura de
-inscripciones.
-
-**Qué hace:** agrega
-`obtener_estado_configuracion_desempates_406(uuid)`, función
-exclusivamente descriptiva que cuenta reglas activas Gross y Neto. Para
-la configuración global actual, el nodo queda completo cuando existe al
-menos una regla activa para Gross y al menos una para Neto. Actualiza
-únicamente la evidencia utilizada por `TIEBREAK_CONFIGURATION_COMPLETE`
-en `obtener_workflow_evaluado_395`.
-
-**Caso verificado antes de migrar:** PRUEBA AUTOSERVICIO #3 tiene cuatro
-reglas activas Gross y cuatro Neto, todas con alcance global `todos`,
-por lo que debe reconocerse como configuración guardada.
-
-**No modifica:** motor de desempates, métodos, secuencias guardadas,
-resolución automática/manual, autorizaciones, Freeze, inscripciones,
-resultados, cierres ni ningún bloqueo operativo.
-
-## MIGRACIÓN 407 --- CATEGORÍAS COMPLETAS Y REGLA DE CUPOS EN APERTURA
-
-**Objetivo:** impedir que la fase de configuración de categorías se
-considere completa si alguna categoría carece de clasificación
-competitiva, y alinear las validaciones de apertura con la regla vigente
-de cupos.
-
-**Qué hace:** agrega `obtener_estado_categorias_configuradas_407(uuid)`,
-que considera completa la fase `HANDICAP_RANGES` sólo cuando las franjas
-HCP son válidas y todas las categorías tienen al menos una clasificación
-competitiva configurada (`GROSS`, `NET` o `BOTH`). El evaluador 395
-utiliza esta evidencia para ese nodo.
-
-**Cupos:** actualiza `validar_configuracion_minima_torneo` y la
-comparación de `baseConfigurationReady` en
-`_estado_apertura_inscripciones_379` para aceptar
-`suma de cupos de categorías <= cupo máximo del torneo`; sólo el
-excedente es inválido.
-
-**No modifica:** motor de desempates, reglas guardadas, Freeze,
-autorizaciones, motores deportivos ni acciones operativas. Las
-clasificaciones se siguen configurando mediante la RPC existente
-`configurar_clasificacion_categoria_torneo`.
-
-## MIGRACIÓN 408 --- MENSAJE DE RONDAS AL ABRIR INSCRIPCIONES
-
-**Objetivo:** orientar al operador cuando intenta abrir inscripciones
-antes de terminar la configuración de rondas.
-
-**Qué hace:** conserva exactamente el bloqueo existente de
-`abrir_inscripciones_torneo`, pero reemplaza el mensaje técnico por: "No
-se pueden abrir las inscripciones todavía. Debes configurar todas las
-rondas y sus turnos antes de abrir las inscripciones."
-
-**No modifica:** criterios de apertura, validación de rondas o turnos,
-autorizaciones, motores deportivos, Freeze, desempates ni ningún proceso
-operativo.
-
-## MIGRACIÓN 409 --- VIGENCIA COMERCIAL NO INTERRUMPE TORNEO EN CURSO
-
-**Objetivo:** impedir que el fin de la vigencia comercial de plataforma
-interrumpa un torneo que ya fue iniciado formalmente y corregir el corte
-prematuro del último día causado por evaluar la fecha en UTC.
-
-**Qué hace:** centraliza la regla en `torneo_esta_vencido_295` y
-`obtener_estado_vigencia_torneo_294`. Ambas usan la fecha local
-correspondiente a `campos_golf.timezone_id`. Si
-`tournaments.estatus = 'en_curso'`, la vigencia comercial no marca el
-torneo como vencido ni lo pone en solo lectura, permitiendo completar
-captura, conciliación, resultados, desempates, cierres, publicación y
-finalización mediante las reglas ya existentes. Para torneos que no
-están en curso, la vigencia comercial conserva su función de habilitar o
-bloquear escritura según sus fechas.
-
-**Zona horaria:** no se hardcodea México. Se utiliza la zona horaria
-configurada en el campo del torneo; sólo existe fallback técnico a UTC
-si faltara ese dato. Al preparar la migración, todos los campos
-existentes tenían `timezone_id` configurado.
-
-**Caso de validación:** `PRUEBA AUTOSERVICIO #3` permanece `en_curso` y
-conserva su `valid_through_date = 2026-09-27`. Después de la migración
-debe dejar de considerarse VENCIDO sin ampliar manualmente su vigencia y
-debe poder continuar su ciclo deportivo.
-
-**No modifica:** fechas de contratación, estatus del torneo, motores
-deportivos, reglas competitivas, captura, conciliación, resultados,
-desempates, cierres, pagos, Asistente Operativo ni los guards
-consumidores; éstos continúan usando la función central de vigencia.
-
-## MIGRACIÓN 410 --- ETIQUETA CERRAR CAPTURA EN ASISTENTE
-
-**Objetivo:** hacer que el Asistente Operativo nombre correctamente la
-acción del nodo `ROUND_CAPTURE_CLOSE`, evitando presentar como revisión
-una acción que corresponde ejecutar.
-
-**Qué hace:** actualiza exclusivamente
-`workflow_master_nodes.action_label` del nodo 180 `ROUND_CAPTURE_CLOSE`
-de la plantilla activa `TEE_CENTRAL_STANDARD` versión 1, cambiando
-"Revisar cierre de captura" por "Cerrar captura". Conserva el título
-`Cerrar captura` y el destino `captura-fisica`.
-
-**Arquitectura:** la corrección se realiza en la plantilla maestra, que
-es la fuente de la etiqueta mostrada por el Asistente; no se hardcodea
-el texto en frontend.
-
-**No modifica:** evaluador 395, RPC 396, navegación, cierre de captura,
-guards, autorizaciones, motores deportivos, reglas competitivas,
-resultados ni ningún proceso operativo. El Asistente continúa siendo
-guía y la aplicación conserva la autoridad para permitir o bloquear la
-acción.
-
-## MIGRACIÓN 411 --- RESULTADOS PARCIALES Y OFICIALES POR CATEGORÍA
-
-**Objetivo:** permitir que cada categoría formalmente cerrada pueda
-publicar resultados parciales inmediatamente, visibles en la aplicación
-del jugador, sin esperar al cierre de las demás categorías;
-posteriormente la publicación oficial sustituye a la parcial.
-
-**Modelo:** `tournament_round_category_publications.publication_status`
-admite `PARTIAL` y `PUBLISHED`. `PARTIAL` significa resultado parcial
-visible; `PUBLISHED` conserva el significado histórico de publicación
-oficial. La restricción única por ronda/categoría se conserva: no se
-crean dos publicaciones visibles de una misma categoría.
-
-**Publicación parcial:** agrega
-`publicar_resultados_parciales_categoria_ronda`. Sólo permite publicar
-una categoría con cierre competitivo formal `FINAL` y congela
-exactamente el snapshot de ese cierre; no recalcula resultados ni
-modifica motores deportivos.
-
-**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva
-su firma y su función como publicación oficial. Si la categoría ya tiene
-una publicación `PARTIAL`, la promueve sobre la misma fila a
-`PUBLISHED`, reemplazando para el jugador la condición parcial por
-oficial sin duplicar resultados. Si ya es oficial, continúa siendo
-idempotente.
-
-**Aplicación del jugador:**
-`obtener_resultados_publicados_categoria_ronda` pasa a esquema 2 e
-informa `publicationType = PARTIAL | OFFICIAL`. Agrega
-`obtener_categorias_resultados_publicados_ronda_411`, que devuelve todas
-las categorías de la ronda que ya tengan resultados visibles para
-construir un selector; el jugador puede consultar cualquier categoría
-publicada, no sólo aquella en la que participó.
-
-**Ciclo maestro:** las publicaciones `PARTIAL` no satisfacen la
-publicación formal de la ronda. Las funciones existentes de
-formalización continúan considerando `publication_status='PUBLISHED'`
-como publicación oficial, por lo que el nodo `ROUND_RESULTS_PUBLICATION`
-no se completa únicamente porque todas las categorías tengan parciales.
-
-**Compatibilidad:** las publicaciones históricas `PUBLISHED` permanecen
-oficiales sin migración de datos. Se conservan las restricciones únicas
-existentes por ronda/categoría y por cierre formal.
-
-**No modifica:** motores Stroke Play, Stableford, A-Go-Go, Best Ball,
-cálculo de hándicap, desempates, cierre de captura, cierre competitivo
-de categoría, cierre competitivo de ronda, guards deportivos ni
-autorizaciones existentes. La publicación sigue dependiendo del cierre
-formal de categoría.
-
-## MIGRACIÓN 412 --- CIERRE DE RONDA ANTES DE PUBLICACIÓN OFICIAL
-
-**Objetivo:** establecer la secuencia operativa correcta después del
-cierre de categorías:
-`Cerrar categorías → publicaciones parciales opcionales → Cerrar ronda → Publicar resultados oficiales`.
-
-**Cierre de ronda:** `_cerrar_ronda_competitiva_pre314` deja de tratar
-`PUBLICATIONS_PENDING` como bloqueo. Continúa exigiendo cierres formales
-de categorías y el resto de las condiciones deportivas existentes. No
-modifica motores ni desempates.
-
-**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva
-su firma, pero ahora exige que exista un cierre competitivo de ronda
-`FINAL`. Mientras la ronda permanezca abierta sólo corresponde la
-publicación parcial creada en 411.
-
-**Guía maestra:** reordena `ROUND_COMPETITIVE_CLOSE` a secuencia 220 y
-`ROUND_RESULTS_PUBLICATION` a 230. El Asistente continúa siendo
-exclusivamente guía; no adquiere autoridad operativa.
-
-**Reparación de prueba:** corrige exclusivamente la publicación de
-categoría A de PRUEBA AUTOSERVICIO #3, creada durante la prueba de 411
-antes del cierre de ronda, de `PUBLISHED/OFFICIAL` a `PARTIAL/PARTIAL`,
-siempre que la ronda continúe sin cierre formal.
-
-**No modifica:** resultados deportivos congelados, cierres de categoría,
-captura, hándicaps, motores Stroke Play/Stableford/A-Go-Go/Best Ball,
-desempates, pagos ni autorizaciones administrativas.
-
-## MIGRACIÓN 413 --- PUBLICACIÓN OFICIAL DESPUÉS DEL CIERRE DE RONDA
-
-**Objetivo:** corregir la evidencia descriptiva del ciclo para que
-cerrar competitivamente una ronda no equivalga a considerar sus
-resultados oficialmente publicados.
-
-**Qué hace:** modifica únicamente
-`_estado_formalizacion_resultados_ronda_265`. Elimina la regla heredada
-`grandfatheredByRoundClosure` que, ante una ronda `FINAL`, marcaba todas
-sus categorías como cerradas y publicadas sin consultar las
-publicaciones reales. La función continúa evaluando la ronda cerrada
-mediante los cierres formales de categoría y
-`tournament_round_category_publications`.
-
-**Publicación oficial:** una categoría cuenta como publicada para
-`allCategoriesPublished` únicamente cuando existe
-`publication_status='PUBLISHED'`. Una publicación `PARTIAL` continúa
-visible como parcial, pero no completa el nodo 230
-`ROUND_RESULTS_PUBLICATION`.
-
-**Compatibilidad:** se conserva la clave `grandfatheredByRoundClosure`
-en el payload normal con valor `false`. El estado `roundClosed` pasa a
-informar el cierre competitivo real aun cuando la función continúa
-evaluando publicaciones.
-
-**Efecto en el Asistente:** el evaluador 395 podrá mantener pendiente
-`ROUND_RESULTS_PUBLICATION` después de cerrar la ronda mientras falten
-publicaciones oficiales, en vez de saltar directamente a
-`Finalizar torneo`. El Asistente sigue siendo guía y no adquiere
-autoridad operativa.
-
-**No modifica:** publicaciones existentes, snapshots deportivos, cierres
-de categoría o ronda, motores Stroke Play/Stableford/A-Go-Go/Best Ball,
-hándicap, desempates, captura, pagos, guards ni autorizaciones.
-
-## MIGRACIÓN 414 --- FINALIZACIÓN EXIGE PUBLICACIÓN OFICIAL
-
-**Objetivo:** impedir la finalización formal de un torneo mientras
-exista alguna ronda activa con categorías participantes cuyos resultados
-todavía no hayan sido publicados oficialmente.
-
-**Qué hace:** modifica únicamente `previsualizar_finalizacion_torneo`.
-Conserva todos los gates históricos de cierre de rondas, lifecycle y
-clasificación acumulada Stableford, y agrega un gate de publicaciones
-oficiales reutilizando `_estado_formalizacion_resultados_ronda_265` para
-cada ronda activa.
-
-**Regla:** sólo `publication_status='PUBLISHED'` cuenta como publicación
-oficial. `PARTIAL` no permite finalizar el torneo. Las categorías sin
-participantes no generan pendientes de publicación.
-
-**Autoridad:** `finalizar_torneo` no se modifica porque ya vuelve a
-ejecutar `previsualizar_finalizacion_torneo` inmediatamente antes de
-crear el sello de finalización y cambiar `tournaments.estatus` a
-`finalizado`. Por tanto, el nuevo gate queda protegido en Supabase y no
-depende del frontend ni del Asistente.
-
-**Evidencia adicional:** la previsualización incorpora
-`officialPublications` con conteos por torneo y por ronda para que la
-interfaz pueda explicar cuántas categorías participantes están
-publicadas oficialmente y cuántas faltan.
-
-**No modifica:** motores Stroke Play/Stableford/A-Go-Go/Best Ball,
-resultados deportivos, desempates, hándicap, cierres de
-captura/categoría/ronda, publicaciones existentes, snapshots, pagos,
-permisos ni el evaluador/Asistente 395/396.
-
-## MIGRACIÓN 415 --- OPERACIÓN DE TARJETA STABLEFORD: HCP, VENTAJAS Y PUNTOS
-
-**Objetivo:** completar la experiencia operativa de Stableford
-Individual para que tarjeta/captura digital, captura física/comparación
-y revisión administrativa puedan mostrar el Playing Handicap congelado,
-las ventajas por hoyo y los puntos Stableford Gross/Neto sin crear un
-segundo motor de cálculo.
-
-**Qué hace:** agrega
-`obtener_operacion_stableford_tarjeta_415(score_card_id)`, una RPC de
-sólo lectura y exclusiva de `scoring_engine='stableford'` +
-`participation_type='individual'`. La función reutiliza los snapshots
-congelados de ronda y las funciones oficiales existentes
-`calcular_golpes_handicap_hoyo` y `calcular_puntos_stableford_estandar`.
-Devuelve por hoyo PAR, Stroke Index, `handicapStrokes`, evidencia
-digital y física, y sus puntos Stableford Gross/Neto. También devuelve
-Playing Handicap, clasificaciones Gross/Neto configuradas y metadatos
-del snapshot del motor.
-
-**Ventajas:** `handicapStrokes` se deriva exclusivamente del
-`playing_handicap` congelado de `tournament_round_handicap_snapshots` y
-del Stroke Index congelado del hoyo. La suma de las ventajas/disventajas
-distribuidas debe coincidir exactamente con el Playing Handicap. El
-frontend puede representar cada golpe positivo con un punto verde dentro
-del recuadro del hoyo; valores mayores a 18 producen múltiples marcas
-según corresponda.
-
-**Puntos durante la operación:** la RPC 415 calcula puntos sobre la
-evidencia disponible sin exigir captura física finalizada ni
-conciliación. Un hoyo `PENDING` conserva puntos `NULL`; `PICKUP` produce
-0 puntos; `SCORE` usa la misma tabla matemática del motor oficial. La
-regla congelada de Hole In One, cuando esté habilitada, se respeta igual
-que en el resultado oficial.
-
-**Gross/Neto:** la RPC informa las clasificaciones congeladas de la
-categoría mediante `grossEnabled` y `netEnabled`. Para
-`TORNEO PRUEBA STABLEFORD OCTUBRE`, categoría ÚNICA, ambas
-clasificaciones están habilitadas, por lo que la interfaz debe mostrar
-PUNTOS GROSS y PUNTOS NETO, con subtotales FRONT/OUT, BACK/IN y TOTAL.
-
-**Frontend requerido:** consumir la RPC 415 únicamente cuando
-`useRoundScoringEngine` resuelva `stableford`. En la tarjeta/captura
-digital mostrar Playing HCP, ventajas por hoyo y puntos conforme se
-captura. En `physical-card-capture` agregar las ventajas y filas de
-puntos Stableford a `RESULTADO DE COMPARACIÓN`. En la revisión
-administrativa permitir ver los 18 hoyos de cada jugador con PAR, SI,
-ventajas, score y puntos. No duplicar en React la fórmula Stableford:
-React sólo presenta y totaliza los puntos por hoyo devueltos por 415.
-
-**Seguridad y aislamiento:** la función reutiliza el guard de lectura
-vigente de `obtener_detalle_captura_tarjeta_score`, no abre permisos a
-`anon` y rechaza cualquier tarjeta que no sea Stableford Individual. No
-reemplaza ni modifica la RPC genérica de captura ni la RPC de resultado
-oficial Stableford.
-
-**No modifica:** Stroke Play, A-Go-Go/team_stroke, Best Ball, sus RPC,
-cálculos, tarjetas o componentes; tampoco modifica scores, captura
-física/digital, conciliación, resultados oficiales, snapshots,
-hándicaps, clasificaciones, cierres, pagos, publicaciones ni datos
-existentes. La migración es aditiva y no hace backfill.
-
-## MIGRACIÓN 416 --- CORRECCIÓN DE NOMBRE DE JUGADOR EN ACUMULADO STABLEFORD
-
-**Objetivo:** corregir el error `column p.nombre does not exist` que
-impedía consultar la clasificación acumulada Stableford y, por
-consecuencia, bloqueaba la previsualización de finalización de torneos
-Stableford.
-
-**Causa:** `obtener_resultados_stableford_torneo(p_tournament_id)` hacía
-`JOIN public.players p` y utilizaba `p.nombre AS player_name`, pero
-`public.players` no tiene una columna `nombre`; el esquema vigente
-almacena el nombre del jugador en `nombres` y `apellidos`.
-
-**Qué hace:** reemplaza exclusivamente esa referencia obsoleta por
-`btrim(concat_ws(' ', p.nombres, p.apellidos)) AS player_name`,
-siguiendo el patrón vigente utilizado por otras funciones de Tee
-Central. La migración valida previamente que exista exactamente una
-ocurrencia del patrón obsoleto esperado; si la definición no coincide
-con ese estado, aborta sin reemplazar la función.
-
-**Impacto funcional:** restablece la cadena
-`obtener_resultados_stableford_torneo` →
-`obtener_leaderboard_stableford_torneo` → previsualización de
-finalización Stableford. También elimina la misma causa de error para
-consumidores de la clasificación global y desempates Stableford que
-dependan de `obtener_resultados_stableford_torneo`.
-
-**Seguridad:** conserva la firma, lenguaje, volatilidad,
-`SECURITY DEFINER`, `search_path`, permisos y toda la lógica existente
-de la función. No modifica datos.
-
-**No modifica:** frontend, Stroke Play, Best Ball, A-Go-Go/team_stroke,
-motor matemático Stableford, resultados por ronda, snapshots, hándicap,
-desempates, conciliación, captura física/digital, cierres,
-publicaciones, pagos ni permisos.
-
-------------------------------------------------------------------------
-
-## Migración 417 --- Reporte detallado de scores: Stroke Play Individual
-
-**Archivo:** `417_reporte_detallado_scores_stroke_play.sql`\
-**Verificación:**
-`417_verificacion_reporte_detallado_scores_stroke_play.sql`
+Se confirmó directamente en PROD la existencia de `public.obtener_workflow_evaluado_395(uuid)`. La función conserva `SECURITY INVOKER`, tiene `EXECUTE` para `authenticated` y `service_role`, no para `anon`, y referencia la plantilla maestra `workflow_master_nodes` sin depender de `tournament_workflow_nodes`. La plantilla `TEE_CENTRAL_STANDARD` versión 1 conserva sus 25 nodos.
+
+La prueba desde el canal administrativo de diagnóstico devolvió `No autenticado` al no existir `auth.uid()` en ese contexto; este resultado es consistente con el contrato de seguridad de la RPC y no constituye un fallo funcional. La prueba del payload con identidad autenticada queda para la integración controlada del frontend/Asistente.
+
+
+## MIGRACIÓN 396 — PREPARADA — ADAPTADOR DEL ASISTENTE A LA PLANTILLA MAESTRA
+
+**Estado:** PREPARADA — pendiente de ejecución manual y verificación en PROD.
+
+**Objetivo:** crear un contrato de Asistente Operativo que consuma exclusivamente el evaluador descriptivo 395 para seleccionar el siguiente paso, manteniendo a la aplicación como única autoridad sobre bloqueos, autorizaciones y operaciones deportivas.
+
+**Qué crea:** `obtener_asistente_operativo_torneo_396(uuid)`. La RPC valida autenticación y permisos, consulta `obtener_workflow_evaluado_395(uuid)`, expone `nextAction`, nodos de torneo, rondas, preferencias y mensajes terminales, y conserva el warning administrativo no bloqueante de pagos pendientes.
+
+**Qué no hace:** no sustituye todavía `obtener_asistente_operativo_torneo(uuid)`; no modifica `_adaptar_asistente_workflow_338`, 340, 341 ni los reconstructores 332–393; no escribe `tournament_workflow_nodes`; no ejecuta acciones; no cambia motores, reglas, procesos, autorizaciones, guards, bloqueos, Freeze, inscripciones, salidas, tarjetas, captura, conciliación, resultados, desempates, cierres, publicación, pagos ni finalización.
+
+**Estrategia de despliegue:** esta fase instala la nueva RPC en paralelo. Primero se verifica su payload autenticado en la aplicación. Sólo después se cambiará el frontend del Asistente para consumirla. De esta forma existe rollback funcional inmediato: el contrato público actual permanece intacto durante la prueba.
+
+**Regla de autoridad:** `authority=APPLICATION`, `assistantRole=GUIDE_ONLY`, `writesOperationalState=false`.
+
+
+## MIGRACIÓN 397 — EVALUADOR NO ANTICIPA RESULTADOS SIN SNAPSHOT
+
+**Objetivo:** corregir exclusivamente la capa descriptiva del evaluador 395 para que el Asistente pueda consultar torneos que todavía están en configuración y cuya ronda aún no tiene snapshot congelado de scoring.
+
+**Qué hace:** antes de consultar evidencia competitiva de resultados, desempates, cierre de categorías y publicación, `obtener_workflow_evaluado_395(uuid)` comprueba si existe un `tournament_round_condition_snapshots` con `scoring_engine`. Si todavía no existe, esas evidencias futuras se consideran aún no disponibles y sus pasos permanecen descriptivamente pendientes. No se crea ni congela ningún snapshot.
+
+**Qué no hace:** no modifica motores deportivos, reglas, procesos, autorizaciones, guards, bloqueos, Freeze, snapshots, inscripciones, salidas, tarjetas, captura, conciliación, desempates, resultados, cierres, publicación, pagos ni finalización. No escribe `tournament_workflow_nodes`.
+
+**Causa corregida:** PRUEBA AUTOSERVICIO #3 devolvía HTTP 500 al consultar la RPC 396 porque el evaluador 395 pedía anticipadamente evidencia competitiva y una función deportiva respondía `La ronda no tiene snapshot congelado de scoring.` El torneo se encontraba correctamente en una fase anterior.
+
+
+## MIGRACIÓN 398 — ASISTENTE 396 SIN CADENA LEGACY
+
+**Objetivo:** eliminar de la nueva capa de guía la dependencia indirecta del Asistente anterior.
+
+**Qué hace:** `obtener_asistente_operativo_torneo_396(uuid)` deja de llamar `_adaptar_asistente_pagos_pendientes_340`, porque esa función invoca `_adaptar_asistente_workflow_338` y éste ejecuta la reconciliación legacy. El warning `PENDING_PAYMENTS` se conserva mediante una consulta directa de solo lectura a las inscripciones activas con `estado_pago='PENDIENTE'`.
+
+**Qué no hace:** no modifica motores, reglas deportivas, procesos, autorizaciones, bloqueos, snapshots, Freeze, salidas, tarjetas, captura, conciliación, resultados, cierres, publicación, pagos ni finalización. No modifica el significado ni el carácter no bloqueante del warning de pagos.
+
+
+## MIGRACIÓN 399 — CORRECCIÓN DE EVIDENCIA DE CIERRE DE RONDA
+
+**Objetivo:** corregir una referencia de columna exclusivamente descriptiva en el evaluador 395.
+
+**Qué hace:** en la evidencia `ROUND_CLOSED`, sustituye la referencia inexistente `tournament_round_competitive_closures.status` por la columna real `competitive_status`. Conserva íntegramente la protección 397 para rondas sin snapshot.
+
+**Qué no hace:** no modifica ningún cierre, estado deportivo, motor, regla, autorización, bloqueo ni dato operativo. Únicamente corrige cómo el Asistente lee evidencia ya existente.
+
+
+## MIGRACIÓN 400 — CORRECCIÓN DE EVIDENCIA DE CORTES EN EL EVALUADOR
+
+**Objetivo:** corregir de una vez las referencias del evaluador descriptivo 395 al esquema real del módulo de cortes.
+
+**Qué hace:** elimina la referencia inexistente `tournament_cut_rules.tournament_id`; determina la aplicabilidad del corte mediante `despues_de_ronda_id`; y cuenta las decisiones desde `tournament_cut_player_statuses`, usando sus columnas reales `tournament_id`, `cut_after_round_id`, `tournament_registration_id` y `cut_status`.
+
+**Qué no hace:** no modifica reglas de corte, resultados, motores deportivos, autorizaciones, bloqueos ni datos operativos. Sólo corrige la lectura descriptiva utilizada por el Asistente.
+
+
+## MIGRACIÓN 401 — ORDEN CORRECTO DE `nextAction` EN EL WORKFLOW MAESTRO
+
+**Objetivo:** hacer que el Asistente seleccione “Qué sigue” después de evaluar toda la evidencia, evitando que un nodo de torneo posterior —especialmente `TOURNAMENT_FINALIZATION`— se adelante a los pasos pendientes de una ronda.
+
+**Qué hace:** conserva intacta la evaluación de evidencia y cambia únicamente la selección descriptiva de `nextAction`. Respeta los pasos iniciales del torneo (10–70), la preparación de la ronda, `START_TOURNAMENT` una sola vez en la secuencia 130, la operación/cierre de la ronda desde 140, el orden de rondas y finalmente `TOURNAMENT_FINALIZATION` 900.
+
+**Qué no hace:** no modifica motores deportivos, reglas, autorizaciones, bloqueos, estados operativos, datos de torneo ni la plantilla maestra. El Asistente continúa siendo exclusivamente una guía.
+
+## MIGRACIÓN 402 — GUARDADO ATÓMICO DE CUPOS Y CATEGORÍAS
+
+**Objetivo:** impedir que un torneo quede con una configuración parcial o descuadrada entre el cupo total y los cupos de sus categorías.
+
+**Qué hace:** crea `guardar_configuracion_cupos_categorias_402(uuid,jsonb,integer)`, una operación transaccional que recibe la configuración completa, exige al menos una categoría, cupos enteros mayores a cero y que la suma de cupos sea exactamente igual al cupo total del torneo. Permite cambiar en la misma operación el cupo general y su distribución, conserva los IDs de categorías existentes al actualizar y revierte toda la llamada ante cualquier error.
+
+**Qué conserva:** no modifica los guards existentes de congelamiento, cancelación o vencimiento; tampoco cambia motores deportivos, reglas de inscripción, elegibilidad, resultados, autorizaciones ni bloqueos. Los guards actuales continúan siendo la autoridad para decidir cuándo la configuración puede editarse.
+
+**Integración pendiente de frontend:** sustituir los guardados directos `DELETE/INSERT/UPDATE` de `tournament_categories` por esta RPC y enviar conjuntamente el cupo total cuando éste cambie.
+
+
+
+## MIGRACIÓN 403 — BLINDAJE DEL CUPO TOTAL CONTRA DESCUADRE DE CATEGORÍAS
+
+**Objetivo:** cerrar el camino alterno que permitía modificar directamente `tournaments.cupo_maximo` y dejarlo distinto de la suma de los cupos de categorías.
+
+**Qué hace:** agrega un trigger `BEFORE UPDATE OF cupo_maximo` sobre `tournaments`. Si el torneo ya tiene categorías, rechaza un cambio aislado cuyo nuevo cupo total no coincida con la suma vigente de `tournament_categories.cupo_maximo`, o si existen categorías con cupo nulo/no positivo. Los cambios conjuntos de cupo total y distribución siguen realizándose mediante `guardar_configuracion_cupos_categorias_402`, en una sola transacción.
+
+**Compatibilidad:** no corrige automáticamente inconsistencias preexistentes y no modifica motores deportivos, congelamiento, inscripción, resultados ni reglas competitivas. Conserva todos los guards existentes.
+
+## MIGRACIÓN 404 — CUPOS DE CATEGORÍAS MENORES O IGUALES AL CUPO TOTAL
+
+**Objetivo:** permitir que el cupo total del torneo sea mayor que la suma de los cupos distribuidos entre categorías, manteniendo como única condición inválida que las categorías comprometan más lugares que el cupo total.
+
+**Qué hace:** ajusta las validaciones creadas por 402 y 403 para aplicar `SUM(cupos categorías) <= cupo total`. La RPC 402 continúa siendo atómica, mantiene cupos individuales enteros y mayores a cero y ahora devuelve también `sinAsignar`. El guard 403 permite aumentar el cupo total dejando lugares todavía sin distribuir y bloquea únicamente cuando el nuevo total queda por debajo de la suma ya asignada.
+
+**Orden transaccional:** la RPC 402 actualiza la distribución de categorías antes de modificar el cupo total para que el guard 403 pueda validar correctamente reducciones conjuntas dentro de la misma transacción.
+
+**Qué no cambia:** Freeze, cancelación, vencimiento, autorizaciones, inscripción, motores deportivos, hándicap, desempates, resultados y cierres competitivos permanecen intactos.
+
+## MIGRACIÓN 405 — DATOS GENERALES COMO EVIDENCIA DEL PRIMER PASO DEL WORKFLOW
+
+**Objetivo:** hacer que `CONFIGURATION / Configurar datos generales` se considere completo exclusivamente cuando los campos obligatorios de Datos generales tengan valores válidos guardados, sin depender de categorías, franjas de HCP, desempates ni estructura de rondas.
+
+**Qué hace:** agrega `obtener_estado_datos_generales_torneo_405(uuid)`, función descriptiva que revisa Nombre, Campo de golf, Fecha inicio, Fecha fin, Cupo máximo, Número de rondas, Modalidad, Porcentaje de hándicap y Tarifa individual. La tarifa individual acepta cero para torneos gratuitos. Actualiza únicamente la evidencia usada por `TOURNAMENT_CONFIGURATION_COMPLETE` dentro de `obtener_workflow_evaluado_395`.
+
+**Separación de responsabilidades:** categorías, franjas de hándicap, desempates y estructura de rondas conservan sus propios nodos del workflow. La migración no cambia la autoridad de la aplicación ni ninguna autorización o bloqueo operativo.
+
+**No modifica:** motores deportivos, Freeze, inscripciones, apertura/cierre de inscripciones, reglas competitivas, resultados, desempates, cierres, pagos ni acciones operativas.
+
+## MIGRACIÓN 406 — EVIDENCIA DE CONFIGURACIÓN DE DESEMPATES
+
+**Objetivo:** hacer que `TIEBREAK_CONFIGURATION / Configurar desempates` se considere completo a partir de la configuración activa realmente guardada en `tournament_tiebreak_rules`, en lugar de depender del indicador agregado `tiebreakReady` usado por la lógica de apertura de inscripciones.
+
+**Qué hace:** agrega `obtener_estado_configuracion_desempates_406(uuid)`, función exclusivamente descriptiva que cuenta reglas activas Gross y Neto. Para la configuración global actual, el nodo queda completo cuando existe al menos una regla activa para Gross y al menos una para Neto. Actualiza únicamente la evidencia utilizada por `TIEBREAK_CONFIGURATION_COMPLETE` en `obtener_workflow_evaluado_395`.
+
+**Caso verificado antes de migrar:** PRUEBA AUTOSERVICIO #3 tiene cuatro reglas activas Gross y cuatro Neto, todas con alcance global `todos`, por lo que debe reconocerse como configuración guardada.
+
+**No modifica:** motor de desempates, métodos, secuencias guardadas, resolución automática/manual, autorizaciones, Freeze, inscripciones, resultados, cierres ni ningún bloqueo operativo.
+
+## MIGRACIÓN 407 — CATEGORÍAS COMPLETAS Y REGLA DE CUPOS EN APERTURA
+
+**Objetivo:** impedir que la fase de configuración de categorías se considere completa si alguna categoría carece de clasificación competitiva, y alinear las validaciones de apertura con la regla vigente de cupos.
+
+**Qué hace:** agrega `obtener_estado_categorias_configuradas_407(uuid)`, que considera completa la fase `HANDICAP_RANGES` sólo cuando las franjas HCP son válidas y todas las categorías tienen al menos una clasificación competitiva configurada (`GROSS`, `NET` o `BOTH`). El evaluador 395 utiliza esta evidencia para ese nodo.
+
+**Cupos:** actualiza `validar_configuracion_minima_torneo` y la comparación de `baseConfigurationReady` en `_estado_apertura_inscripciones_379` para aceptar `suma de cupos de categorías <= cupo máximo del torneo`; sólo el excedente es inválido.
+
+**No modifica:** motor de desempates, reglas guardadas, Freeze, autorizaciones, motores deportivos ni acciones operativas. Las clasificaciones se siguen configurando mediante la RPC existente `configurar_clasificacion_categoria_torneo`.
+
+## MIGRACIÓN 408 — MENSAJE DE RONDAS AL ABRIR INSCRIPCIONES
+
+**Objetivo:** orientar al operador cuando intenta abrir inscripciones antes de terminar la configuración de rondas.
+
+**Qué hace:** conserva exactamente el bloqueo existente de `abrir_inscripciones_torneo`, pero reemplaza el mensaje técnico por: “No se pueden abrir las inscripciones todavía. Debes configurar todas las rondas y sus turnos antes de abrir las inscripciones.”
+
+**No modifica:** criterios de apertura, validación de rondas o turnos, autorizaciones, motores deportivos, Freeze, desempates ni ningún proceso operativo.
+
+
+## MIGRACIÓN 409 — VIGENCIA COMERCIAL NO INTERRUMPE TORNEO EN CURSO
+
+**Objetivo:** impedir que el fin de la vigencia comercial de plataforma interrumpa un torneo que ya fue iniciado formalmente y corregir el corte prematuro del último día causado por evaluar la fecha en UTC.
+
+**Qué hace:** centraliza la regla en `torneo_esta_vencido_295` y `obtener_estado_vigencia_torneo_294`. Ambas usan la fecha local correspondiente a `campos_golf.timezone_id`. Si `tournaments.estatus = 'en_curso'`, la vigencia comercial no marca el torneo como vencido ni lo pone en solo lectura, permitiendo completar captura, conciliación, resultados, desempates, cierres, publicación y finalización mediante las reglas ya existentes. Para torneos que no están en curso, la vigencia comercial conserva su función de habilitar o bloquear escritura según sus fechas.
+
+**Zona horaria:** no se hardcodea México. Se utiliza la zona horaria configurada en el campo del torneo; sólo existe fallback técnico a UTC si faltara ese dato. Al preparar la migración, todos los campos existentes tenían `timezone_id` configurado.
+
+**Caso de validación:** `PRUEBA AUTOSERVICIO #3` permanece `en_curso` y conserva su `valid_through_date = 2026-09-27`. Después de la migración debe dejar de considerarse VENCIDO sin ampliar manualmente su vigencia y debe poder continuar su ciclo deportivo.
+
+**No modifica:** fechas de contratación, estatus del torneo, motores deportivos, reglas competitivas, captura, conciliación, resultados, desempates, cierres, pagos, Asistente Operativo ni los guards consumidores; éstos continúan usando la función central de vigencia.
+
+## MIGRACIÓN 410 — ETIQUETA CERRAR CAPTURA EN ASISTENTE
+
+**Objetivo:** hacer que el Asistente Operativo nombre correctamente la acción del nodo `ROUND_CAPTURE_CLOSE`, evitando presentar como revisión una acción que corresponde ejecutar.
+
+**Qué hace:** actualiza exclusivamente `workflow_master_nodes.action_label` del nodo 180 `ROUND_CAPTURE_CLOSE` de la plantilla activa `TEE_CENTRAL_STANDARD` versión 1, cambiando “Revisar cierre de captura” por “Cerrar captura”. Conserva el título `Cerrar captura` y el destino `captura-fisica`.
+
+**Arquitectura:** la corrección se realiza en la plantilla maestra, que es la fuente de la etiqueta mostrada por el Asistente; no se hardcodea el texto en frontend.
+
+**No modifica:** evaluador 395, RPC 396, navegación, cierre de captura, guards, autorizaciones, motores deportivos, reglas competitivas, resultados ni ningún proceso operativo. El Asistente continúa siendo guía y la aplicación conserva la autoridad para permitir o bloquear la acción.
+
+## MIGRACIÓN 411 — RESULTADOS PARCIALES Y OFICIALES POR CATEGORÍA
+
+**Objetivo:** permitir que cada categoría formalmente cerrada pueda publicar resultados parciales inmediatamente, visibles en la aplicación del jugador, sin esperar al cierre de las demás categorías; posteriormente la publicación oficial sustituye a la parcial.
+
+**Modelo:** `tournament_round_category_publications.publication_status` admite `PARTIAL` y `PUBLISHED`. `PARTIAL` significa resultado parcial visible; `PUBLISHED` conserva el significado histórico de publicación oficial. La restricción única por ronda/categoría se conserva: no se crean dos publicaciones visibles de una misma categoría.
+
+**Publicación parcial:** agrega `publicar_resultados_parciales_categoria_ronda`. Sólo permite publicar una categoría con cierre competitivo formal `FINAL` y congela exactamente el snapshot de ese cierre; no recalcula resultados ni modifica motores deportivos.
+
+**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva su firma y su función como publicación oficial. Si la categoría ya tiene una publicación `PARTIAL`, la promueve sobre la misma fila a `PUBLISHED`, reemplazando para el jugador la condición parcial por oficial sin duplicar resultados. Si ya es oficial, continúa siendo idempotente.
+
+**Aplicación del jugador:** `obtener_resultados_publicados_categoria_ronda` pasa a esquema 2 e informa `publicationType = PARTIAL | OFFICIAL`. Agrega `obtener_categorias_resultados_publicados_ronda_411`, que devuelve todas las categorías de la ronda que ya tengan resultados visibles para construir un selector; el jugador puede consultar cualquier categoría publicada, no sólo aquella en la que participó.
+
+**Ciclo maestro:** las publicaciones `PARTIAL` no satisfacen la publicación formal de la ronda. Las funciones existentes de formalización continúan considerando `publication_status='PUBLISHED'` como publicación oficial, por lo que el nodo `ROUND_RESULTS_PUBLICATION` no se completa únicamente porque todas las categorías tengan parciales.
+
+**Compatibilidad:** las publicaciones históricas `PUBLISHED` permanecen oficiales sin migración de datos. Se conservan las restricciones únicas existentes por ronda/categoría y por cierre formal.
+
+**No modifica:** motores Stroke Play, Stableford, A-Go-Go, Best Ball, cálculo de hándicap, desempates, cierre de captura, cierre competitivo de categoría, cierre competitivo de ronda, guards deportivos ni autorizaciones existentes. La publicación sigue dependiendo del cierre formal de categoría.
+
+## MIGRACIÓN 412 — CIERRE DE RONDA ANTES DE PUBLICACIÓN OFICIAL
+
+**Objetivo:** establecer la secuencia operativa correcta después del cierre de categorías: `Cerrar categorías → publicaciones parciales opcionales → Cerrar ronda → Publicar resultados oficiales`.
+
+**Cierre de ronda:** `_cerrar_ronda_competitiva_pre314` deja de tratar `PUBLICATIONS_PENDING` como bloqueo. Continúa exigiendo cierres formales de categorías y el resto de las condiciones deportivas existentes. No modifica motores ni desempates.
+
+**Publicación oficial:** `publicar_resultados_categoria_ronda` conserva su firma, pero ahora exige que exista un cierre competitivo de ronda `FINAL`. Mientras la ronda permanezca abierta sólo corresponde la publicación parcial creada en 411.
+
+**Guía maestra:** reordena `ROUND_COMPETITIVE_CLOSE` a secuencia 220 y `ROUND_RESULTS_PUBLICATION` a 230. El Asistente continúa siendo exclusivamente guía; no adquiere autoridad operativa.
+
+**Reparación de prueba:** corrige exclusivamente la publicación de categoría A de PRUEBA AUTOSERVICIO #3, creada durante la prueba de 411 antes del cierre de ronda, de `PUBLISHED/OFFICIAL` a `PARTIAL/PARTIAL`, siempre que la ronda continúe sin cierre formal.
+
+**No modifica:** resultados deportivos congelados, cierres de categoría, captura, hándicaps, motores Stroke Play/Stableford/A-Go-Go/Best Ball, desempates, pagos ni autorizaciones administrativas.
+
+
+## MIGRACIÓN 413 — PUBLICACIÓN OFICIAL DESPUÉS DEL CIERRE DE RONDA
+
+**Objetivo:** corregir la evidencia descriptiva del ciclo para que cerrar competitivamente una ronda no equivalga a considerar sus resultados oficialmente publicados.
+
+**Qué hace:** modifica únicamente `_estado_formalizacion_resultados_ronda_265`. Elimina la regla heredada `grandfatheredByRoundClosure` que, ante una ronda `FINAL`, marcaba todas sus categorías como cerradas y publicadas sin consultar las publicaciones reales. La función continúa evaluando la ronda cerrada mediante los cierres formales de categoría y `tournament_round_category_publications`.
+
+**Publicación oficial:** una categoría cuenta como publicada para `allCategoriesPublished` únicamente cuando existe `publication_status='PUBLISHED'`. Una publicación `PARTIAL` continúa visible como parcial, pero no completa el nodo 230 `ROUND_RESULTS_PUBLICATION`.
+
+**Compatibilidad:** se conserva la clave `grandfatheredByRoundClosure` en el payload normal con valor `false`. El estado `roundClosed` pasa a informar el cierre competitivo real aun cuando la función continúa evaluando publicaciones.
+
+**Efecto en el Asistente:** el evaluador 395 podrá mantener pendiente `ROUND_RESULTS_PUBLICATION` después de cerrar la ronda mientras falten publicaciones oficiales, en vez de saltar directamente a `Finalizar torneo`. El Asistente sigue siendo guía y no adquiere autoridad operativa.
+
+**No modifica:** publicaciones existentes, snapshots deportivos, cierres de categoría o ronda, motores Stroke Play/Stableford/A-Go-Go/Best Ball, hándicap, desempates, captura, pagos, guards ni autorizaciones.
+
+## MIGRACIÓN 414 — FINALIZACIÓN EXIGE PUBLICACIÓN OFICIAL
+
+**Objetivo:** impedir la finalización formal de un torneo mientras exista alguna ronda activa con categorías participantes cuyos resultados todavía no hayan sido publicados oficialmente.
+
+**Qué hace:** modifica únicamente `previsualizar_finalizacion_torneo`. Conserva todos los gates históricos de cierre de rondas, lifecycle y clasificación acumulada Stableford, y agrega un gate de publicaciones oficiales reutilizando `_estado_formalizacion_resultados_ronda_265` para cada ronda activa.
+
+**Regla:** sólo `publication_status='PUBLISHED'` cuenta como publicación oficial. `PARTIAL` no permite finalizar el torneo. Las categorías sin participantes no generan pendientes de publicación.
+
+**Autoridad:** `finalizar_torneo` no se modifica porque ya vuelve a ejecutar `previsualizar_finalizacion_torneo` inmediatamente antes de crear el sello de finalización y cambiar `tournaments.estatus` a `finalizado`. Por tanto, el nuevo gate queda protegido en Supabase y no depende del frontend ni del Asistente.
+
+**Evidencia adicional:** la previsualización incorpora `officialPublications` con conteos por torneo y por ronda para que la interfaz pueda explicar cuántas categorías participantes están publicadas oficialmente y cuántas faltan.
+
+**No modifica:** motores Stroke Play/Stableford/A-Go-Go/Best Ball, resultados deportivos, desempates, hándicap, cierres de captura/categoría/ronda, publicaciones existentes, snapshots, pagos, permisos ni el evaluador/Asistente 395/396.
+
+
+## MIGRACIÓN 415 — OPERACIÓN DE TARJETA STABLEFORD: HCP, VENTAJAS Y PUNTOS
+
+**Objetivo:** completar la experiencia operativa de Stableford Individual para que tarjeta/captura digital, captura física/comparación y revisión administrativa puedan mostrar el Playing Handicap congelado, las ventajas por hoyo y los puntos Stableford Gross/Neto sin crear un segundo motor de cálculo.
+
+**Qué hace:** agrega `obtener_operacion_stableford_tarjeta_415(score_card_id)`, una RPC de sólo lectura y exclusiva de `scoring_engine='stableford'` + `participation_type='individual'`. La función reutiliza los snapshots congelados de ronda y las funciones oficiales existentes `calcular_golpes_handicap_hoyo` y `calcular_puntos_stableford_estandar`. Devuelve por hoyo PAR, Stroke Index, `handicapStrokes`, evidencia digital y física, y sus puntos Stableford Gross/Neto. También devuelve Playing Handicap, clasificaciones Gross/Neto configuradas y metadatos del snapshot del motor.
+
+**Ventajas:** `handicapStrokes` se deriva exclusivamente del `playing_handicap` congelado de `tournament_round_handicap_snapshots` y del Stroke Index congelado del hoyo. La suma de las ventajas/disventajas distribuidas debe coincidir exactamente con el Playing Handicap. El frontend puede representar cada golpe positivo con un punto verde dentro del recuadro del hoyo; valores mayores a 18 producen múltiples marcas según corresponda.
+
+**Puntos durante la operación:** la RPC 415 calcula puntos sobre la evidencia disponible sin exigir captura física finalizada ni conciliación. Un hoyo `PENDING` conserva puntos `NULL`; `PICKUP` produce 0 puntos; `SCORE` usa la misma tabla matemática del motor oficial. La regla congelada de Hole In One, cuando esté habilitada, se respeta igual que en el resultado oficial.
+
+**Gross/Neto:** la RPC informa las clasificaciones congeladas de la categoría mediante `grossEnabled` y `netEnabled`. Para `TORNEO PRUEBA STABLEFORD OCTUBRE`, categoría ÚNICA, ambas clasificaciones están habilitadas, por lo que la interfaz debe mostrar PUNTOS GROSS y PUNTOS NETO, con subtotales FRONT/OUT, BACK/IN y TOTAL.
+
+**Frontend requerido:** consumir la RPC 415 únicamente cuando `useRoundScoringEngine` resuelva `stableford`. En la tarjeta/captura digital mostrar Playing HCP, ventajas por hoyo y puntos conforme se captura. En `physical-card-capture` agregar las ventajas y filas de puntos Stableford a `RESULTADO DE COMPARACIÓN`. En la revisión administrativa permitir ver los 18 hoyos de cada jugador con PAR, SI, ventajas, score y puntos. No duplicar en React la fórmula Stableford: React sólo presenta y totaliza los puntos por hoyo devueltos por 415.
+
+**Seguridad y aislamiento:** la función reutiliza el guard de lectura vigente de `obtener_detalle_captura_tarjeta_score`, no abre permisos a `anon` y rechaza cualquier tarjeta que no sea Stableford Individual. No reemplaza ni modifica la RPC genérica de captura ni la RPC de resultado oficial Stableford.
+
+**No modifica:** Stroke Play, A-Go-Go/team_stroke, Best Ball, sus RPC, cálculos, tarjetas o componentes; tampoco modifica scores, captura física/digital, conciliación, resultados oficiales, snapshots, hándicaps, clasificaciones, cierres, pagos, publicaciones ni datos existentes. La migración es aditiva y no hace backfill.
+
+## MIGRACIÓN 416 — CORRECCIÓN DE NOMBRE DE JUGADOR EN ACUMULADO STABLEFORD
+
+**Objetivo:** corregir el error `column p.nombre does not exist` que impedía consultar la clasificación acumulada Stableford y, por consecuencia, bloqueaba la previsualización de finalización de torneos Stableford.
+
+**Causa:** `obtener_resultados_stableford_torneo(p_tournament_id)` hacía `JOIN public.players p` y utilizaba `p.nombre AS player_name`, pero `public.players` no tiene una columna `nombre`; el esquema vigente almacena el nombre del jugador en `nombres` y `apellidos`.
+
+**Qué hace:** reemplaza exclusivamente esa referencia obsoleta por `btrim(concat_ws(' ', p.nombres, p.apellidos)) AS player_name`, siguiendo el patrón vigente utilizado por otras funciones de Tee Central. La migración valida previamente que exista exactamente una ocurrencia del patrón obsoleto esperado; si la definición no coincide con ese estado, aborta sin reemplazar la función.
+
+**Impacto funcional:** restablece la cadena `obtener_resultados_stableford_torneo` → `obtener_leaderboard_stableford_torneo` → previsualización de finalización Stableford. También elimina la misma causa de error para consumidores de la clasificación global y desempates Stableford que dependan de `obtener_resultados_stableford_torneo`.
+
+**Seguridad:** conserva la firma, lenguaje, volatilidad, `SECURITY DEFINER`, `search_path`, permisos y toda la lógica existente de la función. No modifica datos.
+
+**No modifica:** frontend, Stroke Play, Best Ball, A-Go-Go/team_stroke, motor matemático Stableford, resultados por ronda, snapshots, hándicap, desempates, conciliación, captura física/digital, cierres, publicaciones, pagos ni permisos.
+
+---
+
+## Migración 417 — Reporte detallado de scores: Stroke Play Individual
+
+**Archivo:** `417_reporte_detallado_scores_stroke_play.sql`  
+**Verificación:** `417_verificacion_reporte_detallado_scores_stroke_play.sql`
 
 ### Objetivo
 
-Agregar una capa de reporte detallado para **Stroke Play Individual**,
-por categoría, que permita consumir en una sola respuesta los resultados
-oficiales hoyo por hoyo y los acumulados **OUT / IN / TOTAL** para Gross
-y Neto, sin duplicar las reglas deportivas existentes.
+Agregar una capa de reporte detallado para **Stroke Play Individual**, por categoría, que permita consumir en una sola respuesta los resultados oficiales hoyo por hoyo y los acumulados **OUT / IN / TOTAL** para Gross y Neto, sin duplicar las reglas deportivas existentes.
 
 ### Qué hace
 
--   Crea la RPC aditiva
-    `public.obtener_reporte_detallado_scores_stroke_play_417(p_tournament_round_id uuid, p_tournament_category_id uuid, p_criterio text)`.
--   La RPC está limitada explícitamente a `scoring_engine = stroke` y
-    `tipo_participacion = individual`.
--   Reutiliza como fuentes oficiales existentes:
-    -   `obtener_resultados_oficiales_ronda`
-    -   `obtener_leaderboard_ronda`
-    -   `obtener_desempates_ronda`
--   Devuelve los hoyos oficiales existentes de cada tarjeta y agrega
-    para presentación del reporte:
-    -   Gross OUT / IN / TOTAL.
-    -   Neto OUT / IN / TOTAL.
-    -   posición/base rank y evidencia de desempate disponible.
-    -   estado competitivo/outcome disponible.
-    -   Playing Handicap y datos identificadores de tarjeta/jugador.
--   El criterio de presentación admite `GROSS` o `NETO` y valida que la
-    clasificación correspondiente esté habilitada.
--   Mantiene los cálculos deportivos en las funciones oficiales ya
-    existentes; la nueva RPC funciona como capa de consulta/reporte.
--   La función requiere usuario autenticado y permiso administrativo
-    sobre el torneo.
--   `PUBLIC` queda sin permiso de ejecución y `authenticated` recibe
-    `EXECUTE`.
--   Otras modalidades son rechazadas de forma controlada; 417 no
-    implementa Stableford, Best Ball, A-Go-Go ni Stableford por equipos.
+- Crea la RPC aditiva `public.obtener_reporte_detallado_scores_stroke_play_417(p_tournament_round_id uuid, p_tournament_category_id uuid, p_criterio text)`.
+- La RPC está limitada explícitamente a `scoring_engine = stroke` y `tipo_participacion = individual`.
+- Reutiliza como fuentes oficiales existentes:
+  - `obtener_resultados_oficiales_ronda`
+  - `obtener_leaderboard_ronda`
+  - `obtener_desempates_ronda`
+- Devuelve los hoyos oficiales existentes de cada tarjeta y agrega para presentación del reporte:
+  - Gross OUT / IN / TOTAL.
+  - Neto OUT / IN / TOTAL.
+  - posición/base rank y evidencia de desempate disponible.
+  - estado competitivo/outcome disponible.
+  - Playing Handicap y datos identificadores de tarjeta/jugador.
+- El criterio de presentación admite `GROSS` o `NETO` y valida que la clasificación correspondiente esté habilitada.
+- Mantiene los cálculos deportivos en las funciones oficiales ya existentes; la nueva RPC funciona como capa de consulta/reporte.
+- La función requiere usuario autenticado y permiso administrativo sobre el torneo.
+- `PUBLIC` queda sin permiso de ejecución y `authenticated` recibe `EXECUTE`.
+- Otras modalidades son rechazadas de forma controlada; 417 no implementa Stableford, Best Ball, A-Go-Go ni Stableford por equipos.
 
 ### Aislamiento y protección de motores existentes
 
-La migración es aditiva y no redefine los motores deportivos existentes.
-No modifica captura, conciliación, leaderboard, desempates, cierre de
-ronda ni publicación de resultados.
+La migración es aditiva y no redefine los motores deportivos existentes. No modifica captura, conciliación, leaderboard, desempates, cierre de ronda ni publicación de resultados.
 
-El reporte A-Go-Go existente queda fuera del alcance de 417. Antes de la
-migración se registró como referencia el hash de definición de:
+El reporte A-Go-Go existente queda fuera del alcance de 417. Antes de la migración se registró como referencia el hash de definición de:
 
 `obtener_reporte_scores_fisicos_categoria_a_gogo_ronda`
 
@@ -2008,35 +1475,35 @@ con MD5:
 
 `567781c11fb33f443d61555f0950d87c`
 
-El SQL de verificación comprueba que dicha definición permanezca
-intacta.
+El SQL de verificación comprueba que dicha definición permanezca intacta.
 
 ### Verificación prevista
 
 El archivo independiente de verificación comprueba, en solo lectura:
 
--   existencia, firma, retorno, volatilidad y `SECURITY DEFINER` de la
-    nueva RPC;
--   permisos de ejecución;
--   permanencia de las funciones oficiales Stroke Play utilizadas;
--   aislamiento respecto del reporte A-Go-Go;
--   conservación exacta de la definición de la RPC A-Go-Go mediante su
-    hash previo;
--   disponibilidad de rondas y categorías Stroke Play Individual para
-    prueba;
--   consumo de resultados, leaderboard y desempates oficiales;
--   prueba funcional autenticada con una ronda/categoría real;
--   rechazo controlado de una modalidad distinta de Stroke Play
-    Individual.
+- existencia, firma, retorno, volatilidad y `SECURITY DEFINER` de la nueva RPC;
+- permisos de ejecución;
+- permanencia de las funciones oficiales Stroke Play utilizadas;
+- aislamiento respecto del reporte A-Go-Go;
+- conservación exacta de la definición de la RPC A-Go-Go mediante su hash previo;
+- disponibilidad de rondas y categorías Stroke Play Individual para prueba;
+- consumo de resultados, leaderboard y desempates oficiales;
+- prueba funcional autenticada con una ronda/categoría real;
+- rechazo controlado de una modalidad distinta de Stroke Play Individual.
 
 ### Estado
 
-**Preparada para ejecución manual y verificación.** La aplicación de la
-migración corresponde al operador; después de ejecutarla debe
-correrse/verificarse el SQL independiente antes de continuar con el
-frontend del reporte.
+**Preparada para ejecución manual y verificación.** La aplicación de la migración corresponde al operador; después de ejecutarla debe correrse/verificarse el SQL independiente antes de continuar con el frontend del reporte.
 
-------------------------------------------------------------------------
+
+
+---
+
+# CONTINUACIÓN AUDITADA DESDE MIGRACIÓN 417
+
+**Base:** README 417 original, conservado íntegramente sin cambios. Las secciones siguientes se recuperaron de los README históricos individuales de cada migración; no se usaron los README truncados posteriores como base.
+
+**418:** no se identificó evidencia verificable de una migración 418 en la documentación histórica 421; no se inventa una entrada.
 
 ## Migración 419 --- Reporte detallado de scores: Stableford Individual
 
@@ -2058,6 +1525,8 @@ ni Best Ball.
 > verificable.
 
 ------------------------------------------------------------------------
+
+---
 
 ## Migración 420 --- Reporte detallado de scores: Best Ball Team
 
@@ -2083,6 +1552,8 @@ real capturada y conciliada.
 
 ------------------------------------------------------------------------
 
+---
+
 ## Migración 421 --- Configuración de tarjeta digital: default NO
 
 **Archivo:** `421_configuracion_tarjeta_digital_default_no.sql`\
@@ -2103,10 +1574,8 @@ cada torneo sobre el uso de captura digital de tarjetas, estableciendo
 -   Valida que la columna exista, sea `boolean` y `NOT NULL`; si el
     esquema no coincide, la migración aborta.
 -   Cambia el `DEFAULT` de la columna a `false`.
--   Normaliza únicamente los torneos existentes con
-    `estatus = planificado` a `usar_tarjeta_digital = false`; no
-    modifica torneos en curso, finalizados o cancelados, respetando sus
-    protecciones existentes.
+-   Normaliza todos los torneos existentes a
+    `usar_tarjeta_digital = false`.
 -   Los torneos nuevos nacen con tarjeta digital desactivada y deberán
     activarla explícitamente cuando corresponda.
 -   Agrega comentario descriptivo a la columna.
@@ -2123,6 +1592,8 @@ La integración posterior de frontend permitirá seleccionar **¿Utilizar
 tarjetas digitales? SÍ / NO** y las etapas siguientes harán que esa
 decisión controle la impresión del QR y la captura digital pública por
 token.
+
+---
 
 ## Migración 422 --- Bloqueo de tarjeta digital después de emisión oficial
 
@@ -2182,6 +1653,8 @@ modificarse.
 
 Después de la emisión, la configuración deberá mostrarse como no
 editable.
+
+---
 
 ## Migración 423 --- Infraestructura transversal de tarjeta digital por QR
 
@@ -2307,7 +1780,7 @@ modifica PDF, no cambia el algoritmo deportivo de ninguna modalidad, no
 implementa Stableford TEAM y no reemplaza la tarjeta física ni la
 conciliación.
 
-------------------------------------------------------------------------
+---
 
 ## Migración 424 --- Lectura pública enriquecida de tarjeta digital por QR
 
@@ -2344,261 +1817,107 @@ se crea una tarjeta adicional de equipo para capturar el score agregado.
 cualquier nueva lógica de captura deportiva. Esos elementos quedan para
 la Fase 2.
 
-------------------------------------------------------------------------
+---
 
-## Migración 425 --- Cierre explícito de captura digital por QR
+## Migración 425 — Cierre explícito de captura digital por QR
 
-**Objetivo:** separar la liberación temporal del dispositivo
-(`DEJAR DE MARCAR`) del cierre formal de la responsabilidad de captura
-digital de una tarjeta (`CERRAR CAPTURA`).
+**Objetivo:** separar la liberación temporal del dispositivo (`DEJAR DE MARCAR`) del cierre formal de la responsabilidad de captura digital de una tarjeta (`CERRAR CAPTURA`).
 
-La migración agrega a `tournament_scorecard_capture_sessions` un estado
-persistente de cierre digital mediante `digital_closed_at` y la
-referencia al control QR que realizó el cierre. También conserva la
-última reapertura administrativa y crea la bitácora inmutable
-`tournament_scorecard_qr_capture_closure_events` para registrar cierres
-y reaperturas.
+La migración agrega a `tournament_scorecard_capture_sessions` un estado persistente de cierre digital mediante `digital_closed_at` y la referencia al control QR que realizó el cierre. También conserva la última reapertura administrativa y crea la bitácora inmutable `tournament_scorecard_qr_capture_closure_events` para registrar cierres y reaperturas.
 
-Se incorpora
-`cerrar_captura_digital_qr_425(p_qr_token, p_control_token)`. Solo el
-dispositivo que mantiene el control QR vigente puede cerrar y únicamente
-cuando la tarjeta está completa: no debe existir ningún resultado
-`pending` y la sesión debe encontrarse en `captured`. Una inconformidad
-(`disputed`) cuenta como resultado capturado y no impide el cierre. Al
-cerrar se libera inmediatamente el lease del dispositivo.
+Se incorpora `cerrar_captura_digital_qr_425(p_qr_token, p_control_token)`. Solo el dispositivo que mantiene el control QR vigente puede cerrar y únicamente cuando la tarjeta está completa: no debe existir ningún resultado `pending` y la sesión debe encontrarse en `captured`. Una inconformidad (`disputed`) cuenta como resultado capturado y no impide el cierre. Al cerrar se libera inmediatamente el lease del dispositivo.
 
-Una tarjeta cerrada queda disponible por QR exclusivamente en modo
-lectura. `iniciar_captura_qr_423` fue reforzada para impedir adquirir un
-nuevo control mientras exista `digital_closed_at`. Como el cierre libera
-el lease vigente, las RPC de escritura QR existentes tampoco pueden
-seguir escribiendo con el token anterior.
+Una tarjeta cerrada queda disponible por QR exclusivamente en modo lectura. `iniciar_captura_qr_423` fue reforzada para impedir adquirir un nuevo control mientras exista `digital_closed_at`. Como el cierre libera el lease vigente, las RPC de escritura QR existentes tampoco pueden seguir escribiendo con el token anterior.
 
-Se agrega `obtener_tarjeta_publica_qr_425(p_qr_token, p_control_token)`,
-que conserva el contrato enriquecido de la lectura 424 y añade
-`digitalCapture.closed`, `closedAt` y `lastReopenedAt`. Cuando la
-tarjeta está cerrada devuelve `captureState='closed'` y
-`controlState='free'` para que cualquier dispositivo muestre la tarjeta
-en modo lectura y no ofrezca iniciar captura.
+Se agrega `obtener_tarjeta_publica_qr_425(p_qr_token, p_control_token)`, que conserva el contrato enriquecido de la lectura 424 y añade `digitalCapture.closed`, `closedAt` y `lastReopenedAt`. Cuando la tarjeta está cerrada devuelve `captureState='closed'` y `controlState='free'` para que cualquier dispositivo muestre la tarjeta en modo lectura y no ofrezca iniciar captura.
 
-Se agrega
-`reabrir_captura_digital_qr_admin_425(p_score_card_id, p_reason)`. La
-reapertura requiere usuario autenticado con permisos administrativos del
-torneo y no se permite si la captura global de la ronda ya está cerrada.
-La reapertura no modifica scores: únicamente vuelve a habilitar la
-posibilidad de adquirir control QR para efectuar una corrección
-autorizada.
+Se agrega `reabrir_captura_digital_qr_admin_425(p_score_card_id, p_reason)`. La reapertura requiere usuario autenticado con permisos administrativos del torneo y no se permite si la captura global de la ronda ya está cerrada. La reapertura no modifica scores: únicamente vuelve a habilitar la posibilidad de adquirir control QR para efectuar una corrección autorizada.
 
-**Regla operativa:** `DEJAR DE MARCAR` libera un dispositivo pero no
-termina la captura. `CERRAR CAPTURA` declara terminada la
-responsabilidad digital de esa tarjeta. El cierre digital no sustituye
-la recepción de la tarjeta física, la captura física ni la conciliación.
+**Regla operativa:** `DEJAR DE MARCAR` libera un dispositivo pero no termina la captura. `CERRAR CAPTURA` declara terminada la responsabilidad digital de esa tarjeta. El cierre digital no sustituye la recepción de la tarjeta física, la captura física ni la conciliación.
 
-**Verificación:** comprobar columnas de cierre/reapertura, RLS y
-bitácora, RPCs 425 y permisos; después de una prueba real, verificar que
-la tarjeta cerrada tenga `digital_closed_at`, que exista un evento
-`capture_closed`, que el QR permanezca en lectura y que solo una
-reapertura administrativa permita volver a adquirir control.
+**Verificación:** comprobar columnas de cierre/reapertura, RLS y bitácora, RPCs 425 y permisos; después de una prueba real, verificar que la tarjeta cerrada tenga `digital_closed_at`, que exista un evento `capture_closed`, que el QR permanezca en lectura y que solo una reapertura administrativa permita volver a adquirir control.
 
-------------------------------------------------------------------------
+---
 
-## Migración 426 --- Adaptador QR a la operación Stableford Individual existente
+## Migración 426 — Adaptador QR a la operación Stableford Individual existente
 
-**Objetivo:** reincorporar el acceso por QR a la tarjeta digital
-Stableford ya existente sin reconstruir el motor deportivo ni mantener
-dos implementaciones de las mismas reglas.
+**Objetivo:** reincorporar el acceso por QR a la tarjeta digital Stableford ya existente sin reconstruir el motor deportivo ni mantener dos implementaciones de las mismas reglas.
 
-La migración extrae la lógica deportiva que ya utilizaba
-`obtener_operacion_stableford_tarjeta_415` a un núcleo privado único:
-`_obtener_operacion_stableford_tarjeta_core_426(p_score_card_id, p_include_physical)`.
-Ese núcleo conserva el Playing Handicap congelado, distribución de
-golpes por Stroke Index, SCORE/PICKUP, puntos Gross y Neto,
-clasificaciones configuradas, regla especial de Hole in One y orden de
-juego que ya utilizaba la operación 415.
+La migración extrae la lógica deportiva que ya utilizaba `obtener_operacion_stableford_tarjeta_415` a un núcleo privado único: `_obtener_operacion_stableford_tarjeta_core_426(p_score_card_id, p_include_physical)`. Ese núcleo conserva el Playing Handicap congelado, distribución de golpes por Stroke Index, SCORE/PICKUP, puntos Gross y Neto, clasificaciones configuradas, regla especial de Hole in One y orden de juego que ya utilizaba la operación 415.
 
-`obtener_operacion_stableford_tarjeta_415(p_score_card_id)` conserva su
-nombre, firma, autenticación y guard de permisos anteriores; después del
-guard delega el cálculo al núcleo 426. Por tanto, la pantalla
-autenticada existente y el QR dejan de tener cálculos Stableford
-independientes y comparten una sola fuente de verdad.
+`obtener_operacion_stableford_tarjeta_415(p_score_card_id)` conserva su nombre, firma, autenticación y guard de permisos anteriores; después del guard delega el cálculo al núcleo 426. Por tanto, la pantalla autenticada existente y el QR dejan de tener cálculos Stableford independientes y comparten una sola fuente de verdad.
 
-Se agrega `obtener_tarjeta_publica_qr_426(p_qr_token, p_control_token)`.
-Parte de la lectura pública 425 y, únicamente cuando la tarjeta oficial
-corresponde a Stableford Individual (`scoring_engine='stableford'`,
-`participation_type='individual'`, `unit_type='registration'`), agrega
-`digitalOperation` generado por el mismo núcleo deportivo. La variante
-pública excluye los campos de captura física; no abre tablas ni expone
-la conciliación.
+Se agrega `obtener_tarjeta_publica_qr_426(p_qr_token, p_control_token)`. Parte de la lectura pública 425 y, únicamente cuando la tarjeta oficial corresponde a Stableford Individual (`scoring_engine='stableford'`, `participation_type='individual'`, `unit_type='registration'`), agrega `digitalOperation` generado por el mismo núcleo deportivo. La variante pública excluye los campos de captura física; no abre tablas ni expone la conciliación.
 
-**Seguridad:** el núcleo 426 es `SECURITY DEFINER` pero no tiene
-`EXECUTE` para `PUBLIC`, `anon` ni `authenticated`; solo las RPC
-controladas pueden invocarlo. La lectura QR 426 mantiene la validación
-QR y estados de 425. Esta migración no modifica las escrituras 423, el
-lease/control del dispositivo, inconformidades ni el cierre 425.
+**Seguridad:** el núcleo 426 es `SECURITY DEFINER` pero no tiene `EXECUTE` para `PUBLIC`, `anon` ni `authenticated`; solo las RPC controladas pueden invocarlo. La lectura QR 426 mantiene la validación QR y estados de 425. Esta migración no modifica las escrituras 423, el lease/control del dispositivo, inconformidades ni el cierre 425.
 
-**Regla arquitectónica:** 426 no crea un segundo motor Stableford.
-Reorganiza la operación ya existente para que tanto la tarjeta
-autenticada anterior como el nuevo acceso público QR consuman
-exactamente la misma lógica deportiva. El mismo criterio deberá
-aplicarse a las modalidades ya existentes cuando se conecten al QR:
-adaptar acceso y control, no reconstruir la tarjeta digital.
+**Regla arquitectónica:** 426 no crea un segundo motor Stableford. Reorganiza la operación ya existente para que tanto la tarjeta autenticada anterior como el nuevo acceso público QR consuman exactamente la misma lógica deportiva. El mismo criterio deberá aplicarse a las modalidades ya existentes cuando se conecten al QR: adaptar acceso y control, no reconstruir la tarjeta digital.
 
-**Fuera de alcance:** A-Go-Go, Best Ball, Stableford TEAM futuro,
-captura física, conciliación, emisión/PDF y cambios de reglas
-deportivas.
+**Fuera de alcance:** A-Go-Go, Best Ball, Stableford TEAM futuro, captura física, conciliación, emisión/PDF y cambios de reglas deportivas.
 
-**Verificación:** confirmar funciones y permisos, comprobar que 415
-delega en el núcleo 426, probar una tarjeta Stableford Individual
-emitida y verificar que `digitalOperation` devuelve PH, clasificaciones,
-`handicapStrokes`, puntos Gross/Net y hoyos sin exponer campos
-`physical*` en la lectura pública.
+**Verificación:** confirmar funciones y permisos, comprobar que 415 delega en el núcleo 426, probar una tarjeta Stableford Individual emitida y verificar que `digitalOperation` devuelve PH, clasificaciones, `handicapStrokes`, puntos Gross/Net y hoyos sin exponer campos `physical*` en la lectura pública.
 
-------------------------------------------------------------------------
+---
 
-## Migración 427 --- CORREGIR VOLATILIDAD QR 426
+## Migración 427 — CORREGIR VOLATILIDAD QR 426
 
-**Objetivo:** corregir la clasificación de volatilidad de
-`public.obtener_tarjeta_publica_qr_426(text,text)` para que la lectura
-pública QR pueda ejecutar correctamente la cadena `426 → 425 → 424`.
+**Objetivo:** corregir la clasificación de volatilidad de `public.obtener_tarjeta_publica_qr_426(text,text)` para que la lectura pública QR pueda ejecutar correctamente la cadena `426 → 425 → 424`.
 
-**Qué hace:** - Cambia únicamente
-`obtener_tarjeta_publica_qr_426(text,text)` de `STABLE` a `VOLATILE`. -
-La corrección es necesaria porque `obtener_tarjeta_publica_qr_424`
-realiza mantenimiento de controles QR expirados mediante `UPDATE`; una
-función `STABLE` no puede ejecutar esa cadena de escritura. - Mantiene
-`_obtener_operacion_stableford_tarjeta_core_426` como `STABLE`, porque
-ese core es de solo lectura. - No cambia firmas, permisos, lógica
-deportiva, cálculo Stableford, control QR, cierre digital ni datos
-existentes.
+**Qué hace:**
+- Cambia únicamente `obtener_tarjeta_publica_qr_426(text,text)` de `STABLE` a `VOLATILE`.
+- La corrección es necesaria porque `obtener_tarjeta_publica_qr_424` realiza mantenimiento de controles QR expirados mediante `UPDATE`; una función `STABLE` no puede ejecutar esa cadena de escritura.
+- Mantiene `_obtener_operacion_stableford_tarjeta_core_426` como `STABLE`, porque ese core es de solo lectura.
+- No cambia firmas, permisos, lógica deportiva, cálculo Stableford, control QR, cierre digital ni datos existentes.
 
-**Verificación esperada:** 424, 425 y 426 deben quedar `VOLATILE`; el
-core Stableford 426 debe permanecer `STABLE`.
+**Verificación esperada:** 424, 425 y 426 deben quedar `VOLATILE`; el core Stableford 426 debe permanecer `STABLE`.
 
-------------------------------------------------------------------------
+---
 
-## Migración 428 --- CORREGIR POLICY STORAGE VEHÍCULOS 367
+## Migración 428 — CORREGIR POLICY STORAGE VEHÍCULOS 367
 
-**Objetivo:** impedir que la policy pública de carga de fotografías de
-vehículos de Acceso al Campo interfiera con subidas autenticadas de
-otros buckets de Storage.
+**Objetivo:** impedir que la policy pública de carga de fotografías de vehículos de Acceso al Campo interfiera con subidas autenticadas de otros buckets de Storage.
 
-**Diagnóstico confirmado:** `acceso_campo_vehiculos_insert_367` estaba
-asignada a `{anon, authenticated}` y utiliza
-`_storage_upload_vehiculo_autorizado_367(name)`. El helper corresponde
-al flujo público autorizado de vehículos y tiene EXECUTE para `anon` y
-`service_role`, pero no para `authenticated`. Esto podía causar
-`permission denied` durante cualquier INSERT autenticado en Storage,
-incluso en `logos-torneos`.
+**Diagnóstico confirmado:** `acceso_campo_vehiculos_insert_367` estaba asignada a `{anon, authenticated}` y utiliza `_storage_upload_vehiculo_autorizado_367(name)`. El helper corresponde al flujo público autorizado de vehículos y tiene EXECUTE para `anon` y `service_role`, pero no para `authenticated`. Esto podía causar `permission denied` durante cualquier INSERT autenticado en Storage, incluso en `logos-torneos`.
 
-**Qué hace:** cambia únicamente la policy
-`acceso_campo_vehiculos_insert_367` para que aplique a `anon`. Mantiene
-intactos el `WITH CHECK`, el helper 367, buckets, datos y
-`logos_torneos_insert`. No concede permisos innecesarios al rol
-`authenticated`.
+**Qué hace:** cambia únicamente la policy `acceso_campo_vehiculos_insert_367` para que aplique a `anon`. Mantiene intactos el `WITH CHECK`, el helper 367, buckets, datos y `logos_torneos_insert`. No concede permisos innecesarios al rol `authenticated`.
 
-**Verificación esperada:** policy 367 con `{anon}`;
-`logos_torneos_insert` con `{authenticated}`; permisos del helper sin
-cambios.
+**Verificación esperada:** policy 367 con `{anon}`; `logos_torneos_insert` con `{authenticated}`; permisos del helper sin cambios.
 
-------------------------------------------------------------------------
+---
 
-## Migración 429 --- CORREGIR INCONFORMIDAD RESUELTA EN CONCILIACIÓN
+## Migración 429 — CORREGIR INCONFORMIDAD RESUELTA EN CONCILIACIÓN
 
-**Objetivo:** evitar que una inconformidad digital ya resuelta
-formalmente por Comité continúe apareciendo como `INCONF. ACTIVA` en la
-lectura de conciliación, conservando íntegra la evidencia histórica de
-la tarjeta.
+**Objetivo:** evitar que una inconformidad digital ya resuelta formalmente por Comité continúe apareciendo como `INCONF. ACTIVA` en la lectura de conciliación, conservando íntegra la evidencia histórica de la tarjeta.
 
-**Diagnóstico confirmado:** en `STABLEFORD CON QR`, tarjeta
-`R01-V01-0003` de Melgoza Ignacio, hoyo 1, la evidencia vigente conserva
-digital 4, reclamo del jugador 3, físico 5 y una resolución
-administrativa `PHYSICAL = 5`. La conciliación está `COMPLETED` y no
-tiene casos pendientes, pero `obtener_conciliacion_tarjeta_score` seguía
-clasificando la inconformidad como `ACTIVE` únicamente porque
-`tournament_scorecard_hole_scores.status` permanece `disputed`.
+**Diagnóstico confirmado:** en `STABLEFORD CON QR`, tarjeta `R01-V01-0003` de Melgoza Ignacio, hoyo 1, la evidencia vigente conserva digital 4, reclamo del jugador 3, físico 5 y una resolución administrativa `PHYSICAL = 5`. La conciliación está `COMPLETED` y no tiene casos pendientes, pero `obtener_conciliacion_tarjeta_score` seguía clasificando la inconformidad como `ACTIVE` únicamente porque `tournament_scorecard_hole_scores.status` permanece `disputed`.
 
-**Qué hace:** actualiza exclusivamente
-`obtener_conciliacion_tarjeta_score(uuid)` para consultar también
-`tournament_scorecard_hole_resolutions`. Cuando existe una resolución
-formal para un hoyo que tuvo inconformidad, la lectura lo clasifica como
-`HISTORICAL_RESOLVED` antes de evaluar el `status='disputed'` de la
-captura digital original.
+**Qué hace:** actualiza exclusivamente `obtener_conciliacion_tarjeta_score(uuid)` para consultar también `tournament_scorecard_hole_resolutions`. Cuando existe una resolución formal para un hoyo que tuvo inconformidad, la lectura lo clasifica como `HISTORICAL_RESOLVED` antes de evaluar el `status='disputed'` de la captura digital original.
 
-**Trazabilidad:** no modifica `tournament_scorecard_hole_scores.status`,
-no borra `qr_disputed`/`player_disputed`, no elimina el reclamo del
-jugador y no altera los snapshots digital, físico ni la resolución
-administrativa. El estado `disputed` original permanece como evidencia;
-únicamente cambia su interpretación dentro de la conciliación una vez
-que Comité ya resolvió el hoyo.
+**Trazabilidad:** no modifica `tournament_scorecard_hole_scores.status`, no borra `qr_disputed`/`player_disputed`, no elimina el reclamo del jugador y no altera los snapshots digital, físico ni la resolución administrativa. El estado `disputed` original permanece como evidencia; únicamente cambia su interpretación dentro de la conciliación una vez que Comité ya resolvió el hoyo.
 
-**Efecto esperado en la pantalla:** una conciliación completada con una
-inconformidad ya resuelta debe mostrar `INCONF. ACTIVAS = 0` e
-incrementar `INCONF. HIST. RESUELTAS`. Las diferencias y los casos que
-requirieron revisión pueden permanecer como evidencia histórica de lo
-ocurrido. `needsReview` continúa describiendo que el hoyo requirió
-revisión; no significa que siga pendiente.
+**Efecto esperado en la pantalla:** una conciliación completada con una inconformidad ya resuelta debe mostrar `INCONF. ACTIVAS = 0` e incrementar `INCONF. HIST. RESUELTAS`. Las diferencias y los casos que requirieron revisión pueden permanecer como evidencia histórica de lo ocurrido. `needsReview` continúa describiendo que el hoyo requirió revisión; no significa que siga pendiente.
 
-**Compatibilidad:** no modifica `finalizar_conciliacion_tarjeta_score`,
-porque esa función ya considera resuelto un caso cuando existe
-`tournament_scorecard_hole_resolutions` y el caso verificado tenía
-`unresolved = 0`. No cambia motores Stroke, Stableford, A-Go-Go o Best
-Ball, captura QR 423, cierre QR 425, resultados, HCP, cierres
-competitivos ni datos existentes.
+**Compatibilidad:** no modifica `finalizar_conciliacion_tarjeta_score`, porque esa función ya considera resuelto un caso cuando existe `tournament_scorecard_hole_resolutions` y el caso verificado tenía `unresolved = 0`. No cambia motores Stroke, Stableford, A-Go-Go o Best Ball, captura QR 423, cierre QR 425, resultados, HCP, cierres competitivos ni datos existentes.
 
-**Verificación esperada:** la función permanece
-`STABLE SECURITY DEFINER`; la definición incorpora la resolución formal
-al cálculo de `dispute_status`; en el caso Melgoza el historial sigue
-siendo digital 4 / reclamo 3 / físico 5 / resolución PHYSICAL 5,
-mientras la lectura de conciliación deja de contarlo como inconformidad
-activa.
+**Verificación esperada:** la función permanece `STABLE SECURITY DEFINER`; la definición incorpora la resolución formal al cálculo de `dispute_status`; en el caso Melgoza el historial sigue siendo digital 4 / reclamo 3 / físico 5 / resolución PHYSICAL 5, mientras la lectura de conciliación deja de contarlo como inconformidad activa.
 
-------------------------------------------------------------------------
+---
 
-## Migración 430 --- CORREGIR DATOS GENERALES A-GO-GO EN ASISTENTE
+## Migración 430 — CORREGIR DATOS GENERALES A-GO-GO EN ASISTENTE
 
-**Objetivo:** corregir la evidencia descriptiva de **Datos generales**
-que consume el Asistente Operativo para que la modalidad **A-Go-Go**
-(`scoring_engine = team_stroke`) no exija el campo general
-`tournaments.handicap_allowance_pct`, ya que esta modalidad utiliza su
-configuración específica de **HCP TEAM**.
+**Objetivo:** corregir la evidencia descriptiva de **Datos generales** que consume el Asistente Operativo para que la modalidad **A-Go-Go** (`scoring_engine = team_stroke`) no exija el campo general `tournaments.handicap_allowance_pct`, ya que esta modalidad utiliza su configuración específica de **HCP TEAM**.
 
-**Diagnóstico confirmado:** en **PRUEBA A-GO-GO CON QR**, la modalidad
-es `A_GOGO`, el motor es `team_stroke`, `handicap_allowance_pct` está en
-`NULL` y el propio catálogo de la modalidad tiene
-`handicap_allowance_default = NULL`. La función
-`obtener_estado_datos_generales_torneo_405(uuid)` exigía
-`PORCENTAJE_HANDICAP` indiscriminadamente para todas las modalidades.
-Por ello, `obtener_workflow_evaluado_395(uuid)` mantenía pendiente
-`TOURNAMENT_CONFIGURATION_COMPLETE` y el Asistente 396 seguía mostrando
-**Configurar datos generales**, aunque el torneo hubiera avanzado
-operativamente.
+**Diagnóstico confirmado:** en **PRUEBA A-GO-GO CON QR**, la modalidad es `A_GOGO`, el motor es `team_stroke`, `handicap_allowance_pct` está en `NULL` y el propio catálogo de la modalidad tiene `handicap_allowance_default = NULL`. La función `obtener_estado_datos_generales_torneo_405(uuid)` exigía `PORCENTAJE_HANDICAP` indiscriminadamente para todas las modalidades. Por ello, `obtener_workflow_evaluado_395(uuid)` mantenía pendiente `TOURNAMENT_CONFIGURATION_COMPLETE` y el Asistente 396 seguía mostrando **Configurar datos generales**, aunque el torneo hubiera avanzado operativamente.
 
-**Qué hace:** reemplaza únicamente
-`public.obtener_estado_datos_generales_torneo_405(uuid)`. La función
-obtiene el `scoring_engine` de la modalidad y mantiene
-`PORCENTAJE_HANDICAP` como obligatorio para las modalidades que usan el
-allowance general, pero lo excluye de `missingOrInvalid` y
-`requiredFields` cuando `scoring_engine = 'team_stroke'`. La respuesta
-agrega `requiresGeneralHandicapAllowance` y `scoringEngine` para hacer
-explícita la evidencia.
+**Qué hace:** reemplaza únicamente `public.obtener_estado_datos_generales_torneo_405(uuid)`. La función obtiene el `scoring_engine` de la modalidad y mantiene `PORCENTAJE_HANDICAP` como obligatorio para las modalidades que usan el allowance general, pero lo excluye de `missingOrInvalid` y `requiredFields` cuando `scoring_engine = 'team_stroke'`. La respuesta agrega `requiresGeneralHandicapAllowance` y `scoringEngine` para hacer explícita la evidencia.
 
-**Qué no hace:** no agrega un HCP Allowance general a A-Go-Go; no
-modifica `tournaments.handicap_allowance_pct`; no modifica la
-configuración ni el cálculo del HCP TEAM; no toca motores deportivos,
-inscripciones, congelamiento, workflow 395/396 ni
-`tournament_workflow_nodes`.
+**Qué no hace:** no agrega un HCP Allowance general a A-Go-Go; no modifica `tournaments.handicap_allowance_pct`; no modifica la configuración ni el cálculo del HCP TEAM; no toca motores deportivos, inscripciones, congelamiento, workflow 395/396 ni `tournament_workflow_nodes`.
 
-**Efecto esperado:** el Asistente se reevalúa dinámicamente. En **PRUEBA
-A-GO-GO CON QR**, `Configurar datos generales` debe quedar completo
-inmediatamente después de aplicar 430 si no existe otro dato general
-faltante, sin recrear el torneo ni reconstruir nodos materializados.
+**Efecto esperado:** el Asistente se reevalúa dinámicamente. En **PRUEBA A-GO-GO CON QR**, `Configurar datos generales` debe quedar completo inmediatamente después de aplicar 430 si no existe otro dato general faltante, sin recrear el torneo ni reconstruir nodos materializados.
 
-**Verificación:** comprobar la definición STABLE de la función 405;
-verificar que A-Go-Go devuelve `requiresGeneralHandicapAllowance=false`
-y no reporta `PORCENTAJE_HANDICAP`; comprobar como control de regresión
-que modalidades distintas de `team_stroke` continúan exigiendo el
-porcentaje general cuando corresponde.
+**Verificación:** comprobar la definición STABLE de la función 405; verificar que A-Go-Go devuelve `requiresGeneralHandicapAllowance=false` y no reporta `PORCENTAJE_HANDICAP`; comprobar como control de regresión que modalidades distintas de `team_stroke` continúan exigiendo el porcentaje general cuando corresponde.
 
-------------------------------------------------------------------------
+---
 
 ## Migración 431 --- RECUPERAR Y CANCELAR BORRADOR DE INSCRIPCIÓN GRUPAL
 
@@ -2666,7 +1985,7 @@ cancelación explícita deja team inactivo y slots cancelados sin crear
 inscripciones. Los flujos de pago individual y grupal continúan creando
 `tournament_registrations` únicamente después de resultado aprobado.
 
-------------------------------------------------------------------------
+---
 
 ## Migración 432 --- WORKFLOW POR MODALIDAD Y COMPOSICIÓN DE EQUIPOS
 
@@ -2732,6 +2051,65 @@ después de validar salidas.
 
 ---
 
+## 432A — Corrección del orden de workflow: congelamiento antes de grupos/salidas
+
+**Objetivo.** Corregir la Migración 432 ya aplicada para restablecer el orden operativo común: el congelamiento de condiciones ocurre antes de preparar grupos y salidas. La composición de equipos se evalúa antes del congelamiento en modalidades por equipos; el HCP TEAM permanece como paso exclusivo de A-Go-Go.
+
+**Qué hace.**
+- `TEAM_COMPOSITION` aplica a formatos con `tipo_participacion = equipo`.
+- A-Go-Go conserva como evidencia especializada `obtener_estado_equipos_incompletos_a_gogo_274`.
+- Best Ball y Stableford por equipos consideran resuelta la composición cuando todas las inscripciones activas están asignadas a un equipo activo; no se introduce HCP TEAM en esas modalidades.
+- `FREEZE` pasa a secuencia 85, antes de grupos (90), salidas (100), validación (110) y emisión (120).
+- El evaluador 395 queda con el flujo: pasos iniciales → pasos específicos pre-freeze → freeze → preparación de ronda → emisión → inicio.
+- No modifica motores deportivos, reglas de score, autorizaciones ni funciones de congelamiento.
+
+**Orden operativo resultante.**
+- Individual: cerrar inscripciones → congelar → grupos → salidas → validar → emitir.
+- Best Ball / Stableford equipo: cerrar inscripciones → formar equipos → congelar → grupos → salidas → validar → emitir.
+- A-Go-Go: cerrar inscripciones → formar equipos → HCP TEAM → congelar → grupos → salidas → validar → emitir.
+
+
+Este documento conserva un registro breve de cada migración aplicada o
+preparada en el proyecto.
+
+**Proyecto Supabase:** `GOLFING_FULL`\
+**Aplicación:** las migraciones se ejecutan manualmente en Supabase, en
+orden.\
+**Criterio del README:** una entrada por migración, sin repetir el SQL.
+Supabase es la fuente de verdad del esquema vivo.
+
+---
+
+## 433 — Formalización de resultados A-Go-Go y orden de cierre
+
+**Objetivo.** Integrar A-Go-Go (`equipo / team_stroke`) al contrato operativo común de resultados, cierres por categoría y publicación oficial, reutilizando el leaderboard A-Go-Go existente; impedir además que una ronda futura pueda cerrarse antes de sus categorías.
+
+**Qué hace.**
+- `obtener_leaderboard_operativo_ronda` conserva Best Ball y el fallback histórico, y agrega el despacho `team_stroke/equipo` hacia `obtener_leaderboard_a_gogo_ronda`.
+- No crea un segundo cálculo: reutiliza el resultado, rankings y desempates ya encapsulados por el leaderboard A-Go-Go.
+- `_estado_formalizacion_resultados_ronda_265` puede así evaluar `allCategoriesReady`, `allCategoriesClosed` y `allCategoriesPublished` para A-Go-Go.
+- `cerrar_categoria_competitiva_ronda` y `publicar_resultados_categoria_ronda` conservan sus contratos existentes.
+- `cerrar_ronda_competitiva` agrega un guard: cuando la formalización está soportada exige `allCategoriesClosed=true` antes del cierre histórico `_pre314`.
+- No reabre ni modifica rondas ya cerradas; la ronda histórica de PRUEBA A-GO-GO CON QR puede cerrar su categoría y publicar después de 433.
+- No modifica scoring, HCP TEAM, tarjetas, QR, captura, conciliación ni resultados ya calculados.
+
+**Flujo esperado.** Captura cerrada → Revisar resultados → Cerrar categorías → Cerrar ronda → Publicar resultados → Finalizar torneo.
+
+---
+
+## 433A — Normalización del contrato operativo A-Go-Go
+
+**Objetivo.** Corregir la integración introducida por 433: el leaderboard A-Go-Go ya entregaba categorías, equipos y resultados oficiales, pero su contrato histórico no incluía la bandera superior `supported`. `_estado_formalizacion_resultados_ronda_265` interpreta la ausencia de esa bandera como `false`, dejando permanentemente pendiente REVISAR RESULTADOS.
+
+**Qué hace.**
+- Mantiene el despacho `team_stroke/equipo` hacia `obtener_leaderboard_a_gogo_ronda`.
+- Añade exclusivamente en el adaptador común `supported=true` y `applicable=true`.
+- Conserva intactas las ramas Best Ball y fallback histórico.
+- No recalcula ni modifica scores, rankings, desempates, cierres, publicaciones, HCP TEAM, tarjetas, QR, captura o conciliación.
+- Resultado esperado para PRUEBA A-GO-GO CON QR: 1 categoría, 4 equipos resueltos, `allCategoriesReady=true`; el Asistente avanza de REVISAR RESULTADOS a CERRAR CATEGORÍAS.
+
+---
+
 ## Migración 434 — MOTOR BASE STABLEFORD POR EQUIPOS
 
 **Objetivo:** habilitar la base deportiva de Stableford por equipos reutilizando las tarjetas individuales y el cálculo Stableford existente por jugador. No se crea tarjeta TEAM ni se captura manualmente un score de equipo.
@@ -2760,6 +2138,8 @@ después de validar salidas.
 
 **Estado:** preparada para ejecución manual y posterior verificación.
 
+---
+
 ## 434A — CORREGIR DATOS GENERALES STABLEFORD EQUIPO
 
 **Objetivo:** corregir el diagnóstico de datos generales usado por el Asistente Operativo para que la modalidad `STABLEFORD_EQUIPO` no exija `handicap_allowance_pct` general.
@@ -2767,6 +2147,8 @@ después de validar salidas.
 **Qué hace:** actualiza únicamente `public.obtener_estado_datos_generales_torneo_405(uuid)`. Conserva la excepción existente de A-Go-Go / `team_stroke` y agrega una excepción explícita para `STABLEFORD_EQUIPO` (`equipo` + `stableford`). En Stableford por equipos cada integrante conserva su Playing HCP individual y no existe HCP TEAM. Stroke Play y Stableford individual continúan exigiendo el porcentaje general cuando corresponde.
 
 **Alcance:** diagnóstico/workflow del Asistente. No modifica scores, motores deportivos, congelamientos, resultados ni datos del torneo.
+
+---
 
 ## 435 — VALIDADOR DE SALIDAS STABLEFORD POR EQUIPOS
 
@@ -2780,6 +2162,8 @@ después de validar salidas.
 
 **No regresión:** no cambia las rutas de A-Go-Go, Best Ball, Stableford individual ni Stroke Play.
 
+---
+
 ## 435A — COMPATIBILIDAD DE UNIDAD `registration` CON STABLEFORD TEAM
 
 **Objetivo:** permitir persistir las unidades individuales de Stableford por Equipos conservando su `tournament_team_id`.
@@ -2791,6 +2175,8 @@ después de validar salidas.
 **Qué no hace:** no crea tarjetas TEAM, no crea HCP TEAM, no modifica grupos, no modifica el motor Stableford ni los validadores 435.
 
 **Resultado esperado:** `validar_salidas_ronda` puede persistir los jugadores de Stableford TEAM como tarjetas/unidades individuales relacionadas con su equipo.
+
+---
 
 ## 435B — COMPATIBILIDAD DE TARJETA `registration` CON STABLEFORD TEAM
 
@@ -2804,6 +2190,8 @@ después de validar salidas.
 
 **Resultado esperado:** la emisión oficial puede crear una tarjeta individual por integrante de Stableford TEAM, manteniendo el vínculo necesario jugador → equipo para el motor de resultados.
 
+---
+
 ## 435C — OPERACIÓN DE TARJETA STABLEFORD TEAM
 
 **Objetivo:** reutilizar la operación Stableford individual por tarjeta para las tarjetas individuales de `STABLEFORD_EQUIPO`.
@@ -2816,6 +2204,8 @@ después de validar salidas.
 
 **Qué no hace:** no crea un HCP TEAM, no crea tarjeta TEAM y no cambia el cálculo individual Stableford.
 
+---
+
 ## 435D — SNAPSHOT DEL MOTOR STABLEFORD PARA STABLEFORD TEAM
 
 **Objetivo:** congelar el motor Stableford por jugador también cuando la participación es `equipo` y el formato es `STABLEFORD_EQUIPO`.
@@ -2826,6 +2216,7 @@ después de validar salidas.
 
 **Qué no hace:** no descongela el torneo, no recalcula HCP, no crea HCP TEAM y no cambia tarjetas ni resultados capturados.
 
+---
 
 ## Migración 436 — Activación tardía de TARJETA DIGITAL y QR para Stableford por equipos
 
@@ -2838,3 +2229,725 @@ La activación tardía **no anula ni reemite** tarjetas, no cambia folios y no r
 También se actualiza `obtener_tarjeta_publica_qr_426(text,text)` para reconocer tarjetas `registration` de `STABLEFORD_EQUIPO`. Se reutiliza `_obtener_operacion_stableford_tarjeta_core_426`: cada integrante conserva su tarjeta y operación Stableford individual; no se crea tarjeta ni QR de equipo. El motor TEAM seguirá siendo una capa posterior que selecciona la mejor aportación válida por hoyo.
 
 **UI asociada (Lovable, no forma parte de la migración).** El control `TARJETA DIGITAL SÍ/NO` debe retirarse de Información General y convertirse en la primera sección de TARJETAS. Antes de emitir puede cambiarse normalmente. Después de emitir sólo debe ofrecerse `NO → SÍ` si el torneo aún no inició; al activarlo, debe permitir reimprimir las tarjetas oficiales con sus QR. Después de emitir con SÍ, y después de iniciar el torneo, el control se muestra bloqueado.
+
+---
+
+## Actualización 436A — TARJETA DIGITAL reversible antes de iniciar
+
+### Objetivo
+Corregir la protección introducida en 436 para que TARJETA DIGITAL sea una
+decisión operativa reversible mientras el torneo todavía no haya iniciado.
+
+### Regla definitiva
+- Antes de iniciar el torneo, TARJETA DIGITAL puede cambiarse **SÍ ↔ NO**.
+- Esto aplica aunque las tarjetas oficiales ya hayan sido emitidas.
+- No se reemiten tarjetas ni se regeneran `qr_token`.
+- Los mismos QR permanecen asociados a las mismas tarjetas.
+- Con TARJETA DIGITAL = NO, el mecanismo digital queda deshabilitado.
+- Al volver a SÍ, los mismos QR vuelven a habilitar el mecanismo digital.
+- Después de iniciar el torneo, TARJETA DIGITAL queda congelada.
+
+### Alcance
+La regla es general para todas las modalidades que utilizan la infraestructura
+de TARJETA DIGITAL. No es específica de Stableford por equipos.
+
+### Base de datos
+Se reemplaza la función trigger:
+`public._proteger_tarjeta_digital_post_emision_422()`
+
+Se conservan:
+- SECURITY DEFINER.
+- `search_path = public, pg_temp`.
+- El control de autorización existente mediante RLS sobre `tournaments`.
+- Las tarjetas oficiales emitidas.
+- Folios.
+- `qr_token`.
+- Validaciones y salidas.
+
+### Relación con 436
+436 habilitó NO → SÍ después de emisión antes del inicio y adaptó el QR público
+para Stableford por equipos. 436A amplía únicamente la regla del interruptor:
+antes del inicio ahora permite SÍ ↔ NO.
+
+La adaptación QR de Stableford por equipos realizada en 436 permanece intacta.
+
+### Interfaz
+El cambio visual/UX se realiza en Lovable y no forma parte de esta migración.
+TARJETA DIGITAL debe permanecer como primera sección de TARJETAS y permitir
+SÍ ↔ NO mientras el torneo no haya iniciado. Después del inicio debe mostrarse
+bloqueada.
+
+### Verificación esperada
+En `STABLEFORD-PRUEBA QR`, mientras el torneo permanezca en
+`inscripcion_cerrada`, el organizador debe poder:
+1. pasar de SÍ a NO;
+2. comprobar que el QR existente queda digitalmente deshabilitado;
+3. volver de NO a SÍ;
+4. comprobar que el mismo QR vuelve a funcionar.
+
+No debe ser necesario reemitir tarjetas para apagar o volver a encender el
+mecanismo digital. Solo será necesario reimprimir cuando se necesite obtener
+físicamente una tarjeta que incluya el QR.
+
+---
+
+## Actualización 437 --- Leaderboard y cierre competitivo base Stableford TEAM
+
+### Objetivo
+
+Conectar el motor deportivo Stableford por equipos creado en 434 con la
+capa operativa de resultados y cierre, sin crear una tarjeta TEAM
+ficticia.
+
+### Arquitectura preservada
+
+La tarjeta oficial de Stableford por equipos continúa siendo individual
+por jugador. El flujo sigue siendo:
+
+**Jugador → tarjeta individual → resultado Stableford individual por
+hoyo → motor 434 selecciona mejor aportación → resultado TEAM →
+leaderboard TEAM.**
+
+No se crea `tournament_score_card` de tipo TEAM para Stableford por
+equipos.
+
+### Identidad de desempates
+
+`tournament_tiebreak_resolution_players` se amplía para admitir
+`tournament_team_id`. La identidad de una fila de resolución debe ser
+exactamente una de estas dos:
+
+-   `score_card_id` para modalidades históricas basadas en tarjeta
+    competitiva;
+-   `tournament_team_id` para Stableford TEAM.
+
+Los registros históricos permanecen válidos y no se transforman.
+
+### Leaderboard
+
+Se crea: `public.obtener_leaderboard_stableford_team_ronda_437(uuid)`
+
+La función: - consume exclusivamente el resultado TEAM derivado por el
+motor 434; - agrupa por categoría; - clasifica Gross y Neto de forma
+independiente; - ordena por puntos Stableford descendentes; - considera
+un equipo resuelto cuando todas sus tarjetas individuales emitidas están
+conciliadas o tienen outcome terminal; - expone los hoyos TEAM y sus
+integrantes para trazabilidad; - usa `competitiveUnit = TEAM`; -
+conserva la llave histórica `players` dentro de categorías únicamente
+por compatibilidad contractual, pero cada elemento se identifica como
+TEAM.
+
+### Dispatcher común
+
+`public.obtener_leaderboard_operativo_ronda(uuid)` agrega una rama
+explícita para: - `scoring_engine = stableford` -
+`participation_type = equipo` - `format_code = STABLEFORD_EQUIPO`
+
+Best Ball, A-Go-Go y modalidades históricas conservan sus rutas previas.
+
+### Estado competitivo
+
+Se crea: `public.obtener_estado_cierre_stableford_team_ronda_437(uuid)`
+
+y se conecta a: `public.obtener_estado_cierre_competitivo_ronda(uuid)`.
+
+Con ello Stableford TEAM deja de responder "modalidad no soportada".
+
+Estados base: - `RESULTS_PENDING`: existen equipos con tarjetas
+individuales todavía no resueltas; - `TIEBREAKS_PENDING`: todos los
+equipos están resueltos pero existe al menos un empate Gross o Neto; -
+`READY`: resultados resueltos y sin empates pendientes; - `FINAL`: la
+ronda ya tiene cierre competitivo formal.
+
+### Desempates --- alcance de 437
+
+437 **no declara resuelto ningún empate TEAM**. Los detecta y los deja
+explícitamente en `PENDING`.
+
+La infraestructura de identidad TEAM queda preparada para la siguiente
+fase, que aplicará las reglas automáticas Stableford (últimos 9/6/3,
+hoyo 18, hoyo por hoyo por Stroke Index, etc.) a los puntos TEAM por
+hoyo y permitirá resolución manual por `tournament_team_id` cuando
+corresponda.
+
+Esta separación evita abrir el cierre competitivo con un empate
+falsamente resuelto.
+
+### No modifica
+
+-   motor deportivo 434;
+-   cálculo Stableford individual;
+-   tarjetas oficiales emitidas;
+-   QR;
+-   captura digital;
+-   HCP individual;
+-   salidas;
+-   A-Go-Go;
+-   Best Ball;
+-   Stroke Play.
+
+---
+
+## Actualización 437A --- Corrección de clasificaciones Stableford TEAM
+
+### Antecedente
+
+La migración 437 conectó Stableford por equipos al leaderboard operativo
+y al estado competitivo común sin crear una tarjeta TEAM ficticia.
+
+Al ejecutar el flujo real desde la sesión autenticada del organizador
+apareció:
+
+`column s.clasifica_gross does not exist`
+
+La verificación estructural de 437 no ejecutó esa rama autenticada y por
+ello el defecto se detectó al probar la pantalla real.
+
+### Causa
+
+`tournament_category_classification_snapshots` no almacena dos booleanos
+`clasifica_gross` y `clasifica_neto`.
+
+La estructura real congela una fila por clasificación mediante
+`tipo_resultado`. Los valores existentes son:
+
+-   `gross`
+-   `neto`
+
+En `STABLEFORD-PRUEBA QR`, la categoría `UNICA` tiene ambas filas
+congeladas.
+
+### Corrección
+
+437A reemplaza únicamente:
+
+`public.obtener_leaderboard_stableford_team_ronda_437(uuid)`
+
+Ahora:
+
+-   `gross_enabled` es verdadero cuando existe una fila congelada
+    `tipo_resultado='gross'` para la categoría;
+-   `net_enabled` es verdadero cuando existe una fila congelada
+    `tipo_resultado='neto'` para la categoría.
+
+### No modifica
+
+-   motor Stableford TEAM 434;
+-   cálculo Stableford individual;
+-   tarjetas oficiales;
+-   QR y captura digital;
+-   resultados capturados;
+-   dispatchers creados/conectados en 437;
+-   estructura de identidad TEAM para desempates;
+-   A-Go-Go;
+-   Best Ball;
+-   Stroke Play.
+
+### Resultado esperado
+
+Al recargar **Resultados y cierre** de `STABLEFORD-PRUEBA QR`, ya no
+debe aparecer el error de columna inexistente. El sistema debe avanzar
+al estado competitivo real de la ronda: resultados pendientes,
+desempates pendientes o listo, según corresponda.
+
+### Estado de desempates
+
+437A no amplía el alcance deportivo de 437: los desempates TEAM
+continúan reportándose como pendientes hasta implementar su resolución
+específica.
+
+---
+
+## Actualización 438 --- Desempates automáticos Stableford por equipos
+
+### Objetivo
+
+Completar la capa de desempates de Stableford TEAM sin crear tarjetas
+TEAM y sin exigir al organizador una acción para desempates que las
+reglas del torneo pueden resolver automáticamente.
+
+### Principio
+
+Stableford TEAM conserva tarjetas oficiales individuales. El desempate
+se calcula sobre el resultado TEAM hoyo por hoyo ya producido por el
+motor 434.
+
+### Reutilización
+
+438 no crea un algoritmo deportivo distinto. Reutiliza:
+`public.evaluar_secuencia_desempate_stableford(...)` y, a través de
+éste: `public.calcular_clave_metodo_desempate_stableford(...)`.
+
+Por tanto, los métodos existentes se interpretan exactamente igual que
+en Stableford individual, pero reciben los puntos TEAM Gross/Neto de
+cada hoyo.
+
+### Reglas del torneo de prueba
+
+`STABLEFORD-PRUEBA QR` tiene configuradas para Gross y Neto: 1.
+TARJETA_ULTIMOS_9 2. TARJETA_ULTIMOS_6 3. TARJETA_ULTIMOS_3 4.
+TARJETA_ULTIMO_HOYO
+
+Se aplican automáticamente en ese orden.
+
+### Funciones
+
+Se crea: - `obtener_desempates_stableford_team_ronda_438(uuid)` -
+`obtener_leaderboard_stableford_team_ronda_438(uuid)`
+
+Se actualiza el dispatcher: -
+`obtener_leaderboard_operativo_ronda(uuid)`
+
+Y el estado Stableford TEAM: -
+`obtener_estado_cierre_stableford_team_ronda_437(uuid)`
+
+### Comportamiento
+
+Si un método automático rompe completamente el empate, el grupo queda
+`RESOLVED_AUTOMATIC`, se asigna `tiebreakOrder` y `finalRank`, y deja de
+bloquear el cierre.
+
+Si todas las reglas configuradas se agotan y el empate matemático
+persiste, 438 NO inventa un ganador. El grupo permanece pendiente porque
+el torneo no tiene configurado un método final adicional. Esa situación
+requiere definir una regla deportiva final, no una decisión arbitraria
+del software.
+
+### No modifica
+
+-   scores capturados;
+-   motor 434;
+-   cálculo individual Stableford;
+-   tarjetas oficiales;
+-   QR;
+-   salidas;
+-   HCP;
+-   A-Go-Go;
+-   Best Ball;
+-   Stroke Play.
+
+### Caso actual
+
+El empate detectado en `STABLEFORD-PRUEBA QR`:
+`UNICA · GROSS · POSICIÓN 2` debe evaluarse automáticamente al consultar
+nuevamente Resultados y cierre.
+
+---
+
+## Actualización 439 --- Acumulado y finalización Stableford por equipos
+
+### Objetivo
+
+Completar la capa global de torneo para Stableford TEAM. Hasta 438 la
+ronda ya tenía leaderboard y desempates automáticos, pero la
+previsualización de finalización todavía clasificaba `stableford/equipo`
+como no soportado.
+
+### Clasificación acumulada TEAM
+
+Se crea: `public.obtener_leaderboard_stableford_team_torneo_439(uuid)`
+
+La unidad competitiva es el equipo. No se crea tarjeta TEAM.
+
+Para cada equipo: - suma los puntos Gross TEAM de todas las rondas
+requeridas; - suma los puntos Neto TEAM de todas las rondas
+requeridas; - exige que el equipo tenga resultado resuelto en todas las
+rondas activas Stableford TEAM para entrar al ranking acumulado; -
+conserva detalle de puntos por ronda; - clasifica Gross y Neto
+independientemente.
+
+### Desempates acumulados
+
+Cuando dos equipos empatan en puntos acumulados, 439 reutiliza:
+`evaluar_secuencia_desempate_stableford_multirronda(...)`
+
+La evidencia deportiva proviene de la última ronda y de sus puntos TEAM
+por hoyo, igual que la arquitectura multirronda Stableford ya existente.
+
+No se inventa un ganador si las reglas configuradas no logran romper el
+empate.
+
+### Finalización del torneo
+
+Se amplía `_previsualizar_finalizacion_torneo_pre314(uuid)` de forma
+quirúrgica.
+
+Cuando todas las rondas activas congeladas son: -
+`scoring_engine = stableford` - `participation_type = equipo`
+
+el modo pasa a: `STABLEFORD_TEAM`
+
+y `aggregateCompetition` utiliza el leaderboard TEAM 439.
+
+El torneo sólo podrá finalizar cuando, además de los gates ya
+existentes: - todas las rondas estén cerradas; - las publicaciones
+oficiales requeridas estén completas; - el acumulado TEAM esté
+`READY_FOR_PUBLICATION`.
+
+### Se conserva
+
+-   Stableford individual y su acumulado existente;
+-   Stroke Play y lógica histórica;
+-   A-Go-Go;
+-   Best Ball;
+-   motor TEAM 434;
+-   tarjetas individuales;
+-   QR;
+-   desempates de ronda 438;
+-   autorización del organizador/Superadmin existente.
+
+### Caso de prueba
+
+En `STABLEFORD-PRUEBA QR` debe desaparecer el mensaje:
+`El cierre competitivo todavía no soporta scoring_engine=stableford / participation_type=equipo.`
+
+Mientras la ronda continúe sin cierre/publicación formal, la
+finalización debe seguir pendiente, pero por esa causa operativa real y
+no por modalidad no soportada.
+
+---
+
+## Actualización 440 --- Formalización de resultados Stableford TEAM
+
+### Diagnóstico
+
+La capa pública `obtener_estado_cierre_competitivo_ronda` ya reconocía
+`stableford/equipo/STABLEFORD_EQUIPO` y utilizaba
+`obtener_estado_cierre_stableford_team_ronda_437`.
+
+Sin embargo, `_estado_formalizacion_resultados_ronda_265` seguía
+llamando directamente a
+`_obtener_estado_cierre_competitivo_ronda_pre249`. Esa cadena termina en
+la lógica histórica pre213, que sólo contempla Stroke individual y
+Stableford individual y genera el error:
+
+`El cierre competitivo todavía no soporta scoring_engine=stableford / participation_type=equipo.`
+
+### Cambio 440
+
+Se modifica únicamente
+`_estado_formalizacion_resultados_ronda_265(uuid)`:
+
+-   Stableford TEAM usa
+    `obtener_estado_cierre_stableford_team_ronda_437(uuid)`.
+-   Ese estado ya consume el leaderboard/desempates automáticos 438.
+-   Las demás modalidades continúan usando exactamente la ruta histórica
+    pre249.
+-   No se modifica el motor deportivo.
+-   No se crea tarjeta TEAM.
+-   No se modifica captura, QR, HCP ni resultados por hoyo.
+-   No se altera el frontend.
+
+### Resultado esperado
+
+`STABLEFORD-PRUEBA QR` debe dejar de mostrar el error de modalidad no
+soportada. A partir de ahí, el cierre/finalización sólo debe quedar
+bloqueado por pendientes reales del flujo competitivo: resultados,
+cierres formales, publicaciones o lifecycle, según corresponda.
+
+---
+
+## Actualización 441 --- Cierre formal de ronda Stableford TEAM
+
+### Diagnóstico
+
+La rama Stableford TEAM de `obtener_estado_cierre_competitivo_ronda`
+consumía `obtener_estado_cierre_stableford_team_ronda_437`. Cuando
+resultados y desempates estaban completamente resueltos, 437 devolvía
+`READY`.
+
+La capa común de cierre y el frontend habilitan `CERRAR RONDA` cuando el
+estado competitivo previo es `FINAL`. Sin embargo, la rama TEAM sólo
+convertía a `FINAL` cuando ya existía una fila FINAL en
+`tournament_round_competitive_closures`. Esto generaba una dependencia
+circular: para crear el cierre se exigía FINAL, pero FINAL sólo aparecía
+después del cierre.
+
+### Cambio 441
+
+-   Stableford TEAM conserva 437/438 como fuente deportiva.
+-   `READY` + todas las categorías formalmente cerradas se expone como
+    `FINAL`, indicando que la ronda está preparada para el cierre
+    formal.
+-   Si las categorías todavía no están cerradas, se expone
+    `CATEGORIES_PENDING`.
+-   `RESULTS_PENDING` y `TIEBREAKS_PENDING` se conservan sin
+    reinterpretación.
+-   La publicación oficial NO se convierte en requisito para cerrar la
+    ronda. Se preserva el orden establecido: cierre de categoría →
+    cierre de ronda → publicación oficial.
+-   Se incorpora `resultsClosure` mediante
+    `validar_cierre_resultados_ronda`, aprovechando que Stableford TEAM
+    mantiene tarjetas oficiales individuales. Esto restablece el
+    contrato común de Tarjetas / Resueltas / Pendientes / Outcomes para
+    la interfaz.
+-   Una vez persistido el cierre formal de ronda, el estado sigue siendo
+    `FINAL` y `competitivelyClosed=true`.
+-   No se modifica el motor Stableford TEAM, los puntos, desempates,
+    tarjetas, QR, HCP, captura ni resultados por hoyo.
+-   Se preservan sin cambios las ramas de Best Ball y de las demás
+    modalidades.
+
+---
+
+## Actualización 441A --- Corrección de regresión en resultsClosure Stableford TEAM
+
+### Diagnóstico
+
+La 441 agregó `resultsClosure` llamando a
+`validar_cierre_resultados_ronda`. Esa función no era neutral por
+modalidad: para Stableford TEAM derivaba a la cadena histórica pre213 y
+volvía a producir el rechazo `stableford / participation_type=equipo`.
+
+### Corrección
+
+-   Se elimina esa llamada exclusivamente de la rama Stableford TEAM.
+-   Se conserva `obtener_estado_cierre_stableford_team_ronda_437` como
+    estado deportivo y `obtener_leaderboard_stableford_team_ronda_438`
+    como fuente de conteos.
+-   `resultsClosure.summary` se construye sumando `memberCards`,
+    `resolvedMemberCards` y `unresolvedMemberCards` que 438 ya entrega
+    por equipo.
+-   No se crea tarjeta TEAM: esos conteos representan las tarjetas
+    individuales de los integrantes.
+-   Se conserva la regla 441: `READY` + categorías formalmente cerradas
+    =\> `FINAL` previo al cierre formal.
+-   La publicación no es requisito para cerrar la ronda.
+-   Best Ball y las demás modalidades conservan sus rutas anteriores.
+
+---
+
+## Actualización 441B --- Fast path de ronda cerrada Stableford TEAM
+
+**Diagnóstico:** después del cierre formal,
+`obtener_estado_cierre_competitivo_ronda` seguía recalculando el estado
+TEAM mediante 437/438 y además volvía a consultar la formalización. Una
+sola lectura podía disparar varias evaluaciones completas del
+leaderboard y desempates, provocando `statement timeout`.
+
+**Corrección:** para Stableford TEAM, si ya existe un cierre competitivo
+`FINAL`, la función devuelve el `closure_snapshot` persistido ---que es
+la evidencia inmutable del cierre--- y sólo normaliza
+`competitiveStatus=FINAL` y `competitivelyClosed=true`. No recalcula
+resultados, leaderboard ni desempates.
+
+Las rondas Stableford TEAM todavía abiertas conservan la lógica 441A.
+Best Ball y las demás modalidades no se modifican. La publicación
+oficial continúa separada del cierre; la publicación de la ronda de
+prueba permanece `PARTIAL` hasta que el organizador ejecute la
+publicación oficial.
+
+---
+
+## Migración 442 --- REPORTE DETALLADO INDIVIDUAL STABLEFORD TEAM
+
+**Archivo:** `442-MIGRACION_REPORTE_DETALLADO_STABLEFORD_TEAM.sql`\
+**Verificación:**
+`442-VERIFICACION_REPORTE_DETALLADO_STABLEFORD_TEAM.sql`
+
+### Objetivo
+
+Crear una fuente consolidada y escalable para el reporte individual hoyo
+por hoyo de los integrantes de equipos en rondas Stableford por equipos,
+evitando el patrón N×tarjeta desde el navegador y manteniendo
+equivalencia deportiva con el motor Stableford TEAM instalado.
+
+### Diagnóstico previo
+
+Se confirmó que `obtener_resultado_stableford_tarjeta_434` calcula la
+tarjeta individual usando evidencia oficial, snapshots congelados,
+Playing Handicap, distribución por Stroke Index, tabla Stableford y
+override de Hole In One. El motor
+`obtener_resultado_stableford_equipo_ronda_434` consume esas tarjetas y
+aplica posteriormente la elegibilidad por outcome para seleccionar BEST
+1 por hoyo.
+
+También se confirmó una discrepancia preexistente: la cadena oficial
+usada por 434 exige hoyos oficiales SCORE/PICKUP completos, por lo que
+el caso conceptual SIN SCORE intermedio todavía no está implementado por
+el motor vigente. La 442 no intenta corregir esa discrepancia desde un
+reporte.
+
+### Qué hace
+
+-   Crea
+    `obtener_reporte_detallado_scores_stableford_team_442(uuid,uuid,text)`.
+-   Parámetros: ronda, categoría y criterio `GROSS` / `NETO`.
+-   Devuelve una sola estructura JSON agrupada por equipo y jugador.
+-   Incluye HCP índice congelado, Playing HCP, tee, folio, outcome,
+    estado de disponibilidad oficial, totales y 18 hoyos.
+-   Por hoyo incluye PAR, Stroke Index, SCORE/PICKUP, golpes Gross,
+    golpes de ventaja, score Neto, puntos Gross, puntos Neto, criterio
+    seleccionado y aplicación de override HIO.
+-   Expone la elegibilidad del hoyo frente al outcome para trazabilidad,
+    sin recalcular la aportación TEAM.
+-   `DNS`, `DQ` y `NO_CARD` quedan no elegibles para aportación;
+    `WD`/`DNF` respetan el último hoyo válido cuando existe. Esta marca
+    es informativa en el reporte y no sustituye el motor TEAM.
+-   Usa snapshots congelados de hándicap, ronda, hoyos, motor y reglas
+    especiales.
+-   Reutiliza `calcular_golpes_handicap_hoyo` y
+    `calcular_puntos_stableford_estandar`.
+-   La implementación es set-based y no llama una vez por jugador a
+    `obtener_resultado_stableford_tarjeta_434`.
+-   `authenticated` recibe EXECUTE; `PUBLIC` queda revocado.
+-   La función es `STABLE SECURITY DEFINER` con
+    `search_path=public,pg_temp`.
+
+### Protección del motor existente
+
+442 es aditiva. No redefine 434, 438, 439, cierre de categoría, cierre
+de ronda, publicación oficial, clasificación acumulada ni desempates. No
+crea tarjeta TEAM y no recalcula BEST 1 por hoyo.
+
+### Verificación obligatoria antes de frontend
+
+El SQL independiente incluye una comparación contra
+`obtener_resultado_stableford_tarjeta_434` para las 12 tarjetas actuales
+de `STABLEFORD-PRUEBA QR`.
+
+Criterio de aceptación deportivo:
+
+-   cero diferencias de Playing HCP y totales;
+-   cero diferencias hoyo por hoyo en SCORE/PICKUP, gross score, golpes
+    de handicap, puntos Gross y puntos Neto;
+-   12 tarjetas distintas;
+-   18 hoyos por tarjeta;
+-   216 comparaciones de hoyo sin diferencias.
+
+La prueba funcional requiere contexto autenticado. Después de demostrar
+equivalencia se podrá conectar Lovable al nuevo RPC. Para una ronda real
+de 150-200 jugadores se recomienda además medir
+`EXPLAIN (ANALYZE, BUFFERS)` y el tamaño del JSON antes de considerar
+cerrado el requisito de escala.
+
+### Alcance deliberadamente excluido
+
+442 no corrige SIN SCORE intermedio, no cambia outcomes, no modifica
+captura o conciliación, no crea ranking individual, no selecciona
+aportantes TEAM y no modifica ninguna regla deportiva.
+
+### Estado
+
+**Preparada para ejecución manual.** Primero ejecutar la migración 442;
+después ejecutar la verificación y exigir cero diferencias contra 434
+antes de pedir la integración frontend.
+
+---
+
+## Migración 443 --- ALINEAR DESEMPATES DEL ASISTENTE
+
+**Archivo:** `443-MIGRACION_ALINEAR_DESEMPATES_ASISTENTE.sql`  
+**Verificación:** `443-VERIFICACION_ALINEAR_DESEMPATES_ASISTENTE.sql`
+
+### Objetivo
+Corregir la inconsistencia por la cual el Asistente exigía reglas GROSS y NETO aunque las clasificaciones reales del torneo requirieran solamente uno de esos tipos.
+
+### Diagnóstico confirmado
+`obtener_workflow_evaluado_395` usa `obtener_estado_configuracion_desempates_406` para `TIEBREAK_CONFIGURATION_COMPLETE`. La 406 exigía `gross > 0 AND neto > 0`. En `2SOME - STABLEFORD PRUEBA` sólo se requiere NETO: existen cuatro reglas NETO R&A 9/6/3/último hoyo; 261 devuelve COMPLETE y la antigua 406 devolvía incompleto.
+
+Se verificó además que 406 es consumida actualmente por el workflow 395.
+
+### Qué hace
+443 redefine únicamente 406. Conserva sus contadores descriptivos GROSS/NETO, pero delega `complete` al validador canónico 261. De esta forma los tipos requeridos provienen de las clasificaciones reales y se conserva la validación existente de secuencia R&A, faltantes, reglas inválidas y conflictos.
+
+No modifica 395, reglas almacenadas, motores deportivos, frontend, plantilla del workflow, resultados ni datos del torneo.
+
+### Comportamiento esperado
+- NETO solamente: exige NETO.
+- GROSS solamente: exige GROSS.
+- GROSS + NETO: exige ambos.
+- Configuración faltante, inválida o conflictiva: continúa incompleta.
+
+### Verificación
+La verificación comprueba estructura/delegación, el caso real NETO-only, consistencia global 261/406 y el posterior avance del workflow. El criterio principal de consistencia global es **cero filas**.
+
+### Estado
+**Preparada para ejecución manual y posterior verificación.**
+
+---
+
+## Migración 444 --- IDENTIFICACIONES Y AUDITORÍAS DE ACCESO
+
+**Archivo:** `444-MIGRACION_IDENTIFICACIONES_Y_AUDITORIAS_ACCESO.sql`  
+**Verificación:** `444-VERIFICACION_IDENTIFICACIONES_Y_AUDITORIAS_ACCESO.sql`
+
+### Objetivo
+Proteger la fotografía de identificación oficial obligatoria por ingreso al campo, auditar sus consultas y aplicar conservación diferenciada.
+
+### Qué hace
+Agrega una fotografía privada de identificación por evento de ingreso, registra si llega en vehículo y mantiene placa manual en mayúsculas. Separa las identificaciones del bucket de vehículos, agrega autorizaciones de carga, auditoría de consultas y consulta de auditorías por torneo para Organizador/Superadmin. Las fotografías se purgan a los 15 días del estado terminal del torneo y las auditorías un mes calendario después de la purga física efectiva.
+
+### Cómo lo hace
+Crea bucket privado sin política de lectura cliente, funciones para autorizar/confirmar cargas de la puerta, RPC reservada al servicio para autorizar y auditar consultas, y control de la purga 368 que impide borrar registros mientras haya imágenes físicas en ambos buckets. Las auditorías conservan identificadores propios para sobrevivir a la eliminación de entradas. Añade cron independiente para limpiar auditorías vencidas.
+
+### Estado y despliegue obligatorio
+**Preparada para ejecución manual. NO habilitar la captura de identificaciones hasta completar los servicios.** Después de ejecutar SQL y verificación, deben desplegarse y probarse: (1) una Edge Function autenticada que valide el JWT, llame `autorizar_consulta_identificacion_444` con service_role y cree URL firmada de vida corta; (2) actualización de `purge-access-storage-368` para llamar `obtener_identificaciones_purga_444` y eliminar del bucket `acceso-campo-identificaciones` antes de `confirmar_purga_acceso_368`; (3) UI de captura obligatoria y pestañas AUDITORÍAS. No incluir rutas de identificación en reportes, PDF o Excel. El SQL por sí solo **no implementa** la Edge Function ni el frontend.
+
+### Advertencias operativas
+La fotografía se confirma después de crear el evento de ingreso: el frontend debe conservar `entryId` y reintentar la carga sin registrar un segundo ingreso. La obligatoriedad debe exigirse en el flujo UI y en la finalización del registro; los eventos históricos no reciben fotos retroactivamente. Se debe informar el tratamiento de datos personales antes de capturar. No sustituir la foto de identificación por `vehiculo_foto_path`. Revisar en pruebas los permisos de Storage y la purga de objetos huérfanos.
+
+---
+
+## Migración 445 --- RECUPERACIÓN DE INGRESOS INCOMPLETOS (versión definitiva propuesta)
+
+**Archivo:** `445-MIGRACION_RECUPERACION_INGRESOS_INCOMPLETOS.sql`  
+**Verificación:** `445-VERIFICACION_RECUPERACION_INGRESOS_INCOMPLETOS.sql`
+
+### Objetivo
+Permitir recuperar registros incompletos en la misma puerta durante 30 minutos, no bloquear ingresos legítimos en otra puerta, y convertir automáticamente en FALLIDO cualquier registro sin identificación al vencer el plazo.
+
+### Qué hace
+Añade el estado persistente `estado_identificacion_445` (`PENDIENTE`, `COMPLETADO`, `FALLIDO`). Crea la función pública `registrar_o_recuperar_ingreso_acceso_445` para uso sin sesión mediante QR de puerta y QR del jugador; recupera solo pendientes de la misma puerta y día que no hayan vencido. En otra puerta advierte sin exponer detalles y permite un registro nuevo tras confirmación. El guardia nunca consulta fotos anteriores. Un trigger impide confirmar fotos de ingresos vencidos o fallidos. Un cron cada minuto llama `marcar_ingresos_fallidos_445` para cerrar pendientes de 30 minutos y registrar exactamente una auditoría `ACCESS_ENTRY_FAILED` por entrada, con motivo `IDENTITY_NOT_CONFIRMED_30_MIN`.
+
+### Cómo lo hace
+Utiliza validaciones existentes de puerta, torneo y jugador, un advisory lock por inscripción, y la RPC 362 para creación. Una vista de lectura sin rutas de fotografía distingue estados operativos, incluido el vencimiento por reloj mientras espera el cron. La función de cierre toma filas `FOR UPDATE SKIP LOCKED` y una restricción única parcial evita duplicados de auditoría. Los eventos fallidos se conservan conforme a las reglas de purga de la migración 444.
+
+### Integración pendiente
+Lovable debe sustituir la RPC 362 por la 445 en el guardia, manejar `RECOVER`, `CREATED` y `CONFIRM_NEW_ENTRY`, preservar advertencias de QR reutilizado y exigir foto nueva en todo ingreso nuevo. Revisar todos los contadores/reportes que lean `tournament_access_entries` directamente: **solo COMPLETADO cuenta como ingreso válido**; los fallidos se muestran aparte. Adaptar el catálogo visual de AUDITORÍAS para `ACCESS_ENTRY_FAILED`/`ERROR` (mostrar como «Ingreso fallido»). La migración no reescribe automáticamente todos los reportes existentes.
+
+### Límites y validación
+El cron puede tardar hasta aproximadamente un minuto adicional en materializar el estado FALLIDO; la vista y el trigger respetan el límite de 30 minutos inmediatamente. El flujo antiguo que llama directamente 362 todavía existe: es obligatorio migrar el frontend y verificar que no queden otros consumidores. Se requiere prueba funcional con QR de puerta y jugador en torneo de prueba; no se han ejecutado pruebas destructivas en producción. La ejecución del SQL es exclusivamente manual por el usuario.
+
+### Estado
+**Propuesta lista para revisión y ejecución manual, pendiente de verificación en Supabase y adaptación de Lovable.**
+
+---
+
+## Migración 446 --- VALIDACIÓN DE IDENTIFICACIÓN DENTRO DE 30 MINUTOS
+
+**Archivo:** `446-MIGRACION_VALIDACION_IDENTIFICACION_30_MINUTOS.sql`  
+**Verificación:** `446-VERIFICACION_VALIDACION_IDENTIFICACION_30_MINUTOS.sql`
+
+### Objetivo
+Reforzar las RPC de carga de identificación para rechazar desde la preparación y la confirmación cualquier ingreso vencido, fallido o ya completado.
+
+### Qué hace y cómo lo hace
+Redefine exclusivamente `preparar_identificacion_acceso_444` y `confirmar_identificacion_acceso_444` conservando firmas y formatos de respuesta de éxito. Verifica que la puerta esté operativamente abierta, la ventana de acceso del torneo esté habilitada y el registro pertenezca a la puerta; bloquea la fila de ingreso con `FOR UPDATE` y exige `estado_identificacion_445='PENDIENTE'`, fotografía ausente y antigüedad estrictamente inferior a 30 minutos. Las autorizaciones de carga vencen a más tardar al límite de los 30 minutos. En confirmación, la fotografía se valida contra Storage, se actualiza el registro y el trigger 445 asigna `COMPLETADO`.
+
+### Conservación y compatibilidad
+No modifica cron, trigger, tablas, políticas RLS, buckets, reportes, auditorías ni motores deportivos. No reabre ingresos `FALLIDO` ni recupera entradas vencidas. No elimina fotografías cargadas pero no confirmadas: siguen sujetas a la purga existente. Las respuestas de error deben presentarse al guardia indicando que debe iniciar un nuevo registro.
+
+### Verificación y estado
+Ejecutar manualmente en Supabase y luego ejecutar el SQL de verificación (solo lectura). La comprobación estructural no sustituye una prueba funcional real con una puerta de prueba. Lovable debe adaptar la interfaz a la RPC 445 y mostrar los errores de 446.
+
+---
+
+## Actualización 447 — Estados y reportes de acceso
+
+### Alcance
+Se amplían aditivamente los contratos JSON de `obtener_reporte_acceso_torneo_366` y `validar_qr_jugador_acceso_361`. Se crea `obtener_auditorias_acceso_447` para no alterar el tipo TABLE de `obtener_auditorias_acceso_444`. La 444 continúa operativa y sin cambios.
+
+### Reglas de conteo
+- **COMPLETADO**: único estado que cuenta como entrada efectiva. `totalEntries`, `uniquePlayers`, `sameDayReuses`, `accompaniedEntries`, `vehiclePhotos` y `platesCaptured` del reporte se refieren a entradas completadas.
+- **PENDIENTE**: ingreso sin fotografía dentro de los 30 minutos.
+- **FALLIDO**: estado FALLIDO, o PENDIENTE cuyo plazo ya transcurrió aunque el cron todavía no haya actualizado la fila. No es ingreso efectivo.
+- **Historial QR**: `priorEntries`, `priorEntriesToday`, `hasPriorEntries`, `hasPriorEntryToday` y sus advertencias se conservan como *intentos* por seguridad. Se añaden `completedEntries`, `completedEntriesToday`, `pendingAttemptsToday` y `failedAttemptsToday`.
+- **Reporte**: se añaden `totalAttempts`, `completedEntries`, `pendingEntries`, `failedEntries` en summary, y `entryStatus`, `isEffectiveEntry` por fila.
+- **Auditoría**: nueva RPC 447 con campos adicionales `access_point_name`, `access_point_id`, `reason`; conserva autenticación y autorización por torneo. No se devuelven fotografías, placas ni contenido JSON crudo. Para auditorías sin puerta asociable los campos quedan NULL.
+
+### Operación y compatibilidad
+El usuario ejecuta la migración manualmente; ChatGPT solo verifica con SQL de lectura. Lovable debe actualizar la pantalla de AUDITORÍAS para llamar a la RPC 447 y utilizar los nuevos campos; adaptar la lista de ingresos y las advertencias de QR a los contadores diferenciados. No hay cambios a motores deportivos, RLS, Storage, cron ni funciones de captura 445/446.
+
+### Validación pendiente
+Pruebas de integración con una puerta real, con eventos de ingreso completado, pendiente, fallido y reingreso; validar diferencias entre conteos y auditoría.
