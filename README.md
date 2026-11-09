@@ -2951,3 +2951,599 @@ El usuario ejecuta la migración manualmente; ChatGPT solo verifica con SQL de l
 
 ### Validación pendiente
 Pruebas de integración con una puerta real, con eventos de ingreso completado, pendiente, fallido y reingreso; validar diferencias entre conteos y auditoría.
+
+
+---
+
+## Migración 448 — Inscripción individual directamente en equipo con pago el día del evento
+
+**Archivo:** `448-MIGRACION_INSCRIPCION_EQUIPO_PAGO_DIA_EVENTO.sql`  
+**Verificación:** `448-VERIFICACION_INSCRIPCION_EQUIPO_PAGO_DIA_EVENTO.sql`
+
+### Objetivo
+Permitir que un jugador se inscriba en un torneo por equipos, quede asociado al equipo elegido y mantenga independiente la situación económica de su inscripción, inicialmente PENDIENTE, para liquidarla el día del evento.
+
+### Qué hace
+Crea la RPC `inscribir_pago_dia_evento_en_equipo_448(p_tournament_id uuid, p_team_id uuid)` para jugadores autenticados. Valida torneo activo, inscripciones abiertas, opción de pago en el evento, formato por equipos, equipo activo y perteneciente al torneo, categoría del equipo, inexistencia de inscripción duplicada y ausencia de una plaza provisional del mismo jugador. Calcula la tarifa individual con el criterio de la RPC 339. Inserta una única inscripción activa con equipo y categoría vinculados, `estado_pago='PENDIENTE'`, importe por pagar y sin pago registrado. Los triggers existentes siguen validando cupos, perfil, categoría, marca y congelamiento. Una falla revierte la operación completa.
+
+### Alcance y límites
+No altera las funciones de cobro ni el motor deportivo, no registra pagos y no autoriza excepciones al congelamiento. No permite esta alta después de congelar condiciones. No reutiliza plazas provisionales existentes: las rechaza para evitar duplicidad de ocupación. No modifica la RPC 339 de inscripción sin equipo. El flujo de pago posterior se conserva separado de la inscripción.
+
+### Integración con Lovable
+En la pantalla de inscripción, cuando el jugador seleccione equipo y pago el día del evento, invocar `inscribir_pago_dia_evento_en_equipo_448` con los UUID del torneo y equipo. Para la inscripción sin equipo continuar usando `inscribir_pago_dia_evento_339`. Mostrar la inscripción creada y el saldo PENDIENTE, sin iniciar cobro ni llamar después a una asignación adicional. Mostrar los errores reales de la RPC. No ejecutar SQL desde Lovable.
+
+### Estado y verificación
+**Propuesta preparada; pendiente de ejecución manual por el usuario y verificación posterior de solo lectura en Supabase.** Se requiere además prueba funcional con jugador de prueba, equipo con cupo, sin duplicados, y comprobación del registro económico. La verificación SQL no sustituye esa prueba.
+
+
+---
+
+## MIGRACIÓN 449 — PREPARADA — INSCRIPCIÓN DE EQUIPO COMPLETO CON PAGO EL DÍA DEL EVENTO
+
+**Archivo:** `449-MIGRACION_EQUIPO_COMPLETO_PAGO_DIA_EVENTO.sql`  
+**Verificación:** `449-VERIFICACION_EQUIPO_COMPLETO_PAGO_DIA_EVENTO.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual del usuario en Supabase y verificación posterior. Sin pruebas funcionales realizadas.
+
+### Objetivo
+Agregar al flujo existente de inscripción de un equipo completo la opción **PAGAR EL DÍA DEL EVENTO**, con la tarifa especial `tarifa_equipo_completo` distribuida entre las plazas. Cada integrante asume únicamente su parte, no el iniciador del equipo. La selección se efectúa con el equipo completo, pero los invitados conservan el proceso vigente de confirmación posterior.
+
+### Qué hace
+Incorpora `tournament_team_deferred_payments_449` y `tournament_team_deferred_slots_449` para registrar, en una sola transacción, el compromiso económico del equipo y los importes individuales por plaza. El reparto se realiza en centavos y asigna los centavos residuales por orden estable de las plazas. La RPC `registrar_equipo_completo_pago_dia_evento_449(p_team_id)` valida sesión, autorización, torneo activo, inscripciones abiertas, modalidad por equipos, opción de pago diferido habilitada, ausencia de congelamiento, plantilla completa y ausencia de cobros, intentos pendientes o inscripciones incompatibles. Las plazas confirmadas se convierten a inscripciones con `estado_pago='PENDIENTE'`, `total_a_pagar` individual y ningún pago registrado; las invitaciones pendientes conservan su estado y se convierten al confirmarse.
+
+### Compatibilidad y protecciones
+El pago inmediato no cambia para equipos que no eligieron el nuevo esquema. Los triggers 449 impiden nuevos intentos de pago grupal inmediato para equipos comprometidos con pago diferido y evitan incorporar o eliminar plazas después de fijar el reparto. La confirmación existente `confirmar_invitacion_equipo` conserva sus ramas de inscripción ya pagada y cobertura grupal pagada, e informa correctamente la inscripción pendiente creada para el nuevo caso. No se simulan coberturas pagadas. Se conservan los triggers deportivos, de perfil, cupos y congelamiento de las inscripciones.
+
+### Limitaciones operativas
+La migración no agrega una política de sustitución/reconfiguración del equipo después de fijar el compromiso; las plazas no pueden agregarse ni eliminarse mediante las operaciones normales de roster. El rechazo de una invitación sigue disponible, pero no reasigna automáticamente su importe ni crea una deuda para quien rechazó. Una eventual reasignación requiere diseño y autorización separados. No se habilitan pagos parciales. No se modifican los procedimientos de cobro individual vigentes.
+
+### Integración pendiente de Lovable
+Agregar únicamente en el registro de equipo completo la alternativa **PAGAR EL DÍA DEL EVENTO** cuando el torneo lo permita. Mostrar la tarifa especial completa y las cuotas individuales, sin pedir medio de pago ni iniciar la pasarela. Al confirmar, llamar a `registrar_equipo_completo_pago_dia_evento_449(p_team_id)` y refrescar el equipo, las invitaciones y las inscripciones. Mantener intactos el pago inmediato, la generación de invitaciones y la aceptación de los invitados. No ejecutar SQL desde Lovable.
+
+### Verificación y estado
+El archivo de verificación contiene únicamente SELECT sobre existencia de objetos, permisos, triggers, reparto exacto, integridad de inscripciones y ausencia de cobros grupales incompatibles. Su ejecución y las pruebas funcionales en torneo de prueba están pendientes; no se afirma que la migración esté instalada ni validada en producción.
+
+
+---
+
+## MIGRACIÓN 450 — PREPARADA — RESERVAS DE CARRITOS POR TORNEO
+
+**Archivo:** `450-MIGRACION_RESERVAS_CARRITOS.sql`  
+**Verificación:** `450-VERIFICACION_RESERVAS_CARRITOS.sql`  
+**Estado al 13 de octubre de 2026:** SQL preparado; **NO ejecutado** por el usuario; **NO verificado** en Supabase; pruebas funcionales pendientes.
+
+### Objetivo
+Incorporar un módulo independiente de reserva, renta, cobro manual, entrega y devolución de carritos de golf, sin afectar inscripciones deportivas, resultados ni pasarela de cobros.
+
+### Identidad y permisos
+El operador se identifica mediante el correo electrónico único de la plataforma y su cuenta existente de Supabase Auth. No se crea una segunda identidad ni se almacenan contraseñas en tablas de carritos. SUPERADMIN administra todos los torneos; ORGANIZADOR administra los torneos de su ámbito; el operador solo opera los torneos expresamente asignados. Las asignaciones se revocan por torneo. El alta inicial de un correo inexistente se realiza por el flujo vigente de autenticación y no por SQL.
+
+### Estructura
+Se crean ocho tablas `cart_*_450`: configuración por torneo; inventario de 2 y 4 plazas por ronda con precio; operadores asignados; folios de reserva; reservas por ronda; cobros manuales; distribución de cobros por ronda; auditoría. Se activa RLS y se revoca acceso directo a roles públicos; se exponen únicamente RPC autenticadas con comprobación de permisos.
+
+### Reglas económicas y operativas
+La tarifa se define por carrito y ronda. El total de una reserva multirronda es la suma de los precios de sus rondas. Si la configuración indica todas las rondas, un solo folio ocupa inventario en cada ronda; de lo contrario se elige una ronda. Máximo un carrito activo por jugador y ronda. Las reservas se serializan por torneo para evitar sobreventa. Se admite cobro parcial con distribución explícita a una o varias rondas y registro de fecha, medio, cobrador y usuario registrador. El módulo no cobra mediante pasarela. Se registran entrega y devolución por ronda, y cancelación manual individual por ronda con historial preservado. El CUT no provoca cancelaciones automáticas.
+
+### RPC principales
+`cart_can_450`, `cart_dashboard_450`, `cart_configure_450`, `cart_assign_operator_450`, `cart_book_450`, `cart_cancel_round_450`, `cart_delivery_450` y `cart_record_payment_450`.
+
+### Integración pendiente en Lovable
+Crear las pantallas RESERVAS CARRITOS para SUPERADMIN, organizadores y operadores, y la acción RESERVAR CARRITO en MIS TORNEOS para jugadores. Utilizar la autenticación vigente; nunca enviar SQL desde Lovable. Para dar de alta operadores que no tienen cuenta, usar el flujo de invitación/registro existente. Mostrar «NO HAY DISPONIBILIDAD — AGOTADOS» y «CARRITO RESERVADO — FOLIO [número]». Incorporar reportes, saldos por ronda, entrega/devolución y gestión de reservas posteriores al CUT.
+
+### Límites, verificación y pendientes
+La verificación adjunta es de solo lectura y revisa objetos, RLS, permisos, integridad, sobreventa y pagos. Después de la ejecución manual del usuario, ChatGPT deberá ejecutarla y analizar resultados; además hacen falta pruebas de permisos con identidades reales, concurrencia, reserva multirronda y pagos parciales. No se declara instalada ni funcionalmente validada. La configuración del operador no cambia contraseñas de Supabase Auth. El control de finalización automática de permisos y la integración del CUT con una lista de candidatos a cancelación quedan para Lovable/implementación posterior y deben probarse.
+
+
+---
+
+## VERIFICACIÓN POSTERIOR A LA EJECUCIÓN DE MIGRACIÓN 450 — 13 OCTUBRE 2026
+
+El usuario confirmó la ejecución manual de la migración 450 en GOLFING_FULL. Consultas de solo lectura confirmaron ocho tablas con RLS habilitado, ocho funciones RPC, ausencia de permisos directos de anon/authenticated sobre las tablas y denegación de ejecución anónima de las RPC. Al momento de verificar había cero operadores y cero reservas, sin incidencias detectadas de inventario, duplicados o pagos. Esta es una **verificación estructural**, no una validación funcional con usuarios. El texto histórico de 450 que indica «NO ejecutada» se conserva sin alteraciones porque documenta el estado de preparación en su fecha.
+
+## MIGRACIÓN 450A — PREPARADA, NO EJECUTADA — CORRECCIÓN DE SEGURIDAD Y DISPONIBILIDAD DE CARRITOS
+
+**Archivo:** `450A-MIGRACION_CORRECCION_SEGURIDAD_RESERVAS_CARRITOS.sql`  
+**Verificación:** `450A-VERIFICACION_CORRECCION_SEGURIDAD_RESERVAS_CARRITOS.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual por el usuario y verificación posterior.
+
+### Diagnóstico
+La inspección de solo lectura identificó que el rol real de organizador es `tournament_organizer` con ámbito `tournament`, no los códigos `ORGANIZADOR` o `ORGANIZER` previstos en 450. El rol real de SUPERADMIN es `superadmin` con ámbito `global`. La corrección mantiene autorizaciones independientes por torneo y no cambia otras áreas de la aplicación.
+
+### Qué hace
+Reemplaza la comprobación de permisos `cart_can_450` usando códigos y ámbitos reales; limita a los organizadores a asignaciones directas al torneo, conserva el acceso global del SUPERADMIN y restringe a operadores a sus torneos activos, impidiendo el acceso operativo tras finalizar o cancelar el torneo. Impide configurar, reservar, cancelar, entregar o registrar pagos en torneos terminales. Permite revocar operadores incluso después de la finalización, pero no asignarlos. Agrega `cart_availability_450(uuid)` para consultar tarifas, rondas y disponibilidad desde el perfil del jugador inscrito sin revelar otros jugadores, reservas o cobros. No crea cuentas ni contraseñas y no altera datos previos.
+
+### Límites y verificación
+La verificación 450A es exclusivamente de lectura. Quedan pendientes pruebas funcionales con SUPERADMIN, ORGANIZADOR, OPERADOR, JUGADOR y usuarios de otros torneos, además de pruebas de concurrencia y validación del flujo Lovable. La restricción de permisos del operador se aplica a las RPC de este módulo; la protección frente a otros módulos depende de sus controles de acceso preexistentes. No se afirma que 450A haya sido ejecutada.
+
+
+---
+
+## INCIDENCIA Y REVISIÓN DE LA MIGRACIÓN 450A — 13 OCTUBRE 2026
+
+El primer intento manual de ejecución de 450A falló con SQLSTATE 42601: «unexpected end of function definition» en la línea 156. Una consulta de solo lectura posterior confirmó que `cart_availability_450(uuid)` no existía y que `cart_can_450` todavía no contenía `tournament_organizer`. No se confirmó aplicación de los cambios de 450A.
+
+Se corrigió **el mismo archivo 450A**, sin crear una nueva migración: siete terminaciones PL/pgSQL `END $$;` se reemplazaron por `END;` seguido de `$$;`. Se mantiene el nombre `450A-MIGRACION_CORRECCION_SEGURIDAD_RESERVAS_CARRITOS.sql` y su verificación `450A-VERIFICACION_CORRECCION_SEGURIDAD_RESERVAS_CARRITOS.sql`. El identificador 450B fue propuesto por error y **no corresponde a una migración ejecutada ni a un nuevo paso**. No ejecutar ningún archivo 450B.
+
+**Estado de la versión corregida 450A:** PREPARADA, PENDIENTE DE EJECUCIÓN MANUAL Y VERIFICACIÓN POSTERIOR. Revisión de sintaxis estática realizada; no se declara ejecución exitosa ni validación funcional. El historial previo se conserva íntegro.
+
+
+---
+
+## SEGUNDO INTENTO FALLIDO DE 450A Y CORRECCIÓN DE SINTAXIS — 13 OCTUBRE 2026
+
+El usuario informó un segundo fallo de ejecución manual de la migración 450A con SQLSTATE 42601: «unexpected end of function definition at end of input», cerca de la línea 164. Se detectó un paréntesis de cierre faltante en el `SELECT jsonb_build_object(...)` de la función `cart_availability_450`. La instrucción que terminaba en `...'[]'::jsonb)) INTO v_result` fue corregida a `...'[]'::jsonb))) INTO v_result`. Se revisó el balance de paréntesis de los ocho cuerpos de funciones y la terminación de los siete bloques PL/pgSQL.
+
+Una consulta de solo lectura confirmó que `cart_availability_450(uuid)` aún no existe y que `cart_can_450` todavía no contiene `tournament_organizer`. Por ello, la 450A no se considera aplicada. Se mantiene el identificador **450A**; **450B no debe ejecutarse**.
+
+**Estado:** SQL 450A corregido y preparado; ejecución manual y verificación funcional pendientes. La revisión es estática, no equivale a una prueba de compilación/ejecución en PostgreSQL.
+
+
+---
+
+## MIGRACIÓN 451 — PREPARADA, NO EJECUTADA — PROTECCIÓN DE CONFIGURACIÓN DE CARRITOS — 13 OCTUBRE 2026
+
+**Archivo:** `451-MIGRACION_PROTECCION_CONFIGURACION_CARRITOS.sql`  
+**Verificación:** `451-VERIFICACION_PROTECCION_CONFIGURACION_CARRITOS.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación de solo lectura.
+
+### Objetivo y funcionamiento
+Refuerza `cart_configure_450` sin crear tablas nuevas. Desde la primera reserva histórica del torneo, congela la modalidad UNA RONDA/TODAS LAS RONDAS y los precios ya configurados por ronda y capacidad, incluso si las reservas fueron canceladas. El inventario puede aumentar o disminuir, pero nunca por debajo de las reservas activas. Evita introducir nuevas tarifas tras la primera reserva, valida filas duplicadas y mantiene la transacción atómica.
+
+### Suspensión y correo pendientes
+Para no suspender silenciosamente un servicio sin cumplir la notificación acordada, esta versión impide deshabilitar el servicio cuando existen reservas activas; el envío de correo y la confirmación explícita del operador se implementarán en una fase posterior, mediante el mecanismo existente de correo. La suspensión con reservas activas **NO** se considera implementada. Si no hay reservas activas, puede deshabilitarse. Esta restricción provisional deberá sustituirse cuando se habiliten notificaciones verificables. No se envían correos desde esta migración.
+
+### Verificación y límites
+El archivo de verificación es de solo lectura; verifica firma y contenido de la RPC, estado de reservas e inexistencia de sobreventa. Quedan pendientes pruebas funcionales con identidades reales y confirmación de entrega de correos en su fase. Lovable debe mostrar mensajes de bloqueo y no afirmar que las notificaciones fueron enviadas.
+
+
+---
+
+## MIGRACIÓN 452 — PREPARADA, NO EJECUTADA — ALTA Y VINCULACIÓN DE OPERADORES DE CARRITOS — 13 OCTUBRE 2026
+
+**SQL:** `452-MIGRACION_ALTA_VINCULACION_OPERADORES_CARRITOS.sql`  
+**Verificación:** `452-VERIFICACION_ALTA_VINCULACION_OPERADORES_CARRITOS.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual del usuario y de verificación estructural y funcional.
+
+### Objetivo
+Permitir que un organizador autorizado, dentro de su torneo, vincule un operador existente por correo o registre una solicitud de alta para una persona nueva, sin intervención del SUPERADMIN, sin selector de torneos ni catálogo global de operadores. Un operador conserva una identidad única en Supabase Auth y puede estar vinculado a torneos de organizadores diferentes.
+
+### Qué hace
+Agrega `cart_operator_pending_452` con RLS y sin permisos directos para clientes. Introduce cinco RPC SECURITY DEFINER: `cart_link_or_register_operator_452` (vinculación inmediata si el correo existe en Auth; solicitud pendiente si es nuevo y se proporcionan nombres y apellidos), `cart_activate_operator_452` (la propia persona autenticada y con correo confirmado activa sus solicitudes pendientes), `cart_operators_for_tournament_452` (lista limitada al torneo abierto), `cart_my_tournaments_452` (torneos vigentes vinculados al usuario) y `cart_cancel_pending_operator_452` (anulación de solicitud pendiente). Reutiliza `cart_operators_450`, `cart_assign_operator_450`, `cart_can_450` y la auditoría existente. La desactivación de un vínculo activo sigue utilizando `cart_assign_operator_450(...,false)`. No concede rol `tournament_organizer`, ni acceso a otros módulos.
+
+### Integración posterior de Lovable
+La activación de cuenta nueva necesita un flujo React de OTP mediante Supabase Auth (`signInWithOtp`/`verifyOtp`), creación personal de contraseña (`updateUser`) y llamada a `cart_activate_operator_452`. La migración **no envía correos por sí sola**, no crea identidades Auth ni contraseñas y no garantiza que el usuario haya completado el registro. El frontend deberá presentar estados Vinculado / Pendiente / Desactivado, y mostrar solo los torneos devueltos por `cart_my_tournaments_452` y únicamente las funciones de carritos, con protección de rutas. El alta de operadores no debe llamar `completar_autoregistro_organizador_296`, porque ese flujo crea una identidad de organizador, no un operador. Los correos de autenticación se envían únicamente cuando el propio operador utiliza el flujo OTP; no se presupone correo automático al crear la solicitud pendiente.
+
+### Seguridad y pruebas pendientes
+El organizador solo puede operar desde un torneo autorizado; los pendientes se reclaman únicamente por la identidad Auth cuyo correo verificado coincide. El permiso operativo de carritos continúa sujeto a `cart_can_450` y excluye torneos cancelados o finalizados. Deben verificarse con cuentas reales: alta nueva, vinculación existente, varias asignaciones independientes, baja, alta cancelada, seguridad por torneo, flujo OTP/contraseña y acceso directo a rutas administrativas. El SQL de verificación es de solo lectura. No se declara migración ejecutada, publicada ni probada funcionalmente.
+
+
+---
+
+## CORRECCIÓN 452A — PREPARADA, NO EJECUTADA — CALIFICACIÓN DEL TIPO CITEXT EN RPC DE OPERADORES — 14 OCTUBRE 2026
+
+**Migración:** `452A-MIGRACION_CORRECCION_CITEXT_OPERADORES.sql`  
+**Verificación:** `452A-VERIFICACION_CORRECCION_CITEXT_OPERADORES.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación. La migración 452 se encontraba instalada y fue comprobada estructuralmente; en prueba de alta de operador en torneo XYZ se produjo `type "citext" does not exist`.
+
+### Diagnóstico verificado en Supabase (solo lectura)
+La extensión `citext` está instalada en el esquema `public`. Las funciones de la migración 452 utilizan `SET search_path TO ''`, pero tres de ellas realizan conversiones sin esquema `::citext`, provocando el error en ejecución.
+
+### Objetivo y alcance
+Corregir exclusivamente las referencias de tipo a `::public.citext` en las tres RPC `cart_link_or_register_operator_452`, `cart_activate_operator_452` y `cart_cancel_pending_operator_452`, preservando sus firmas, lógica y permisos existentes. No se crean ni eliminan cuentas Auth, no se modifican datos, tablas, políticas RLS, flujos de contraseñas ni otras funciones. No corresponde a un cambio exclusivo de Lovable.
+
+### Verificación y pendientes
+El SQL de verificación es de solo lectura y revisa la existencia del tipo, la calificación explícita en el código de las tres funciones, `SECURITY DEFINER`, propietario y permisos de ejecución, además del número de solicitudes pendientes. Después de ejecutar manualmente 452A debe repetirse la prueba funcional de alta con un correo de prueba y comprobar si la reversión de la cuenta fallida anterior ocurrió. No afirmar que la cuenta fallida fue borrada sin verificación.
+
+
+---
+
+## CORRECCIÓN 452B — PREPARADA, NO EJECUTADA — CITEXT EN ASIGNACIÓN DE OPERADORES — 14 OCTUBRE 2026
+
+**Migración:** `452B-MIGRACION_CORRECCION_CITEXT_ASIGNAR_OPERADOR.sql`  
+**Verificación:** `452B-VERIFICACION_CORRECCION_CITEXT_ASIGNAR_OPERADOR.sql`  
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación. La corrección 452A fue verificada estructuralmente en Supabase, pero el alta real de un operador en el torneo XYZ continuó fallando con `type "citext" does not exist`.
+
+### Diagnóstico y objetivo
+Consulta de solo lectura confirmó que `public.cart_assign_operator_450` todavía contiene `lower(trim(p_email))::citext` con `SET search_path TO ''`. La función 452 `cart_link_or_register_operator_452` llama a esta RPC durante la vinculación. Las tres RPC corregidas por 452A ya utilizan `::public.citext`; la revisión de todas las funciones `cart_*` encontró esta única referencia restante sin calificar.
+
+### Qué hace
+Reemplaza únicamente la definición de `public.cart_assign_operator_450`, cambiando `::citext` a `::public.citext`. Conserva la firma, los controles de autorización, la lógica de vinculación y desactivación, `SECURITY DEFINER`, `search_path` y el registro de auditoría. No crea ni elimina cuentas, no modifica datos, tablas, permisos ni el frontend. Es una corrección SQL que ejecuta manualmente el usuario, no Lovable.
+
+### Verificación y pendientes
+El SQL de verificación es exclusivamente de lectura; comprueba el tipo `public.citext`, la firma, seguridad y permisos de la RPC, y revisa todas las funciones `cart_*` para detectar referencias `::citext` sin esquema. Debe verificarse su ejecución antes de repetir el alta funcional de un operador de prueba. La comprobación estructural no equivale a haber probado el alta ni el rollback de cuentas en Supabase Auth.
+
+
+---
+
+## MIGRACIÓN 453 — PREPARADA, NO EJECUTADA — ENTREGA Y DEVOLUCIÓN DE CARRITOS — 14 OCTUBRE 2026
+
+**Migración:** `453-MIGRACION_ENTREGA_DEVOLUCION_CARRITOS.sql`  
+**Verificación:** `453-VERIFICACION_ENTREGA_DEVOLUCION_CARRITOS.sql`  
+**Estado:** PREPARADA, NO EJECUTADA. Pendiente ejecución manual del usuario y verificación de solo lectura y pruebas funcionales.
+
+### Objetivo
+Controlar la entrega y devolución física de carritos por reserva, jugador y ronda, con pago completo **únicamente de la ronda entregada**, procedencia y trazabilidad automática, sin catálogo de flotilla ni inspecciones o fotografías obligatorias.
+
+### Qué hace
+Agrega a `cart_booking_rounds_450` tres campos: `cart_origin_453` (PROPIO/AJENO/OTRO), `cart_origin_other_453` (descripción obligatoria cuando es OTRO) y `return_notes_453` (observaciones opcionales de devolución). Reutiliza `cart_identifier` como referencia opcional, y los campos existentes `delivered_at`, `delivered_by`, `returned_at` y `returned_by` para fecha, hora y usuario autenticado. Las entregas y devoluciones se auditan en `cart_audit_450` con vínculo a reserva, jugador y ronda.
+
+Introduce `cart_delivery_453(p_booking_round,p_return,p_cart_origin,p_cart_origin_other,p_cart_identifier,p_return_notes)`, protegida por `cart_can_450`, que impide entregar reservas canceladas, carritos ya entregados, torneos finalizados/cancelados o rondas con saldo pendiente. El pago se comprueba con las asignaciones existentes `cart_payment_allocations_450` y pagos de la misma reserva y torneo. Cada ronda es independiente. Impide devoluciones antes de entregar y segundas devoluciones; **nunca devuelve automáticamente**. La devolución manual es admisible después de finalizar la ronda o torneo, para no perder el control de un carrito aún fuera. No se permite modificar los datos originales de entrega durante la devolución.
+
+Para cerrar la vía antigua que no comprobaba pago, revoca a `authenticated`, `anon` y `PUBLIC` el permiso de ejecución de `cart_delivery_450(uuid,boolean,text)`; conserva su definición histórica. La interfaz Lovable deberá cambiar las llamadas de entrega y devolución a la nueva RPC 453. El estado operativo se deriva de las fechas: PENDIENTE (sin entrega), ENTREGADO / PENDIENTE DE DEVOLUCIÓN (entregado sin devolución) y DEVUELTO (con devolución). No cambia el estado ACTIVE/CANCELLED de la reserva ni introduce catálogo de unidades físicas.
+
+### Verificación, compatibilidad y pendientes
+El SQL de verificación es exclusivamente de lectura: comprueba columnas, restricciones, firmas, seguridad, privilegios, movimientos y posibles anomalías de datos. **No se declara ejecutada ni verificada en Supabase.** Antes de aplicar en producción, revisar si existen entregas históricas que carezcan de procedencia o pago completo; la migración no las reescribe ni las presenta como conformes. Si Lovable todavía llama a `cart_delivery_450`, esas operaciones dejarán de funcionar hasta actualizar la integración; coordinar aplicación SQL y frontend sin publicar unilateralmente. Probar con operador real: ronda impaga, pago parcial, pago completo de una ronda con otra pendiente, entrega duplicada, devolución duplicada, devolución tras cierre, autorización por torneo y auditoría. No enviar correos nuevos ni alterar pagos de inscripciones.
+
+
+---
+
+## Migración 454 — ENCARGADOS DE SEGURIDAD (14 de octubre de 2026)
+
+**Estado documental:** preparada para ejecución manual por el usuario; NO ejecutada ni verificada aún en Supabase.
+
+**Objetivo:** habilitar encargados de seguridad independientes del organizador, asignados por torneo, con permisos específicos para el módulo CONTROL DE ACCESO.
+
+**Archivos:** `454-MIGRACION_ENCARGADOS_SEGURIDAD.sql` y `454-VERIFICACION_ENCARGADOS_SEGURIDAD.sql`.
+
+**Funcionamiento:** reutiliza el modelo de operadores de carritos: vinculación inmediata de cuenta existente en Supabase Auth; si no existe, solicitud pendiente hasta registro, confirmación de correo y activación. Una misma cuenta puede estar en múltiples torneos. No se crean empleados ni colaboradores del organizador, ni contraseñas propias en tablas públicas. Solo organizador o SUPERADMIN administra altas, permisos y revocaciones.
+
+**Permisos independientes:** administrar puntos y credenciales, abrir/cerrar puertas, apertura general, consultar ingresos y consultar reportes. Los controles se aplican en Supabase, no únicamente en la interfaz. Las funciones operativas históricas mantienen su lógica y reciben una autorización adicional específica, mediante modificación controlada de las guardias de organizador. La migración falla y revierte completamente si una función requerida o su guardia no coincide con el esquema inspeccionado.
+
+**Seguridad:** RLS habilitado en tablas nuevas; sin SELECT directo para authenticated; RPCs SECURITY DEFINER con comprobación de auth.uid(), torneo activo y permisos; exclusión de torneos terminales. La función de activación requiere correo confirmado. El encargado no recibe rol de organizador ni acceso a módulos ajenos.
+
+**Verificación:** ejecutar posteriormente el SQL de verificación de solo lectura, comprobar la presencia de 15 funciones adaptadas, políticas y privilegios; realizar pruebas con cuentas reales para vinculación existente, alta pendiente, activación, revocación, separación entre torneos y cada permiso.
+
+**Frontend:** Lovable implementará sección ENCARGADOS DE SEGURIDAD y acceso independiente después de aplicar/verificar SQL. Lovable NO ejecuta migraciones. No publicar sin autorización.
+
+**Constancia posterior de 453:** consultas de solo lectura efectuadas el 14 de octubre de 2026 confirmaron presencia de columnas y RPC `cart_delivery_453`; esta constancia se agrega sin alterar la anotación histórica previa de 453 como pendiente.
+
+
+---
+
+## Corrección 454A — CORRECCION GUARDIAS SEGURIDAD (14 de octubre de 2026)
+
+**Motivo:** el primer intento de ejecución de la migración 454 devolvió `P0001: Guardia no encontrada en abrir_acceso_campo_ahora_359`. La expresión regular de la migración 454 no reconocía el argumento anidado `auth.uid()` de `public.is_tournament_organizer`.
+
+**Evidencia de reversión:** consulta de solo lectura posterior al error: `to_regclass('public.security_operators_454')` y `to_regclass('public.security_operator_pending_454')` devolvieron NULL. La migración 454 falló dentro de `BEGIN ... COMMIT` y no se observan sus tablas nuevas.
+
+**Corrección:** 454A sustituye íntegramente la migración fallida 454 (NO debe ejecutarse 454 antes). Conserva el resto del SQL y reemplaza la búsqueda de guardias por una expresión compatible con `auth.uid()` y `v_auth_uid`; exige exactamente una coincidencia por función y revierte toda la transacción si alguna no coincide. El patrón se probó con consultas de solo lectura en Supabase para las funciones relevantes y su reemplazo se verificó en texto de prueba. No se ha ejecutado 454A.
+
+**Archivos:** `454A-MIGRACION_CORRECCION_GUARDIAS_SEGURIDAD.sql` y `454A-VERIFICACION_CORRECCION_GUARDIAS_SEGURIDAD.sql`. El SQL 454 original y el README 454 se conservan como historial; el README 454A agrega esta nota sin reescribir contenido anterior.
+
+**Estado:** pendiente de ejecución manual del usuario y verificación posterior de solo lectura. No se declara probada la operación funcional con usuarios reales.
+
+
+---
+
+## MIGRACIÓN 455 — PREPARADA, NO EJECUTADA — NOMBRES EN LISTADOS DE CARRITOS Y SEGURIDAD — 15 OCTUBRE 2026
+
+**Migración:** `455-MIGRACION_NOMBRES_OPERADORES_CARRITOS_SEGURIDAD.sql`  
+**Verificación:** `455-VERIFICACION_NOMBRES_OPERADORES_CARRITOS_SEGURIDAD.sql`  
+**Estado:** PREPARADA; ejecución manual y verificación pendientes. No se considera aplicada.
+
+### Objetivo
+Mostrar nombres y apellidos de los operadores de reservas de carritos y encargados de seguridad ya vinculados, además del correo, sin solicitar nuevamente estos datos ni consultar el catálogo de jugadores.
+
+### Qué hace
+Actualiza exclusivamente las funciones `cart_operators_for_tournament_452(uuid)` y `security_operators_for_tournament_454(uuid)`. En el arreglo JSON `operators`, agrega `nombres` y `apellidos` obtenidos de `auth.users.raw_user_meta_data` mediante la relación `auth_user_id`. Si faltan esos metadatos, devuelve NULL para el campo y la interfaz debe conservar el correo como alternativa. Conserva todos los campos históricos de `operators` y `pending`, las firmas, las validaciones `cart_can_450` y `security_manage_454`, `SECURITY DEFINER`, `search_path`, privilegios y filtros por torneo. No modifica tablas, datos, autenticación, asignaciones, permisos ni las altas y revocaciones.
+
+### Integración y pendientes
+Después de ejecutar manualmente la migración, verificar las definiciones mediante el SQL de solo lectura y solicitar a Lovable que muestre nombre completo en ambos listados, con correo como dato secundario y alternativa cuando falte el nombre. Probar con una cuenta real de cada módulo. Lovable no ejecuta migraciones SQL.
+
+
+---
+
+## MIGRACIÓN 456 — LIVE SCORE DIGITAL — MI CATEGORÍA (16 DE OCTUBRE DE 2026)
+
+**Archivos:** `456-MIGRACION_LIVE_SCORE_DIGITAL_MI_CATEGORIA.sql` y `456-VERIFICACION_LIVE_SCORE_DIGITAL_MI_CATEGORIA.sql`.
+
+**Estado documental:** SQL preparado para ejecución manual. **NO EJECUTADO NI VERIFICADO EN SUPABASE.** La versión preliminar de la 456 y los borradores de corrección 456A no fueron ejecutados y quedan sustituidos por esta versión única 456. No constituyen migraciones adicionales ni dejan huecos en la numeración.
+
+**Objetivo:** añadir LIVE SCORE provisional para jugadores autenticados de su propia categoría durante torneos en curso, utilizando exclusivamente eventos de captura de tarjeta digital QR. Independiente de tarjetas físicas, Comité, conciliación y resultados oficiales.
+
+**Alcance técnico:** crea la función de consulta `public.obtener_live_score_mi_categoria_456(uuid)` con `SECURITY DEFINER`, verificación de `auth.uid()`, inscripción activa y categoría del jugador, torneo `en_curso`, tarjeta digital habilitada y última validación de ronda con estado `validated`. La función solo puede ejecutarse por el rol `authenticated` y no modifica datos. Consulta las últimas evidencias QR en `tournament_scorecard_events` y `tournament_best_ball_scorecard_events`; las capturas pendientes no se convierten en cero. Mantiene indicador de disputa asociado a la captura digital y calcula resultados provisionales usando snapshots de hándicap, función de distribución de ventajas y función Stableford existentes. Para Best Ball toma mínimos bruto/neto por hoyo; para Stableford por equipos, máximos puntos bruto/neto por hoyo. A-Go-Go utiliza tarjeta y hándicap de equipo.
+
+**Publicación:** en modalidades individuales, cada hoyo aparece conforme se captura. En A-Go-Go, Best Ball y Stableford por equipos, el primer score QR del hoyo siguiente libera lo disponible del hoyo anterior, siguiendo `play_sequence` (también para Shotgun); no se espera a todos los integrantes ni se revisan DNS/WD/DNF/DQ para publicar. El último hoyo jugado se libera al cerrar digitalmente la(s) tarjeta(s) de la unidad. Los totales solo incluyen hoyos publicados. Los 18 hoyos permanecen representados y los no publicados no revelan resultados.
+
+**Interfaz pendiente en Lovable:** agregar acceso desde MIS TORNEOS a LIVE SCORE — MI CATEGORÍA, mostrar aviso «Información provisional de tarjetas digitales. No verificada oficialmente.», ordenar jugadores por apellido y equipos por nombre, cuadrícula móvil de 18 hoyos agrupados 1–9 y 10–18, expansión de aportaciones y punto rojo junto al score en disputa. Lovable no crea ni ejecuta SQL.
+
+**Verificación pendiente:** tras ejecución manual del usuario, ejecutar exclusivamente las consultas de lectura del archivo de verificación, comprobar permisos y probar desde la aplicación con las modalidades disponibles. Los escenarios sin capturas QR reales, particularmente Best Ball, no deben declararse probados hasta contar con evidencia.
+
+
+---
+
+## MIGRACIÓN 457 — AUTOSERVICIO DE RESERVAS DE CARRITOS PARA JUGADORES — 16 OCTUBRE 2026
+
+**Archivos:** `457-MIGRACION_AUTOSERVICIO_RESERVAS_CARRITOS_JUGADORES.sql` y `457-VERIFICACION_AUTOSERVICIO_RESERVAS_CARRITOS_JUGADORES.sql`.
+
+**Estado:** PREPARADA, NO EJECUTADA. No se atribuye verificación funcional.
+
+**Objetivo:** integrar la reserva de carritos por el propio jugador autenticado desde MIS TORNEOS, utilizando el módulo administrativo ya existente de la migración 450. No se modifica la configuración, inventario, tarifas, pagos ni entrega/devolución.
+
+**Funciones nuevas:** `cart_my_bookings_457(uuid)` devuelve únicamente reservas del jugador autenticado, folio, rondas, estado, importe, pagos aplicados y saldo por ronda; `cart_self_book_457(uuid,integer,uuid)` valida inscripción, bloquea el torneo para serializar la operación, impide duplicados activos y delega el alta a `cart_book_450`; `cart_self_cancel_round_457(uuid,text)` permite cancelar una ronda propia activa, no entregada y sin pagos aplicados, con auditoría. Las reservas con pagos deben tramitar su cancelación con un operador para evitar inconsistencias de cobro/reembolso.
+
+**Configuración de rondas:** se respeta estrictamente `cart_settings_450.all_rounds`: si es verdadero, `cart_book_450` reserva todas las rondas activas; si es falso, el jugador selecciona una ronda. No se cambia la semántica histórica de esta configuración. Capacidades permitidas: 2 y 4 plazas. No se implementa pasarela de pagos ni cobros automáticos.
+
+**Seguridad:** `SECURITY DEFINER`, `search_path=public,pg_temp`, comprobación de `auth.uid()`, inscripción activa y pertenencia de la reserva al jugador. Acceso `EXECUTE` solamente a `authenticated`, revocado para `PUBLIC` y `anon`. No se conceden permisos administrativos.
+
+**Lovable:** mostrar RESERVAR CARRITO / MI RESERVA DE CARRITO dentro de MIS TORNEOS cuando corresponda, consultar `cart_availability_450` y `cart_my_bookings_457`, reservar mediante `cart_self_book_457` y cancelar sin pagos mediante `cart_self_cancel_round_457`. Mostrar folios, importes y saldos por ronda. No ejecutar migraciones SQL ni publicar sin autorización.
+
+**Verificación:** consultas de solo lectura del archivo 457. La migración se ejecuta manualmente por el usuario. Probar con un jugador autenticado, varias rondas, falta de inventario, duplicados, cancelación con/sin pago y controles de identidad antes de declarar validación funcional.
+
+
+---
+
+## MIGRACIÓN 458 — CONFIGURACIÓN OBLIGATORIA DE FORMAS DE PAGO E INSCRIPCIÓN GRATUITA — 22 OCTUBRE 2026
+
+**Archivos:** `458-MIGRACION_CONFIGURACION_PAGOS_E_INSCRIPCION_GRATUITA.sql` y `458-VERIFICACION_CONFIGURACION_PAGOS_E_INSCRIPCION_GRATUITA.sql`.
+
+**Estado:** PREPARADA, NO EJECUTADA. La verificación SQL y las pruebas funcionales están pendientes de la ejecución manual del usuario. El README 457 anterior se preserva íntegramente como prefijo de este documento, sin editar ni reordenar entradas históricas.
+
+**Objetivo:** exigir al organizador configurar y guardar expresamente las dos decisiones de cobro antes de abrir inscripciones: cobro en línea con tarjeta y pago el día del torneo. Los valores posibles son SÍ/SÍ, SÍ/NO, NO/SÍ y NO/NO. NO/NO significa torneo gratuito, no una omisión. Una vez registrada la primera inscripción, incluso si después queda inactiva, no pueden cambiarse las decisiones de pago. Los torneos existentes y sus inscripciones históricas no se transforman ni se recalculan.
+
+**Base de datos:** incorpora a `tournaments` las columnas `pago_tarjeta_online_habilitado`, `configuracion_pagos_guardada_at` y `configuracion_pagos_guardada_por`. La función `guardar_configuracion_pagos_458(uuid,boolean,boolean)` verifica autorización del organizador o Superadmin, dos respuestas explícitas, planificación, ausencia de cualquier inscripción histórica y tarifas en cero cuando el torneo es gratuito. El trigger `_validar_configuracion_pagos_458` impide modificaciones de formas de pago después de cualquier inscripción, rechaza tarifas positivas para un torneo gratuito y exige configuración guardada antes de la transición inicial de planificado a inscripciones abiertas. Se conserva la función de apertura anterior y las protecciones existentes.
+
+**Inscripción gratuita:** se añade `NA` al enum `medio_pago_torneo`, como código exclusivamente interno, nunca como opción para el jugador. Las inscripciones gratuitas se registran con `total_a_pagar=0`, `monto_pagado=0`, `estado_pago=PAGADO`, `fecha_pago` de la inscripción y `referencia_pago` igual al folio generado por el trigger vigente. No se crea intento de pago ni transacción bancaria. El trigger `_validar_na_inscripcion_458` limita `NA` a torneos configurados expresamente como gratuitos y verifica integridad de importes, estado, fecha y folio. Se conservan sin cambios las restricciones de integridad de la migración 339. La nueva función `_proteger_intento_pago_configuracion_458` impide intentos de pago de inscripción en línea en torneos configurados sin tarjeta.
+
+**RPC de inscripción:** `inscribir_gratis_individual_458(uuid,uuid)` para individual y `inscribir_gratis_en_equipo_458(uuid,uuid)` para integrantes de equipos; ambas verifican autenticación, torneo activo, inscripciones abiertas, configuración gratuita, tarifa cero y categoría/equipo. Los triggers existentes siguen verificando duplicados y otras condiciones. `registrar_equipo_completo_gratis_458(uuid)` confirma el compromiso de equipo completo con roster válido, convierte únicamente las plazas ya confirmadas y mantiene invitaciones pendientes. La tabla `tournament_team_free_enrollments_458` identifica el compromiso; `_al_confirmar_slot_gratis_458` convierte automáticamente al aceptar una invitación, y `_proteger_roster_gratis_458` evita cambios estructurales incompatibles. No se modifica el procedimiento 449 de pago diferido. Las funciones internas no conceden EXECUTE a usuarios autenticados.
+
+**Seguridad:** funciones expuestas como `SECURITY DEFINER` con `search_path=public,pg_temp`, validación de identidad y permisos; `EXECUTE` solo para `authenticated`. La tabla de compromisos de equipos gratuitos tiene RLS habilitada y sin permisos directos para clientes. La migración no incluye pasarela Stripe ni supone que exista una integración de cobro real.
+
+**Lovable pendiente (no es migración):** en INSCRIPCIONES mostrar las dos preguntas obligatorias y GUARDAR CONFIGURACIÓN antes de ABRIR INSCRIPCIONES; distinguir respuesta no seleccionada de NO; bloquear edición desde primera inscripción; en la App de Jugadores mostrar solo alternativas habilitadas y, para NO/NO, INSCRIPCIÓN GRATUITA sin checkout. Invocar los nuevos RPC según inscripción individual, integrante de equipo o equipo completo; conservar el flujo de invitaciones, el asistente operativo, correos y reportes. Revisar que las notificaciones y los reportes interpreten `NA` como ausencia de cobro, no ingreso. Lovable NO ejecuta migraciones SQL. El cobro real por Stripe permanece pendiente de su diseño y autorización.
+
+**Verificación pendiente:** ejecutar exclusivamente consultas de solo lectura del archivo de verificación después de la migración manual; probar combinaciones de configuración, intento de apertura sin guardar, bloqueo tras inscripción cancelada, importes cero, folio/referencia, duplicados, aceptación de invitaciones, RLS, correo de confirmación, reportes y modalidades pagadas existentes. No declarar migración ejecutada ni funcionalidad validada sin evidencia.
+
+
+---
+
+## MIGRACIÓN 459 — PATROCINADORES TRANSVERSALES, PAGOS PARCIALES Y RECIBOS — 3 NOVIEMBRE 2026
+
+**Objetivo:** administrar patrocinadores en cualquier torneo, con compromisos económicos fijos o flexibles y seguimiento de pagos por abono.
+
+**Qué hace:** distingue patrocinio ECONÓMICO FIJO y FLEXIBLE; conserva el importe de categoría al registrar un patrocinio fijo; permite múltiples aportaciones, pagos consecutivos con fecha, importe y referencia, saldo automático y un PDF privado por pago con control de envío. Corrige `MIN(uuid)` en la creación de equipos de cortesía sin modificar las reglas deportivas ni los flujos de inscripción.
+
+**Estado:** preparada para ejecución manual y verificación; integración de Lovable pendiente.
+
+
+---
+
+## MIGRACIÓN 459A — AJUSTES Y CANCELACIÓN DE APORTACIONES FLEXIBLES — 3 NOVIEMBRE 2026
+
+**Objetivo:** permitir corregir cantidades, descripciones y compromisos de aportaciones flexibles, o cancelarlas cuando el patrocinador cambie su ofrecimiento.
+
+**Qué hace:** agrega cantidad opcional para apoyos no monetarios, modificación controlada y cancelación lógica con motivo e historial de cambios. Excluye las aportaciones canceladas del compromiso monetario y bloquea reducciones que dejen compromisos por debajo de pagos recibidos. Conserva los pagos, recibos, categorías económicas fijas, cortesías y motores deportivos. Incorpora las RPC `sponsor_registrar_aportacion_459a`, `sponsor_modificar_aportacion_459a` y `sponsor_cancelar_aportacion_459a`.
+
+**Estado:** CORRECCIÓN PREPARADA; NO EJECUTADA NI VERIFICADA FUNCIONALMENTE. La migración 459 se comprobó instalada mediante consultas de solo lectura. La Fase 2 de Lovable aún no ha sido ejecutada. SQL de migración y verificación correspondientes a 459A; ejecución exclusivamente manual por el usuario.
+
+
+---
+
+## MIGRACIÓN 459B — PERMISO DE CARGA DE ARCHIVOS DE PATROCINADORES — 3 NOVIEMBRE 2026
+
+**Objetivo:** corregir el error de permisos `permission denied for function _identity_upload_authorized_444` que aparece al guardar un patrocinador con archivos adjuntos.
+
+**Qué hace:** concede exclusivamente al rol `authenticated` permiso `EXECUTE` sobre la función existente `_identity_upload_authorized_444(text)`, utilizada por una política de Storage que incluye a usuarios autenticados. No cambia la función, las políticas, los buckets, los datos ni las reglas deportivas.
+
+**Estado:** preparada, pendiente de ejecución manual y verificación. Prueba funcional de guardado con logotipo y constancia fiscal pendiente.
+
+**Pendiente independiente:** revisar la reducción segura de cortesías de patrocinadores cuando ya existen jugadores vinculados, inscritos o equipos creados; no resuelto por esta corrección.
+
+
+---
+
+## MIGRACIÓN 459C — VALORACIÓN DE PATROCINIOS MIXTOS — 3 NOVIEMBRE 2026
+
+**Objetivo:** permitir que cualquier categoría comercial (MASTER, ORO, PLATA, BRONCE y categorías variables) acepte múltiples aportaciones en dinero, bienes o servicios, con valoración acordada de la especie y control monetario separado.
+
+**Qué hace:** añade `valor_estimado_459c` para bienes y servicios, que puede estar pendiente; transforma de manera conservadora el compromiso fijo histórico en un renglón de dinero sin alterar `compromiso_fijo_459`; crea automáticamente un renglón inicial de dinero para nuevas categorías de monto fijo. Recalcula `sponsor_estado_financiero_459` desde aportaciones monetarias de cualquier categoría y crea `sponsor_valor_total_459c` para presentar valor de categoría, dinero, especie, valor acordado, aportaciones por valorar y saldo solo monetario. Incorpora RPC `sponsor_registrar_aportacion_459c`, `sponsor_modificar_aportacion_459c`, `sponsor_cancelar_aportacion_459c` y conserva auditoría de modificaciones de valor estimado con motivo. No cambia pagos, recibos, cortesías, equipos, inscripciones o motores deportivos.
+
+**Ejemplo funcional:** PLATA $65,000 = dinero $50,000 + comida en campo estimada en $15,000; saldo monetario inicial $50,000. El valor de la categoría es referencia comercial; el recibo fiscal de este flujo corresponde únicamente a pagos monetarios y requiere emisión externa válida.
+
+**Compatibilidad:** los RPC anteriores 459/459A permanecen para continuidad, pero el frontend debe utilizar los 459C para registrar/editar/cancelar aportaciones mixtas. La categoría fija inicia con el valor monetario de referencia, editable con motivo y protección de importes ya pagados. La especie sin valoración no genera deuda. Las cifras de referencia congeladas en `compromiso_fijo_459` no se sobrescriben.
+
+**Estado:** SQL PREPARADO; NO EJECUTADO NI VERIFICADO FUNCIONALMENTE. Usuario ejecuta manualmente 459C; posteriormente verificar con el archivo de solo lectura y solicitar a Lovable actualización del formulario y reportes. CURAQ fue observado antes de la migración con categoría MASTER, compromiso $110,000, sin aportaciones ni pagos.
+
+**Pendientes ajenos a esta migración:** cierre correcto del visor PDF y descarga de constancia fiscal; protección de reducción de cortesías cuando existen jugadores vinculados; implementación y pruebas de cobros/recibos Fases 3 y 4. No se asumen completados.
+
+
+---
+
+## MIGRACIÓN 459D — CORRECCIÓN AUDITADA DE PAGOS Y BLOQUEO POR XML COINCIDENTE — 3 NOVIEMBRE 2026
+
+**Archivos:** `459D-MIGRACION_CORRECCION_PAGOS_VALIDACION_XML_BLOQUEO.sql` y `459D-VERIFICACION_CORRECCION_PAGOS_VALIDACION_XML_BLOQUEO.sql`.
+
+**Estado:** PREPARADA; NO EJECUTADA NI VERIFICADA FUNCIONALMENTE. Esta entrada documenta el diseño y no afirma ninguna modificación de Supabase. Ejecución manual exclusiva del usuario. Se conserva íntegramente el README maestro 459C como prefijo, con todo el historial anterior, sin alterar entradas históricas cuya situación real pueda haber evolucionado.
+
+**Motivo:** en CURAQ se registró pago N.º 1 de $50,000 (20/10/2026, referencia TRANSFERENCIA 201261), pero el importe correcto es $55,000. El pago necesita corrección auditada antes de aceptar su comprobante. La migración NO modifica automáticamente CURAQ ni otro registro.
+
+**Regla aprobada:** primero se registra el pago. Mientras no tenga comprobante validado, se puede corregir fecha, importe y referencia con motivo obligatorio, conservando número consecutivo, UUID e historial de valores anterior/nuevo, actor y fecha. El XML del comprobante se carga desde la app; un procedimiento autorizado analiza el atributo `Total` del elemento principal `Comprobante` y `Moneda=MXN` y compara exactamente con `sponsor_pagos_459.monto`. XML inválido o monto diferente: se rechaza la operación, sin conservar comprobante ni bloquear el pago. Cuando coincide: se guarda el XML original y su importe de manera privada y atómica, y el pago queda bloqueado definitivamente para importe y demás campos identificadores. El PDF es documento legible adicional y puede asociarse después en el bucket privado existente; registro de «enviado» permanece por pago. No se verifica SAT, RFC, impuestos, complementos de pago ni deducibilidad.
+
+**Implementación:** tablas `sponsor_pagos_correcciones_459d` (historial auditado, lectura RLS autorizada) y `sponsor_pagos_xml_459d` (texto XML original privado, importe y metadatos, sin SELECT directo), triggers `_sponsor_proteger_pago_validado_459d` y `_sponsor_proteger_xml_459d` contra cambios posteriores, RPC `sponsor_corregir_pago_459d`, `sponsor_validar_adjuntar_xml_459d`, `sponsor_obtener_xml_459d`, `sponsor_listar_pagos_459d`. El XML se elige en el formulario y se transmite como texto a RPC; no se necesita un nuevo bucket. Se ajusta `sponsor_adjuntar_recibo_459` y la política INSERT de Storage para requerir previamente XML validado. Se refuerza `sponsor_registrar_pago_459` para heredar en servidor la preferencia general de recibo del patrocinador.
+
+**Integridad y compatibilidad:** no altera aportaciones mixtas, saldos, cortesías, equipos, inscripciones ni motores deportivos. No elimina pagos, no crea pagos adicionales, no cambia CURAQ por sí sola. El recibo PDF permanece en almacenamiento privado; el XML se obtiene por RPC autorizada y no se muestra por lectura directa a clientes. Existen protecciones contra aceptar un comprobante cuyo `Total` no coincida y contra correcciones posteriores al bloqueo. La migración aborta si detecta PDF ya asociados, para no transformar documentación previa sin revisión.
+
+**Lovable pendiente:** añadir CORREGIR PAGO antes de comprobante con motivo, presentar historial, selector de XML y PDF, validar XML mediante RPC en servidor (no solo Javascript), mostrar rechazo por monto/moneda, bloquear controles tras aceptación, consultar/descargar XML y PDF y marcar enviado según flujo existente. Cargar XML primero; PDF después de validar XML. No ejecutar SQL desde Lovable. Pruebas funcionales y revisión de permisos pendientes de sesión real.
+
+
+---
+
+## MIGRACIÓN 460 — CONFIGURACIÓN PREPARATORIA DE TRANSFERENCIA Y REFERENCIA DE INVITACIÓN — 4 NOVIEMBRE 2026
+
+**Objetivo:** preparar la configuración general por torneo para transferencia bancaria y referencia de invitación, sin alterar los flujos de inscripción o cobro existentes.
+
+**Qué hace:** agrega siete campos a `tournaments`: habilitación futura de transferencia, banco, titular, número de cuenta, CLABE y los switches para solicitar y exigir el nombre del invitador. Comprueba CLABE de 18 dígitos y coherencia de switches; protege cambios por autorización, estado planificado y ausencia de inscripciones históricas. Mantiene la lógica y los triggers 458 sin modificaciones. La transferencia permanece expresamente deshabilitada hasta la migración 461, que adaptará la detección de torneos gratuitos. No cambia datos existentes ni crea inscripciones, pagos o correos.
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Ejecución manual exclusiva del usuario. La verificación SQL de solo lectura y las pruebas posteriores están pendientes.
+
+**Archivos:** `460-MIGRACION_CONFIGURACION_TRANSFERENCIA_REFERENCIA_INVITACION.sql` y `460-VERIFICACION_CONFIGURACION_TRANSFERENCIA_REFERENCIA_INVITACION.sql`.
+
+
+---
+
+## MIGRACIÓN 461 — INTEGRACIÓN DE TRANSFERENCIA EN CONFIGURACIÓN DE PAGOS — 4 NOVIEMBRE 2026
+
+**Objetivo:** permitir que la configuración del torneo distinga tarjeta, transferencia bancaria diferida y pago el día del evento, individualmente o combinados, sin confundir transferencia con gratuidad.
+
+**Qué hace:** crea una RPC de guardado único para las tres modalidades, datos bancarios y switches de invitación; elimina el bloqueo temporal de transferencia de la 460; adapta únicamente las condiciones de gratuidad de las funciones 458 y conserva sus protecciones, inscripciones y flujos existentes. No inscribe jugadores, no cobra ni envía correos. El frontend y las inscripciones diferidas se implementarán en pasos posteriores.
+
+**Estado:** PREPARADA, pendiente de ejecución manual y verificación en Supabase.
+
+
+---
+
+## MIGRACIÓN 462 — PERSISTENCIA DE MODALIDAD DE PAGO E INVITADOR EN INSCRIPCIONES — 4 NOVIEMBRE 2026
+
+**Objetivo:** preparar cada inscripción para conservar la modalidad de pago elegida y el nombre de la persona que invitó al jugador, sin afectar los procedimientos existentes.
+
+**Qué hace:** agrega dos columnas opcionales con restricciones de formato a `tournament_registrations`. Conserva íntegros los datos y las inscripciones históricas; no modifica pagos, inscripciones, equipos, correos ni políticas de seguridad. La captura y las validaciones funcionales se incorporarán posteriormente.
+
+**Estado:** PREPARADA; ejecución manual y verificación en Supabase pendientes.
+
+
+---
+
+## MIGRACIÓN 463 — INSCRIPCIÓN INDIVIDUAL CON PAGO DIFERIDO UNIFICADO — 4 NOVIEMBRE 2026
+
+**Objetivo:** incorporar transferencia bancaria y pago el día del evento como modalidades diferidas de una misma inscripción individual, sin crear un sistema paralelo.
+
+**Qué hace:** crea una sola RPC para ambas modalidades con inscripción `PENDIENTE`, registra la modalidad y el invitador, y reutiliza las validaciones deportivas y de tarifas existentes. Conserva intactos los procedimientos anteriores, equipos, pagos y correos.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación en Supabase.
+
+
+---
+
+## MIGRACIÓN 464 — INSCRIPCIÓN GRATUITA INDIVIDUAL CON INVITADOR — 4 NOVIEMBRE 2026
+
+**Objetivo:** permitir guardar el nombre del invitador en inscripciones individuales gratuitas respetando si el torneo lo solicita y si es obligatorio.
+
+**Qué hace:** incorpora una nueva RPC para inscripción gratuita con las mismas reglas de gratuidad de la función 458 y guarda el invitador en el mismo registro. No modifica la función 458 ni los pagos, equipos o inscripciones existentes.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación en Supabase.
+
+
+---
+
+## MIGRACIÓN 465 — INVITADOR EN INSCRIPCIÓN INDIVIDUAL CON TARJETA — 4 NOVIEMBRE 2026
+
+**Objetivo:** conservar el nombre del invitador al registrar una inscripción individual pagada con tarjeta, según la configuración del torneo.
+
+**Qué hace:** valida el invitador en el intento de pago y lo copia a la inscripción definitiva cuando el pago se aprueba, usando el campo JSONB existente y modificando solo la rama individual del procesador. Preserva importes y las ramas de equipos y prerreservas.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación en Supabase.
+
+
+---
+
+## MIGRACIÓN 466 — TRAZABILIDAD Y REENVÍO DE INVITACIONES TELEFÓNICAS — 5 NOVIEMBRE 2026
+
+**Objetivo:** conservar el historial de intentos de invitación por reserva telefónica y permitir su rastreo y reenvío controlado desde Lovable.
+
+**Qué hace:** crea una tabla de auditoría por intento con destinatario, usuario, fecha, identificadores de Resend y estado; protege acceso exclusivo de servidor y evita intentos simultáneos. No modifica las reservas ni los correos de inscripción. El botón, el envío y la consulta de entrega se implementan exclusivamente en Lovable. Los envíos históricos sin identificador no se pueden rastrear retroactivamente.
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Integración Lovable pendiente.
+
+**Archivos:** `466-MIGRACION_TRAZABILIDAD_REENVIO_INVITACIONES_TELEFONICAS.sql` y `466-VERIFICACION_TRAZABILIDAD_REENVIO_INVITACIONES_TELEFONICAS.sql`.
+
+
+---
+
+## MIGRACIÓN 467 — BASE SEGURA DE OPERADOR DE INSCRIPCIONES — 5 NOVIEMBRE 2026
+
+**Objetivo:** habilitar identidad y asignación por correo/OTP para operadores de INSCRIPCIONES limitados a sus torneos, sin crear catálogo general ni conceder rol de organizador.
+
+**Qué hace:** crea asignaciones por torneo, autorización independiente, activación por correo verificado, revocación, listado de torneos autorizados, consulta acotada y de solo lectura del perfil de inscritos, y tabla/consulta de auditoría. No amplía las RPC operativas existentes ni autoriza todavía cobros o reservas; esas funciones y la pantalla simplificada quedan pendientes de adaptación Lovable y autorizaciones por operación. La auditoría de fallos necesita registro independiente desde el servidor.
+
+**Estado:** PREPARADA; no ejecutada, no verificada ni publicada. Solo el usuario ejecuta SQL en Supabase. No conceder acceso operativo hasta completar y verificar las siguientes fases.
+
+**Archivos:** `467-MIGRACION_BASE_OPERADOR_INSCRIPCIONES.sql` y `467-VERIFICACION_BASE_OPERADOR_INSCRIPCIONES.sql`.
+
+
+---
+
+## MIGRACIÓN 468 — CONSULTA DE JUGADORES INSCRITOS PARA OPERADOR — 5 NOVIEMBRE 2026
+
+**Objetivo:** habilitar una consulta limitada a las inscripciones activas del torneo asignado al operador 467, sin reutilizar la vista administrativa ni conceder acceso al catálogo general de jugadores.
+
+**Qué hace:** crea `registration_operator_players_468(uuid)`, que exige autorización `view_players` mediante 467 y devuelve folio, nombre, categoría, estado de pago e identificador de jugador únicamente de inscripciones activas del torneo autorizado. El perfil individual se consulta por la RPC 467 de solo lectura. No modifica datos, permisos generales, pagos, reservas, tarjetas, inscripciones ni pantallas de organizador. La integración visual en Lovable y pruebas autenticadas permanecen pendientes hasta la ejecución manual de esta migración.
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Ejecución exclusiva del usuario.
+
+**Archivos:** `468-MIGRACION_CONSULTA_INSCRITOS_OPERADOR.sql` y `468-VERIFICACION_CONSULTA_INSCRITOS_OPERADOR.sql`.
+
+
+---
+
+## MIGRACIÓN 469 — AUTORIZACIONES OPERADOR DE INSCRIPCIONES — 5 NOVIEMBRE 2026
+
+**Objetivo:** permitir que el operador autorizado por torneo utilice las funciones originales de pagos, reservas previas y reserva telefónica, sin incorporarlo al catálogo administrativo.
+
+**Qué hace:** agrega permisos de consulta acotados por torneo, acceso a comprobantes, procedimientos específicos para registrar y anular pagos con auditoría, historial y reportes de cobranza, registro de comprobantes con UID del operador y consulta de categorías elegibles. Conserva las funciones originales de organizador/SUPERADMIN y los datos históricos; la integración de las pantallas y operaciones de servidor queda pendiente de Lovable.
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Ejecución SQL exclusiva del usuario; verificar mediante consultas de solo lectura antes de habilitar las operaciones para operadores.
+
+**Archivos:** `469-MIGRACION_AUTORIZACIONES_OPERADOR_INSCRIPCIONES.sql` y `469-VERIFICACION_AUTORIZACIONES_OPERADOR_INSCRIPCIONES.sql`.
+
+
+---
+
+## MIGRACIÓN 469A — CORRECCIÓN DE AUDITORÍA DE OPERADOR DE INSCRIPCIONES — 5 NOVIEMBRE 2026
+
+**Objetivo:** corregir la incompatibilidad entre el resultado de auditoría de tres operaciones 469 y la restricción ya instalada en 467.
+
+**Qué hace:** cambia exclusivamente el resultado de auditoría de `OK` a `success` en registrar pago, anular pago y registrar comprobante de transferencia. Conserva autorizaciones, procedimientos originales, datos y registros históricos.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación en Supabase. La migración 469 está instalada, pero se detectó este problema mediante consultas de solo lectura. No se ha habilitado la integración del operador en Lovable.
+
+**Archivos:** `469A-MIGRACION_CORRECCION_AUDITORIA_OPERADOR_INSCRIPCIONES.sql` y `469A-VERIFICACION_CORRECCION_AUDITORIA_OPERADOR_INSCRIPCIONES.sql`.
+
+
+---
+
+## MIGRACIÓN 469B — CORRECCIÓN DE ESQUEMA DE BÚSQUEDA EN PAGOS DEL OPERADOR — 5 NOVIEMBRE 2026
+
+**Objetivo:** resolver el error `relation "tournament_categories" does not exist` al registrar pagos desde OPERADOR DE INSCRIPCIONES, sin afectar los pagos de ORGANIZADOR y SUPERADMIN.
+
+**Qué hace:** ajusta exclusivamente el `search_path` de `registration_operator_register_payment_469` y `registration_operator_void_payment_469` a `public, pg_temp`, igual que los procedimientos administrativos originales. No cambia cuerpos de las funciones, validaciones, permisos, auditoría, disparadores ni datos históricos.
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Tras ejecución manual, confirmar instalación con verificación de solo lectura y realizar prueba funcional de pago con una cuenta operadora.
+
+**Archivos:** `469B-MIGRACION_CORRECCION_SEARCH_PATH_PAGOS_OPERADOR.sql` y `469B-VERIFICACION_CORRECCION_SEARCH_PATH_PAGOS_OPERADOR.sql`.
+
+
+---
+
+## MIGRACIÓN 470 — ASIGNACIÓN DE CARRITOS INCLUIDOS — 6 NOVIEMBRE 2026
+
+**Objetivo:** incorporar asignación automática de carritos incluidos en torneos, independiente de la renta, con salidas validadas en firme como requisito.
+
+**Qué hace:** incorpora modalidades excluyentes RENTA, INCLUIDOS y SIN_CARRITOS; inventario por ronda, distribución automática y numeración de carritos, identificación de ocupantes conforme a la hoja de salidas, confirmación, intercambio controlado antes de entregas, control de entrega y devolución por jugador, trazabilidad y control del estado para el Asistente Operativo. La visualización y boletas PDF quedan pendientes de Lovable.
+
+**Estado:** PREPARADA; NO EJECUTADA NI VERIFICADA FUNCIONALMENTE EN SUPABASE. Sustituye borradores no ejecutados denominados 470/470A. Requiere revisión antes de ejecución manual por el usuario.
+
+**Archivos:** `470-MIGRACION_ASIGNACION_CARRITOS_INCLUIDOS.sql` y `470-VERIFICACION_ASIGNACION_CARRITOS_INCLUIDOS.sql`.
+
+
+---
+
+## MIGRACIÓN 470A — CORRECCIÓN DE PERMISOS DE ASIGNACIÓN DE CARRITOS — 6 NOVIEMBRE 2026
+
+**Objetivo:** eliminar privilegios de escritura y `TRUNCATE` concedidos al rol `authenticated` sobre las seis tablas de asignación de carritos creadas en la migración 470.
+
+**Qué hace:** revoca todos los privilegios de tabla de `authenticated` en esas seis tablas y concede únicamente `SELECT` sujeto a las políticas RLS existentes. Conserva permisos de `postgres` y `service_role`; no altera datos, procedimientos, triggers, estructura ni el módulo de renta.
+
+**Estado:** PREPARADA, PENDIENTE DE EJECUCIÓN MANUAL Y VERIFICACIÓN EN SUPABASE. La migración 470 está instalada y sus objetos principales fueron verificados por consultas de solo lectura; la corrección 470A aún no está ejecutada.
+
+**Archivos:** `470A-MIGRACION_CORRECCION_PERMISOS_ASIGNACION_CARRITOS.sql` y `470A-VERIFICACION_CORRECCION_PERMISOS_ASIGNACION_CARRITOS.sql`.
+
+
+---
+
+## MIGRACIÓN 470B — CORRECCIÓN DE DUPLICADOS EN CARRITOS INCLUIDOS — 6 NOVIEMBRE 2026
+
+**Objetivo:** evitar que la distribución de carritos duplique jugadores cuando las salidas validadas de equipos ya contienen una unidad por jugador.
+
+**Qué hace:** ajusta únicamente `cart_plan_470(uuid)` para tratar como jugador individual las unidades con jugador o inscripción explícitos y expandir equipos completos solo cuando la unidad no identifica a un jugador. Conserva nombres de equipo, validación de duplicados, controles de acceso, inventario y el resto de la función. No modifica datos ni salidas.
+
+**Estado:** PREPARADA; NO EJECUTADA NI VERIFICADA EN SUPABASE. Requiere ejecución manual del usuario y posterior verificación de solo lectura y prueba funcional.
+
+**Archivos:** `470B-MIGRACION_CORRECCION_DUPLICADOS_CARRITOS_INCLUIDOS.sql` y `470B-VERIFICACION_CORRECCION_DUPLICADOS_CARRITOS_INCLUIDOS.sql`.
