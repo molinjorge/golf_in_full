@@ -3547,3 +3547,260 @@ Después de ejecutar manualmente la migración, verificar las definiciones media
 **Estado:** PREPARADA; NO EJECUTADA NI VERIFICADA EN SUPABASE. Requiere ejecución manual del usuario y posterior verificación de solo lectura y prueba funcional.
 
 **Archivos:** `470B-MIGRACION_CORRECCION_DUPLICADOS_CARRITOS_INCLUIDOS.sql` y `470B-VERIFICACION_CORRECCION_DUPLICADOS_CARRITOS_INCLUIDOS.sql`.
+
+
+---
+
+## MIGRACIÓN 471 — CORREGIR APORTACIÓN INICIAL AL EDITAR PATROCINADOR — 9 NOVIEMBRE 2026
+
+**Objetivo:** permitir editar datos administrativos de un patrocinador sin intentar duplicar su aportación económica inicial de categoría.
+
+**Qué hace:** corrige únicamente la función trigger `_sponsor_crear_aportacion_inicial_459c()` para no insertar una nueva aportación cuando una edición conserva la misma categoría; mantiene la generación inicial y la protección de unicidad cuando corresponde una alta o un cambio de categoría permitido. No modifica aportaciones, pagos, compromisos, patrocinadores ni sus datos históricos.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación de solo lectura en Supabase, y de prueba funcional al editar el contacto de LEASING DE QUERÉTARO en ROTARY.
+
+**Archivos:** `471-MIGRACION_CORREGIR_APORTACION_INICIAL_AL_EDITAR_PATROCINADOR.sql` y `471-VERIFICACION_CORREGIR_APORTACION_INICIAL_AL_EDITAR_PATROCINADOR.sql`.
+
+
+---
+
+## MIGRACIÓN 472 — EVITAR RESULTADOS OFICIALES PREMATUROS EN ASISTENTE — 10 NOVIEMBRE 2026
+
+**Objetivo:** restablecer el Asistente Operativo cuando hay tarjetas emitidas sin captura física finalizada.
+
+**Qué hace:** modifica exclusivamente la condición previa del evaluador `obtener_workflow_evaluado_395(uuid)` para consultar resultados competitivos solo cuando captura física, conciliación y cierre de captura constan completos. Conserva íntegros los motores deportivos, bloqueos, permisos y la lógica restante del asistente. No modifica datos de torneos ni tarjetas.
+
+**Estado:** PREPARADA; pendiente de ejecución manual, verificación de solo lectura y prueba funcional autenticada.
+
+**Archivos:** `472-MIGRACION_CORREGIR_CONSULTA_PREMATURA_RESULTADOS_ASISTENTE.sql` y `472-VERIFICACION_CORREGIR_CONSULTA_PREMATURA_RESULTADOS_ASISTENTE.sql`.
+
+
+---
+
+## MIGRACIÓN 472A — CORRECCIÓN DE CONTROL DE SEGURIDAD EN EL SQL DEL ASISTENTE — 10 NOVIEMBRE 2026
+
+**Objetivo:** corregir la validación de seguridad equivocada del SQL 472, que se detuvo antes de modificar el evaluador.
+
+**Qué hace:** reconoce que `obtener_workflow_evaluado_395(uuid)` usa SECURITY INVOKER, conserva este modo de seguridad y añade la condición de captura física, conciliación y cierre de captura completos antes de consultar resultados oficiales. No modifica datos, motores deportivos, reglas de resultados ni permisos.
+
+**Estado:** PREPARADA; pendiente de ejecución manual por el usuario, verificación SELECT de solo lectura y prueba funcional autenticada. El primer intento 472 falló por precondición y se revirtió sin modificar la función.
+
+**Archivos:** `472A-MIGRACION_CORREGIR_SECURITY_INVOKER_ASISTENTE.sql` y `472A-VERIFICACION_CORREGIR_SECURITY_INVOKER_ASISTENTE.sql`.
+
+
+---
+
+## MIGRACIÓN 473 — RESERVAS TELEFÓNICAS SIN CATEGORÍA NI CUPO — 10 NOVIEMBRE 2026
+
+**Objetivo:** permitir que el operador registre solicitudes telefónicas sin elegir categoría; esta se solicita al jugador durante su inscripción normal.
+
+**Qué hace:** conserva las tablas `phone_reservations` y `tournament_pre_reservations`; identifica nuevas reservas de interés, sin categoría, equipo, modalidad ni monto; impide que ocupen cupo o bloqueen la inscripción deportiva; desactiva su conversión automática al crear un jugador. Preserva sin modificar la reserva activa de TORNEO PORSCHE. Incluye consulta autenticada de intereses pendientes. No modifica inscripciones ni pagos existentes.
+
+**Estado:** PENDIENTE DE EJECUCIÓN MANUAL Y VERIFICACIÓN. El primer intento con el número 473 falló por una referencia a columna inexistente en `tournament_team_roster_slots` y se revirtió por completo; esta versión corregida mantiene el mismo número, sin sufijo. Lovable no se ha modificado para esta funcionalidad.
+
+**Archivos:** `473-MIGRACION_RESERVAS_TELEFONICAS_SIN_CATEGORIA_SIN_CUPO.sql` y `473-VERIFICACION_RESERVAS_TELEFONICAS_SIN_CATEGORIA_SIN_CUPO.sql`.
+
+
+---
+
+## MIGRACIÓN 474 — CORRECCIÓN DEL TRIGGER DE CUPO PARA INSCRIPCIONES — 10 NOVIEMBRE 2026
+
+**Objetivo:** corregir el error `record "new" has no field "es_interes_telefonico_473"` al confirmar una inscripción formal, incluida transferencia bancaria.
+
+**Qué hace:** modifica exclusivamente `validar_cupo_total_torneo()` para consultar `NEW.es_interes_telefonico_473` únicamente al insertar en `tournament_pre_reservations`. En `tournament_registrations` continúa el control normal de cupo. Conserva los conteos existentes, la exclusión de intereses, los triggers, datos históricos y las modalidades de pago.
+
+**Estado:** PREPARADA; pendiente de ejecución manual y verificación de solo lectura en Supabase y de prueba real de inscripción. La 473 está instalada estructuralmente; este error se detectó durante una inscripción por transferencia de PRUEBA 2 PORSCHE.
+
+**Archivos:** `474-MIGRACION_CORREGIR_TRIGGER_CUPO_INSCRIPCIONES_473.sql` y `474-VERIFICACION_CORREGIR_TRIGGER_CUPO_INSCRIPCIONES_473.sql`.
+
+
+---
+
+## MIGRACIÓN 475 — CIERRE AUTOMÁTICO DE INTERESES TRAS INSCRIPCIÓN FORMAL — 10 NOVIEMBRE 2026
+
+**Objetivo:** evitar que los intereses telefónicos 473 permanezcan activos cuando la misma persona ya está inscrita formalmente en ese torneo.
+
+**Qué hace:** instala un trigger sobre inscripciones activas para desactivar únicamente los intereses 473 correspondientes, conservando su historial y, para jugadores de catálogo, vinculándolos a la inscripción. Regulariza intereses previos que ya tienen inscripción activa, incluido el caso de prueba ahora denominado ASOCIACION CONTADORES. No cambia pagos, importes, cupos ni reservas históricas anteriores a 473. El cambio de nombre del torneo fue realizado por el usuario y no forma parte de esta migración.
+
+**Estado:** PREPARADA; pendiente de ejecución manual por el usuario, verificación de solo lectura y prueba funcional con la interfaz de Lovable. El ajuste de presentación del listado es una tarea separada de Lovable, sin SQL.
+
+**Archivos:** `475-MIGRACION_CERRAR_INTERESES_AL_INSCRIBIR.sql` y `475-VERIFICACION_CERRAR_INTERESES_AL_INSCRIBIR.sql`.
+
+
+---
+
+## MIGRACIÓN 476 — COMPATIBILIDAD DE TELÉFONO NACIONAL SIN REESCRIBIR DATOS — 13 NOVIEMBRE 2026
+
+**Objetivo:** preparar la transición a código internacional más número nacional de diez dígitos, evitando que la búsqueda, identificación de intereses y unicidad dependan de cómo se reparten los dígitos entre LADA y número.
+
+**Qué hace:** incorpora el índice único `ux_players_telefono_nacional_476` sobre país y concatenación de LADA/número y adapta exclusivamente `buscar_jugador_por_telefono(text,text,text)`, el trigger `validar_telefono_unico()` y `mis_intereses_telefonicos_473()` para comparar números nacionales completos. Conserva exactamente las firmas de estas funciones, `SECURITY DEFINER`, búsqueda solo de jugadores activos, la coincidencia de correo, filtros de reservas e intereses 473 y el caso histórico `94b89eee-f92c-459b-94a0-0f490f103e2a`. No altera registros históricos, tablas ni columnas, no cambia el formulario de Lovable y no elimina `telefono_lada`.
+
+**Alcance y secuencia:** fase inicial de compatibilidad; **NO** es todavía la concatenación física de los datos en `telefono_numero`. Esta operación queda expresamente pendiente hasta adaptar y verificar todas las escrituras y lectores, incluidas sustituciones A-Go-Go, reservas y perfiles; concatenar ahora rompería consumidores que aún usan las tres columnas. Las dos reservas históricas con longitud diferente de diez dígitos se mantienen intactas.
+
+**Estado:** PREPARADA, **NO EJECUTADA NI VERIFICADA EN SUPABASE**. Requiere ejecución manual del usuario y verificación con consultas de solo lectura antes de iniciar la fase siguiente. No se han modificado los motores deportivos.
+
+**Archivos:** `476-MIGRACION_COMPATIBILIDAD_TELEFONO_NACIONAL.sql` y `476-VERIFICACION_COMPATIBILIDAD_TELEFONO_NACIONAL.sql`.
+
+
+---
+
+## MIGRACIÓN 477 — MODALIDAD DE ADJUDICACIÓN Y NÚMERO DE POSICIONES PREMIADAS — 15 NOVIEMBRE 2026
+
+**Estado:** PREPARADA, PENDIENTE DE EJECUCIÓN MANUAL POR EL USUARIO Y VERIFICACIÓN EN SUPABASE. No se ha ejecutado ninguna escritura de producción desde ChatGPT. Adaptación Lovable y pruebas funcionales pendientes.
+
+**Objetivo:** permitir que cada premio especial configurado tenga una política explícita de adjudicación independiente de su criterio de medición: `CLASIFICACION` (una cantidad definida de posiciones premiadas entre 1 y 99, con posibilidad de empate en una posición) o `PRIMER_LOGRO` (un único ganador, el primero que consiguió el logro acreditado). El responsable informa la hora real del logro, distinta de la hora de registro; el organizador conserva la confirmación oficial.
+
+**Qué hace:** agrega `tournament_special_prizes.modalidad_adjudicacion` y `posiciones_premiadas` con validación combinada; agrega `tournament_special_prize_entries.logrado_at timestamptz` sin inventar ni reemplazar fechas históricas; crea un guard para evitar cambios de modalidad cuando ya existen capturas o adjudicaciones; crea el nuevo RPC `registrar_resultado_premio_qr_477` que exige hora real para `PRIMER_LOGRO` y reutiliza completamente las validaciones de QR, roster, testigo y pertenencia del RPC 305, utilizando un parámetro transaccional que un trigger de INSERT lee para registrar la hora en el mismo INSERT. El RPC 305 sigue funcionando para premios no PRIMER_LOGRO; para PRIMER_LOGRO, si se intenta capturar por 305 sin hora real, el trigger rechaza la operación con mensaje explícito. `obtener_estacion_premios_por_qr_477` amplía la lectura QR 304 con `awardMode` y `awardedPositions` sin modificar 304.
+
+**Validación de adjudicación oficial:** un nuevo trigger de INSERT sobre `tournament_special_prize_awards` valida el límite de posiciones en `CLASIFICACION` y, en `PRIMER_LOGRO`, exige un solo adjudicatario en posición 1, una hora real registrada y el instante más temprano entre todos los registros válidos. Si existen registros válidos sin hora real, la adjudicación queda bloqueada para aclaración; cuando dos logros comparten exactamente la primera hora, el organizador debe justificar en observaciones a quién elige. La RPC 308, sus permisos, sus reglas de autorización y de anulación y su historial se conservan. No se elige ni adjudica automáticamente un ganador.
+
+**Protección histórica:** las nuevas columnas de configuración no tienen DEFAULT ni backfill: `NULL/NULL` se interpreta como `LEGADO`, conservando exactamente el comportamiento y adjudicaciones anteriores, incluso los premios ya capturados. El historial de entradas conserva `capturado_at` original y `logrado_at=NULL` si no se conocía la hora física. Un premio existente sin capturas ni adjudicaciones podrá adoptar explícitamente la nueva modalidad por el organizador. Un premio con resultados anteriores no se reinterpreta ni se cambia de modalidad; para nueva regla es necesario configurar un nuevo premio antes de iniciar su captura.
+
+**Secuencia de despliegue:** (1) el usuario ejecuta la migración SQL manualmente; (2) ChatGPT verifica mediante SQL de solo lectura; (3) Lovable adapta la pantalla de definición de premio para preguntar «¿Cómo se determina el ganador?» y, si es clasificación, «¿Cuántas posiciones serán premiadas?», escribiendo los dos campos nuevos; (4) el capturista QR para `PRIMER_LOGRO` solicita fecha/hora efectiva del logro y utiliza el RPC 477, manteniendo el 305 para otras modalidades; (5) los reportes y adjudicación distinguen `LEGADO`, `CLASIFICACION` y `PRIMER_LOGRO`, aplican sus reglas y nunca confunden posición provisional con adjudicación oficial. No activar en producción premios nuevos `PRIMER_LOGRO` hasta publicar y probar el capturista adaptado.
+
+**Límites:** esta migración no modifica reglas de medición `MENOR_ES_MEJOR`/`MAYOR_ES_MEJOR`/`SOLO_REGISTRO`, no cambia el reporte provisional 306 ni la función de adjudicación 308, no modifica resultados existentes, no altera acceso QR 304/305 ni sus firmas, no cambia sesiones, estaciones, asociaciones, pagos, tablas deportivas o adjudicaciones históricas. La fecha/hora real del logro necesita intervención humana y testigo, no se deduce de `capturado_at`. Si hay dudas en el orden real, deben aclararse antes de la adjudicación.
+
+**Archivos:** `477-MIGRACION_MODALIDAD_ADJUDICACION_PREMIOS.sql` y `477-VERIFICACION_MODALIDAD_ADJUDICACION_PREMIOS.sql`. El README de esta versión es `477-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md` y conserva byte por byte el README maestro 476 como prefijo histórico.
+
+
+---
+
+## MIGRACIÓN 477A — BLOQUEO AUTOMÁTICO Y AVISOS A ESTACIONES PARA PRIMER LOGRO — 15 NOVIEMBRE 2026
+
+**Estado:** PREPARADA, PENDIENTE DE EJECUCIÓN MANUAL POR EL USUARIO Y VERIFICACIÓN E2E. Es una corrección complementaria de la 477, no una migración nueva 478.
+
+**Necesidad:** el primer resultado válido de un premio configurado como `PRIMER_LOGRO` debe cerrar automáticamente nuevas capturas para ese premio, evitando falsas expectativas en los jugadores. No debe anunciarse como adjudicación OFICIAL antes de la confirmación explícita del organizador.
+
+**Bloqueo en Supabase:** se añade un trigger `BEFORE INSERT OR UPDATE` sobre `tournament_special_prize_entries`, que bloquea por fila del premio (`FOR UPDATE`) para serializar intentos simultáneos procedentes de dos estaciones. Para `PRIMER_LOGRO`, rechaza un segundo registro `VALIDO` y también bloquea cualquier registro válido si ya existe adjudicación `OFICIAL` vigente. El error identifica al jugador que ocupa el primer registro válido. Los premios LEGADO (`NULL`) y `CLASIFICACION` quedan fuera del bloqueo. El sistema de captura QR 305/477, testigos, historial de correcciones y adjudicación 308 se preservan.
+
+**Reapertura por invalidación:** no se crea un botón de reapertura ni se altera el procedimiento de corrección. Si el único primer registro válido es invalidado justificadamente mediante el procedimiento vigente y no existe adjudicación oficial, el premio vuelve a aceptar un primer registro válido. Si ya existe adjudicación oficial, ésta debe anularse formalmente antes de una nueva captura. No se inventan registros ni se reordenan horas del logro.
+
+**Avisos a todas las estaciones activas:** se crea la RPC `obtener_avisos_primer_logro_477a(p_qr_token text)`, invocable por los roles de estación QR autorizados, que verifica el token vigente y devuelve los estados de los premios `PRIMER_LOGRO` activos de ese mismo torneo: `ABIERTO`, `BLOQUEADO_PROVISIONAL` u `OFICIAL`, junto a hoyo, premio, nombre del primer jugador registrado, hora y estación. No expone correo, teléfono ni registros de torneos ajenos. El frontend de Lovable debe consultar la RPC periódicamente mientras la estación esté abierta (por ejemplo, cada 15 segundos), mostrar una alerta a todas las estaciones activas y volver a sincronizar al reconectar o reabrir la pantalla. La protección de escritura es inmediata en Supabase, pero el aviso visual depende del tiempo de consulta/red: no es una notificación push instantánea.
+
+**Criterio comercial y deportivo:** los demás jugadores pueden seguir haciendo Hole In One físicamente, pero el premio de un solo ganador ya no acepta candidatos después de su primer registro válido. El mensaje debe hablar de *primer logro registrado / ganador provisional*, no de ganador oficial. Si existiera evidencia de que un logro anterior no fue capturado oportunamente, la controversia debe resolverse mediante invalidación documentada, nueva captura autorizada y, si aplica, anulación oficial; no se cambia automáticamente el ganador.
+
+**Alcance y limitaciones:** no modifica datos, no borra premios históricos, no crea tablas de mensajería, no altera fichas de patrocinadores, no modifica el motor de clasificación ni reemplaza RPC 305, 306, 308 o 477. La verificación estructural es de solo lectura; requieren pruebas funcionales controladas del bloqueo simultáneo, invalidación, permisos, avisos, apertura y cambio de estado. El prompt anterior para Lovable **no debe ejecutarse**: preparar uno consolidado después de comprobar 477A.
+
+**Archivos:** `477A-MIGRACION_BLOQUEO_Y_AVISOS_PRIMER_LOGRO.sql`, `477A-VERIFICACION_BLOQUEO_Y_AVISOS_PRIMER_LOGRO.sql`; README maestro `477A-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`.
+
+
+---
+
+## MIGRACIÓN 478 — INVALIDACIÓN ADMINISTRATIVA AUDITADA DE PREMIOS ESPECIALES — 15 NOVIEMBRE 2026
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA EN SUPABASE. Requiere ejecución manual por el usuario y verificación mediante SQL de solo lectura. El frontend administrativo está pendiente de integración por Lovable. No se han invalidado registros ni modificado premios existentes desde ChatGPT.
+
+**Motivo:** el procedimiento histórico `invalidar_resultado_premio_qr_305` requiere QR activo de la propia estación. La página administrativa de RESULTADOS DE PREMIOS no permite invalidar directamente un registro válido, y reutilizar el QR ocultaría la identidad del administrador en la auditoría. Se necesita un procedimiento independiente de las estaciones, con autorización del organizador y registro de autor, fecha y motivo.
+
+**SQL:** crea la tabla `tournament_special_prize_admin_invalidations_478` como auditoría complementaria con referencia al registro, torneo, administrador de `admin_users`, identidad autenticada, motivo, versión histórica 305 y fecha. Habilita RLS sin dar acceso directo a `anon` o `authenticated`; la escritura solo se realiza por una RPC `SECURITY DEFINER` autorizada. No modifica tablas existentes ni sus triggers.
+
+**RPC de escritura:** `invalidar_resultado_premio_admin_478(p_entry_id uuid, p_motivo text)` verifica `auth.uid`, existencia de administrador activo y autorización mediante `is_superadmin` o `is_tournament_organizer` para el torneo del registro; exige motivo de cinco caracteres, bloquea el registro para evitar carreras con la corrección QR, rechaza registros previamente inválidos y exige anular antes cualquier adjudicación `OFICIAL` vigente del premio. El `UPDATE` a `INVALIDO`, `motivo_invalido`, `motivo_ultima_correccion` y `capturado_via='ORGANIZADOR'` pasa por el trigger 305 de historia versionada y por el bloqueo 477A. En la misma transacción inserta la autoría en la tabla de auditoría; no elimina datos. La respuesta informa `entryId`, `auditId`, administrador y versión.
+
+**RPC de lectura:** `obtener_invalidaciones_admin_premio_478(p_entry_id uuid)` solo permite a superadministradores y organizadores autorizados consultar las invalidaciones administrativas de ese registro; devuelve nombre de administrador, motivo, fecha y versión. La auditoría de cambios realizados por QR continúa en el historial 305, sin atribuirles una identidad administrativa inexistente.
+
+**Reapertura de PRIMER_LOGRO:** si se invalida su única captura válida y no existe adjudicación `OFICIAL`, el bloqueo 477A permite capturar nuevamente. La RPC de avisos 477A vuelve a señalar `ABIERTO`; Lovable debe agregar un aviso visible de reapertura para todas las estaciones. La invalidación no adjudica, no reordena ni cambia `logrado_at`, ni transforma premios LEGADO. Si hay adjudicación oficial, debe anularse con la RPC 308 antes de invalidar. No se modifica la RPC de invalidación QR histórica: sus permisos y controles se mantienen.
+
+**Trabajo exclusivo de Lovable:** incorporar botón «INVALIDAR REGISTRO» en RESULTADOS DE PREMIOS solo para administradores autorizados, motivo obligatorio (mín. 5), confirmación, bloqueo de doble clic, recarga del reporte e historial de auditoría mediante las dos RPC 478. Incorporar aviso «PREMIO REABIERTO» a estaciones a partir de transiciones en la respuesta 477A. Mantener separado este cambio de la FASE 3 de adjudicación; no publicar sin autorización.
+
+**Verificación:** SQL de solo lectura comprueba funciones, privilegios, RLS, triggers, contratos históricos y datos; las pruebas funcionales de invalidación, competencia con capturas QR, reapertura, notificaciones y autorización negativa siguen pendientes hasta disponer de escenario autorizado. El orden de comprobación no debe interpretarse como aprobación de operación real.
+
+**Archivos:** `478-MIGRACION_INVALIDACION_ADMIN_PREMIOS_ESPECIALES.sql`, `478-VERIFICACION_INVALIDACION_ADMIN_PREMIOS_ESPECIALES.sql`, `478-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base literal íntegra: `477A-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`, sin alterar ninguna sección anterior.
+
+
+---
+
+## MIGRACIÓN 479 — CONSULTA SEGURA DE PREMIOS ESPECIALES PARA LIVE SCORE DE JUGADORES — 15 NOVIEMBRE 2026
+
+**Estado:** PREPARADA, NO EJECUTADA NI VERIFICADA FUNCIONALMENTE EN SUPABASE. La ejecución manual corresponde exclusivamente al usuario. Requiere verificación SQL de solo lectura posterior e integración frontend posterior por Lovable.
+
+**Diagnóstico en Supabase:** `obtener_live_score_mi_categoria_456(p_tournament_round_id uuid)` ya exige autenticación, torneo activo en estado `en_curso`, `usar_tarjeta_digital = true`, ronda activa y validación de inicio vigente; comprueba la inscripción activa del jugador y su categoría. Los premios, capturas, modalidades 477, adjudicaciones 308 y estados 477A ya existen, pero las políticas RLS de sus tablas y las RPC administrativas 306/308 no permiten a jugadores ordinarios consultarlos. Los avisos 477A están protegidos por QR de estación y no deben exponerse a participantes. No es apropiado abrir las políticas de las tablas a todos los jugadores.
+
+**Decisión funcional:** NO crear un interruptor de publicación. Se respeta el control histórico `tournaments.usar_tarjeta_digital`. Si no hay tarjetas digitales ni LIVE SCORE, los premios no se exponen. Los premios se mostrarán en el LIVE SCORE ya existente, sin una segunda pantalla ni ampliación de permisos de las tablas.
+
+**SQL:** crea exclusivamente `obtener_premios_live_score_jugador_479(p_tournament_round_id uuid) RETURNS jsonb`, con `SECURITY DEFINER`, `STABLE`, `search_path` restringido y EXECUTE para `authenticated` exclusivamente. No crea tablas, columnas, triggers, políticas RLS ni datos; no modifica las funciones 456/305/306/308/477/477A/478. La función verifica JWT (`auth.uid()`), torneo activo/en curso, tarjeta digital, ronda activa, validación de inicio `validated`, formato admitido por LIVE SCORE 456 y jugador activo con inscripción activa y categoría del torneo. Si el LIVE SCORE no está habilitado devuelve `available=false`. Si no hay inscripción válida rechaza con `42501`.
+
+**Contrato de lectura:** la función devuelve únicamente datos deportivos de premios ACTIVOS de la ronda solicitada del mismo torneo, para todas las categorías: identificador del premio, ronda, hoyo/par, nombre, patrocinador, premio ofrecido, unidad, criterio y modalidad (`LEGADO`, `CLASIFICACION` o `PRIMER_LOGRO`), cantidad de posiciones y estado (`ABIERTO`, `CON_REGISTROS_PROVISIONALES`, `PRIMER_LOGRO_REGISTRADO`, `OFICIAL`). Incluye capturas VÁLIDAS ordenadas con nombre, medición, posición provisional cuando corresponde, hora real para PRIMER_LOGRO e indicador `isMine`; las adjudicaciones OFICIALES vigentes devuelven posiciones, nombres y mediciones en snapshots. Nunca devuelve correos, teléfonos, testigos, QR, responsables, historial, invalidaciones, observaciones, autor administrativo ni identificadores de jugadores ajenos. Las capturas inválidas y adjudicaciones anuladas no aparecen. Un resultado provisional nunca se presenta como oficial.
+
+**Integración exclusiva de Lovable:** añadir PREMIOS ESPECIALES debajo de la clasificación del LIVE SCORE — MI CATEGORÍA, con consulta 479 independiente cada 30 segundos solamente con pantalla visible y refresco al recuperar foco. Si la RPC devuelve `available=false` o un conjunto vacío, ocultar o mostrar estado vacío discreto, sin crear un nuevo botón de torneo. Mantener íntegra la consulta 456, tarjetas, navegación y clasificación. Mostrar avisos de cambios solo durante la sesión activa; no prometer notificaciones push. La operación de presentación queda pendiente de la verificación SQL y de autorización del usuario.
+
+**Verificación:** `479-VERIFICACION_CONSULTA_PREMIOS_LIVE_SCORE_JUGADORES.sql` contiene exclusivamente SELECT para comprobar existencia, contrato, permisos y RLS, así como recuentos históricos. Requiere pruebas funcionales posteriores desde cuentas reales de jugador inscrito/no inscrito y de torneo con/sin tarjeta digital, sin exponer datos administrativos. No declarar publicada ni funcionalmente verificada antes de dichas pruebas.
+
+**Archivos:** `479-MIGRACION_CONSULTA_PREMIOS_LIVE_SCORE_JUGADORES.sql`, `479-VERIFICACION_CONSULTA_PREMIOS_LIVE_SCORE_JUGADORES.sql`, `479-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base íntegra: `478-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`, cuyo contenido debe conservarse literalmente.
+
+
+---
+
+## CORRECCIÓN 479A — PREMIOS VISIBLES ANTES DEL INICIO DEL TORNEO — 15 NOVIEMBRE 2026
+
+**Estado:** PREPARADA; PENDIENTE DE EJECUCIÓN MANUAL Y VERIFICACIÓN POSTERIOR EN SUPABASE. No se ha ejecutado ninguna modificación desde ChatGPT. La migración 479 anterior sí fue verificada estructuralmente en Supabase; quedó pendiente prueba funcional con jugador real.
+
+**Diagnóstico real:** PORSCHE-1 está en `inscripcion_cerrada`, con `usar_tarjeta_digital=true`, ronda activa y validación `validated`. Las estaciones de premios pueden operar mediante el QR autorizado antes del inicio; la RPC de lectura del jugador `obtener_premios_live_score_jugador_479(uuid)` exige `t.estatus::text = 'en_curso'`, por lo que devuelve `available=false` antes del inicio. La consulta 456 de clasificación también exige `en_curso` y NO debe modificarse.
+
+**Decisión del usuario:** los premios especiales deben estar disponibles para jugadores inscritos antes de que empiece el torneo. Sin interruptores nuevos ni apertura de tablas. La visibilidad de premios se independiza del inicio de LIVE SCORE de clasificación, no de las reglas de autorización ni de las tarjetas digitales.
+
+**SQL 479A:** corrección por `CREATE OR REPLACE FUNCTION public.obtener_premios_live_score_jugador_479(uuid)` que conserva el contrato JSON, `SECURITY DEFINER`, el filtro de torneo y ronda, formato, `auth.uid()`, inscripción activa con categoría, selección de premios/resultados válidos y adjudicaciones oficiales. Únicamente sustituye la condición `t.estatus::text = 'en_curso'` por la lista explícita `inscripciones_abiertas`, `inscripcion_cerrada`, `en_curso`. No permite `planificado`, `finalizado` ni `cancelado`; conserva `t.activo`, tarjeta digital habilitada, ronda activa y validación de inicio vigente. Excluye datos privados e invalidados y conserva RLS. Incluye preflight que aborta ante diferencias inesperadas del contrato 479 y restablece permisos de ejecución para `authenticated`, no `anon`.
+
+**Separación funcional del frontend:** Lovable deberá permitir consultar y mostrar premios a los jugadores en la pantalla del torneo antes de que exista LIVE SCORE de clasificación. No basta con renderizarlos debajo de la clasificación porque el componente de LIVE SCORE puede no abrirse cuando 456 devuelve `available=false`. La ruta y el acceso concretos deberán revisarse en el código actual, sin inventar un LIVE SCORE nuevo ni alterar la clasificación 456. Mantener controles de inscripción y tarjetas digitales. Actualización y avisos de premios según FASE 4B, sin usar QR ni RPC administrativas.
+
+**Verificación:** ejecutar `479A-VERIFICACION_PREMIOS_VISIBLES_ANTES_INICIO.sql` (solo SELECT) tras aplicación manual. Comparar definiciones 456/479, permisos, RLS y PORSCHE-1. Prueba funcional real con sesión de jugador inscrito sigue siendo necesaria para declarar funcionamiento completo. No publicar automáticamente.
+
+**Archivos:** `479A-MIGRACION_PREMIOS_VISIBLES_ANTES_INICIO.sql`, `479A-VERIFICACION_PREMIOS_VISIBLES_ANTES_INICIO.sql`, `479A-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base literal íntegra: `479-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`; ninguna sección histórica fue alterada.
+
+
+---
+
+## MIGRACIÓN 480 — LOGOS DE PATROCINADORES EN PREMIOS ESPECIALES — 16 NOVIEMBRE 2026
+
+**Estado documental:** PREPARADA, PENDIENTE DE EJECUCIÓN MANUAL POR EL USUARIO Y DE VERIFICACIÓN POSTERIOR EN SUPABASE. Ningún cambio fue ejecutado por ChatGPT ni por Lovable.
+
+**Motivo y diagnóstico:** La tabla `public.tournament_special_prizes` guarda `patrocinador` y `premio_ofrecido`, pero no una ruta al logotipo de ese patrocinador en este premio. El bucket público existente `logos-torneos` y sus políticas de acceso ya permiten reutilizar la misma subida de logos del torneo (primer segmento de ruta = UUID del torneo, autorización de organizador/superadmin/administrador de club). El reporte administrativo tiene un `SponsorLogoSlot` reservado sin logo; LIVE SCORE 479A entrega `sponsor` pero no `sponsorLogoPath`. No se confía en vincular al patrocinador mediante texto libre con una imagen del catálogo, pues no existe una relación garantizada.
+
+**SQL preparado:** columna opcional `public.tournament_special_prizes.logo_path text` con comprobación de ruta propia `tournament_id/premios/prize_id/archivo`, sin afectar ningún dato previo. `CREATE OR REPLACE FUNCTION public.obtener_premios_live_score_jugador_479(uuid)` preserva íntegro el contrato y reglas de seguridad de la versión 479A y únicamente agrega la propiedad JSON `sponsorLogoPath` tomada de `sp.logo_path`. La consulta administrativa 306 se deja SIN CAMBIOS: su pantalla obtiene el logo mediante SELECT separado autorizado por RLS de los premios del torneo y cruza únicamente por `prizeId`, sin exponer información adicional a jugadores. No crear buckets, RLS, interruptores ni tablas; no tocar RPC 456, capturas, adjudicaciones ni registros.
+
+**UI Lovable posterior a la ejecución y verificación:** añadir campo opcional `LOGO DEL PATROCINADOR` en CONFIGURACIÓN DE CADA PREMIO ESPECIAL. Usar subida como `TournamentLogoField`, bucket `logos-torneos`, ruta `tournamentId/premios/prizeId/logo-<timestamp>.png|jpg`, y validar tipos PNG/JPG y peso máximo 3 MB antes de subir. Texto visible: **«PNG o JPG · máximo 3 MB · tamaño recomendado 512 × 512 píxeles»**. Las dimensiones son recomendadas, NO restricción estricta. Mostrar vista previa y botones Subir/Cambiar/Quitar, usar `object-contain` para conservar proporción; subir después de crear el premio porque requiere `prizeId`. No borrar objeto anterior inmediatamente en cambios para evitar referencias rotas; no mostrar como guardado hasta confirmar persistencia del `logo_path` y revisar errores/reintentos. Mantener los permisos del bucket y de la tabla. No reutilizar automáticamente logos por igualdad de nombre de patrocinador.
+
+**Presentación:** usar el slot existente `SponsorLogoSlot` en RESULTADOS DE PREMIOS (sin mostrar imagen falsa si falta logo). En LIVE SCORE de los jugadores, usar `sponsorLogoPath` de RPC 479 y resolverlo a URL pública del bucket, con `object-contain`, sin forzar recorte cuadrado ni estrechar la columna del nombre de jugador; ocultar imagen si no existe. La clasificación 456 no cambia y continúa abierta solo desde `en_curso`; premios 479A visibles desde inscripciones abiertas/cerradas o en curso bajo autenticación, inscripción activa, tarjeta digital y ronda validada.
+
+**Pruebas pendientes:** ejecutar manualmente 480 y el archivo 480-VERIFICACION de solo lectura; revisar permisos, RLS, estructura, respuesta 479 y no regresión de 456. Después pedir a Lovable implementar solo frontend y probar con sesión autorizada la subida, persistencia, cambio, eliminación visual, vistas administrativas y jugador. No declarar ejecutada o verificada la 480 sin evidencia.
+
+**Entregables:** `480-MIGRACION_LOGOS_PATROCINADORES_PREMIOS_ESPECIALES.sql`, `480-VERIFICACION_LOGOS_PATROCINADORES_PREMIOS_ESPECIALES.sql`, `480-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base histórica íntegra: `479A-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`.
+
+
+---
+
+## MIGRACIÓN 481 — CONSULTA PÚBLICA LIMITADA DE PATROCINADORES OYES EN TARJETA QR — 16 NOVIEMBRE 2026
+
+**Estado al preparar esta versión:** PREPARADA, NO EJECUTADA. La migración la ejecutará MANUALMENTE el usuario en Supabase. La verificación posterior también está pendiente. La información de la migración 480 permanece histórica sin reescribirla; al revisar Supabase el 16/11/2026 se observó que `logo_path` ya existe y que los logos BMW/MERCEDES BENZ están asociados a sus premios.
+
+**Necesidad:** La tarjeta digital QR es pública y sus RPC 424/425/426 no contienen los datos de patrocinadores de premios. LIVE SCORE 479 sí tiene esa información, pero exige usuario autenticado e inscripción; abrir SELECT público de `tournament_special_prizes` sería incorrecto. El rediseño híbrido QR de Lovable conserva 18 hoyos, SCORE/PICKUP y reglas de la captura actual.
+
+**Migración:** `481-MIGRACION_CONSULTA_PUBLICA_OYES_TARJETA_QR.sql` crea exclusivamente la RPC `public.obtener_oyes_tarjeta_qr_481(text)`, `STABLE SECURITY DEFINER` con `search_path` fijado. Identifica un QR hexadecimal de 64 caracteres de una tarjeta realmente emitida, emisión vigente, torneo activo con tarjeta digital habilitada, ronda activa y validación `validated`. No requiere control de captura porque los anuncios deben mostrarse también en modo lectura. Para un QR inválido entrega `available=false` y arreglo vacío. Para uno válido solo retorna `tournamentId`, `roundId` y, de OYES activos de esa misma ronda, `prizeId`, `holeNumber` (snapshot de ronda), `name`, `sponsor`, `prizeOffered`, `sponsorLogoPath`. Filtra explícitamente OYES por `nombre_snapshot`; no expone Hole In One, adjudicaciones, resultados, testigos, jugadores ni otros datos administrativos. Concede EXECUTE a `anon` y `authenticated` sobre esta RPC y NO otorga SELECT a tablas. No modifica tablas, datos, storage, reglas deportivas ni RPC 423/424/425/426/479.
+
+**Diagnóstico PORSCHE-1:** premios OYES configurados en hoyo 3 BMW (CHAMARRA BMW) con logotipo asociado y hoyo 5 MERCEDES BENZ (HIELERA DE LUJO MB) con logotipo asociado. Los premios Hole In One de hoyos 11 y 14 no pertenecen a esta fase. La coincidencia por nombre OYES es deliberada y deberá revisarse si el catálogo cambia la nomenclatura.
+
+**Verificación:** `481-VERIFICACION_CONSULTA_PUBLICA_OYES_TARJETA_QR.sql`, exclusivamente SELECT, examina permisos y definición RPC, ausencia de lectura pública directa a tabla, retorno para token inválido, premios de referencia y permanencia de funciones de score. Tras su ejecución manual, ChatGPT debe revisar el resultado y pedir a Lovable la parte visual: consultar RPC 481 únicamente en contexto de tarjeta QR válida, enlazar hoyos por número y verificar `sponsorLogoPath` con `resolvePrizeLogoUrl` contra `tournamentId` y `prizeId`, fallback sin logo, lectura segura y ninguna alteración a SCORE/PICKUP. No publicar automáticamente. La verificación funcional con QR real solo por el usuario, sin exponer el token, y no requiere guardar puntuaciones.
+
+**Archivos:** `481-MIGRACION_CONSULTA_PUBLICA_OYES_TARJETA_QR.sql`, `481-VERIFICACION_CONSULTA_PUBLICA_OYES_TARJETA_QR.sql`, `481-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base: `480-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`, preservada byte a byte al inicio del nuevo archivo.
+
+
+---
+
+## MIGRACIÓN 482 — CATEGORÍA PUBLICITARIA Y MENSAJES DE PATROCINADORES EN TARJETAS QR — 16 NOVIEMBRE 2026
+
+**Estado al preparar esta versión:** PREPARADA, NO EJECUTADA. Ejecución manual exclusivamente por el usuario en Supabase; pendiente ejecutar SQL de verificación de solo lectura y después implementar interfaz Lovable. No se modificó ninguna tabla ni dato real durante el diagnóstico. Esta sección solo se agrega al final del README 481 validado, sin alterar ninguna sección histórica.
+
+**Decisión de negocio autorizada:** las categorías de patrocinio pertenecen a cada torneo y tienen nombres definidos por su organizador. En la misma pantalla de creación/edición de las categorías de patrocinador se selecciona una sola categoría para exposición en TODAS las tarjetas digitales del torneo, o ninguna. Si la categoría elegida tiene cero patrocinadores activos no aparece anuncio; con uno aparece fijo; con dos o más hay rotación circular de exposición equivalente, sin pesos comerciales ni selección aleatoria. La rotación se realizará solo en frontend, sin registrar impactos ficticios ni escribir scores. El espacio publicitario se sitúa DEBAJO de los controles de captura QR, independiente de los OYES 481; la publicidad no interrumpe el registro de golpes.
+
+**Reutilización de estructura:** se conservan `public.categorias_patrocinador` y `public.patrocinadores` con todas sus relaciones, fotos y datos económicos. Los logos ya existen como `patrocinadores.logo_url` y se guardan en el bucket público `logos-torneos`, ruta `tournament_id/patrocinadores/sponsor_id-...`; no se vuelven a subir. Por ejemplo, Rotary Querétaro tiene tres patrocinadores MASTER activos con logo: CURAQ, FGR y LEASING DE QUERÉTARO. PORSCHE-1 tiene categoría PREMIUM activa pero aún sin patrocinadores vinculados.
+
+**Migración SQL:** agrega `categorias_patrocinador.exposicion_tarjeta_digital_482 boolean NOT NULL DEFAULT false` (sin categorías preseleccionadas) y un índice único parcial por `tournament_id` para impedir más de una categoría marcada por torneo. Agrega `patrocinadores.mensaje_publicitario_482 text` opcional con máximo 200 caracteres; el mensaje se mostrará como texto plano, nunca HTML. No modifica campos actuales de logo, importes, patrocinio, pagos ni cortesías. Las categorías inactivas o patrocinadores inactivos se excluyen de publicidad incluso si conservan datos históricos.
+
+**Administración segura:** `configurar_categoria_publicidad_qr_482(p_tournament_id uuid,p_categoria_id uuid DEFAULT NULL)` solo se permite a superadmin, organizador de ese torneo o administrador del club dueño. Comprueba `auth.uid()`, existencia de torneo y pertenencia/actividad de la categoría; utiliza un bloqueo de la fila del torneo y actualiza únicamente la bandera de exposición, para cambiar o deseleccionar una categoría de manera atómica. Revoca EXECUTE de `PUBLIC` y `anon`; concede a `authenticated`. No cambia la RLS existente.
+
+**Lectura QR segura:** `obtener_publicidad_tarjeta_qr_482(p_qr_token text)` es `STABLE SECURITY DEFINER` con `search_path` restringido. Comprueba QR hexadecimal de 64 caracteres perteneciente a tarjeta emitida, emisión vigente, torneo activo con tarjeta digital habilitada, ronda activa y validación `validated`. Solo devuelve `{available,tournamentId,roundId,category,sponsors}`; cada patrocinador activo de la categoría elegida lleva únicamente `sponsorId`, `name`, `message`, `logoUrl`. `logoUrl` solo se devuelve si coincide con la ruta pública esperada de ESTE proyecto/torneo/patrocinador en `logos-torneos`; no se muestran URL ajenas ni contactos, datos fiscales, importes, pagos, recibos o datos de jugadores. Respuesta negativa para QR inválido, o respuesta válida vacía si falta selección; no otorga SELECT público directo a `patrocinadores`. En Lovable se hará validación adicional de URL/origen y fallback a texto ante imagen rota.
+
+**Integración de Lovable POSTERIOR:** incluir interruptor exclusivo (o radio) «Exposición en tarjetas digitales» en la misma pantalla de categorías, utilizando exclusivamente la RPC administrativa 482 para cambios (NO dos updates separados). Incorporar textarea de mensaje opcional, máximo 200 caracteres, al formulario EXISTENTE de cada patrocinador, reutilizando `logo_url` actual. En QR leer RPC pública 482 en paralelo e independientemente de 426/481; si falla, los scores siguen funcionales. Mostrar un anunciante a la vez debajo de captura; con uno, fijo; con 2+, rotación circular equitativa por tiempo y/o cambio de hoyo, sin registros de impresiones hasta que se acuerde medición real; filtrar inactivos. Probar móviles 320/375, error de red, ausencia de categoría/logos/mensajes, rotación, cambio entre torneos, OYES y regresiones SCORE/PICKUP. Usuario publica exclusivamente después de revisar.
+
+**Verificación:** `482-VERIFICACION_PUBLICIDAD_CATEGORIA_Y_MENSAJES_TARJETAS_QR.sql` es solo SELECT y verifica columnas, índice de unicidad, CHECK, permisos de ambas RPC, seguridad de tabla administrativa, QR malformado/no existente, ausencia de selecciones predeterminadas, recuentos de categorías y permanencia de RPC previas. No ejecutar la RPC administradora durante verificaciones de solo lectura. La prueba positiva de una tarjeta real y del formulario requiere frontend y autorización de usuario, sin publicar ni alterar scores de PORSCHE-1.
+
+**Archivos:** `482-MIGRACION_PUBLICIDAD_CATEGORIA_Y_MENSAJES_TARJETAS_QR.sql`, `482-VERIFICACION_PUBLICIDAD_CATEGORIA_Y_MENSAJES_TARJETAS_QR.sql`, `482-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`. Base documental íntegra y no sobrescrita: `481-README_TEE_CENTRAL_COMPLETO_ACTUALIZADO.md`.
